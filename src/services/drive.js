@@ -52,19 +52,31 @@ class DriveService {
    * Initialize the Google Drive API client using a service account.
    */
   async init() {
-    const keyPath = path.resolve(config.google.serviceAccountKeyPath);
-    if (!fs.existsSync(keyPath)) {
-      throw new Error(
-        `Google service account key not found at: ${keyPath}\n` +
-          "Create one in Google Cloud Console → IAM → Service Accounts → Keys → Add Key → JSON.\n" +
-          "Then share your Drive folder with the service account email."
-      );
-    }
+    let auth;
 
-    const auth = new google.auth.GoogleAuth({
-      keyFile: keyPath,
-      scopes: ["https://www.googleapis.com/auth/drive.readonly"],
-    });
+    // Support GOOGLE_SERVICE_ACCOUNT_KEY as JSON string env var (for Render/cloud)
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+      auth = new google.auth.GoogleAuth({
+        credentials,
+        scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+      });
+    } else {
+      // Fallback: read from key file on disk (local dev)
+      const keyPath = path.resolve(config.google.serviceAccountKeyPath);
+      if (!fs.existsSync(keyPath)) {
+        throw new Error(
+          `Google service account key not found at: ${keyPath}\n` +
+            "Create one in Google Cloud Console → IAM → Service Accounts → Keys → Add Key → JSON.\n" +
+            "Then share your Drive folder with the service account email.\n" +
+            "Or set GOOGLE_SERVICE_ACCOUNT_KEY env var with the JSON contents."
+        );
+      }
+      auth = new google.auth.GoogleAuth({
+        keyFile: keyPath,
+        scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+      });
+    }
 
     this.drive = google.drive({ version: "v3", auth });
 
