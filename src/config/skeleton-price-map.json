@@ -1,0 +1,66 @@
+{
+  "small_unframed": {
+    "variantId": "42927017099348",
+    "variantGid": "gid://shopify/ProductVariant/42927017099348",
+    "price": "29.99",
+    "sku": "NP-SMALL-UNFRAMED",
+    "tier": "small",
+    "framed": false
+  },
+  "small_framed": {
+    "variantId": "42927017132116",
+    "variantGid": "gid://shopify/ProductVariant/42927017132116",
+    "price": "39.99",
+    "sku": "NP-SMALL-FRAMED",
+    "tier": "small",
+    "framed": true
+  },
+  "medium_unframed": {
+    "variantId": "42927018377300",
+    "variantGid": "gid://shopify/ProductVariant/42927018377300",
+    "price": "49.99",
+    "sku": "NP-MEDIUM-UNFRAMED",
+    "tier": "medium",
+    "framed": false
+  },
+  "medium_framed": {
+    "variantId": "42927018410068",
+    "variantGid": "gid://shopify/ProductVariant/42927018410068",
+    "price": "64.99",
+    "sku": "NP-MEDIUM-FRAMED",
+    "tier": "medium",
+    "framed": true
+  },
+  "large_unframed": {
+    "variantId": "42927019360340",
+    "variantGid": "gid://shopify/ProductVariant/42927019360340",
+    "price": "79.99",
+    "sku": "NP-LARGE-UNFRAMED",
+    "tier": "large",
+    "framed": false
+  },
+  "large_framed": {
+    "variantId": "42927019393108",
+    "variantGid": "gid://shopify/ProductVariant/42927019393108",
+    "price": "99.99",
+    "sku": "NP-LARGE-FRAMED",
+    "tier": "large",
+    "framed": true
+  },
+  "extra_large_unframed": {
+    "variantId": "42927020802132",
+    "variantGid": "gid://shopify/ProductVariant/42927020802132",
+    "price": "119.99",
+    "sku": "NP-XL-UNFRAMED",
+    "tier": "extra_large",
+    "framed": false
+  },
+  "extra_large_framed": {
+    "variantId": "42927020834900",
+    "variantGid": "gid://shopify/ProductVariant/42927020834900",
+    "price": "149.99",
+    "sku": "NP-XL-FRAMED",
+    "tier": "extra_large",
+    "framed": true
+  }
+}

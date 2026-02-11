@@ -1,0 +1,57 @@
+{
+  "name": "neverland-prints-brain",
+  "version": "1.0.0",
+  "description": "Neverland Prints – Shopify 'Brain' layer: ingestion, AI tagging, resolution engine, and lively store logic",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+
+    "ingest": "node src/scripts/ingest-v2.js",
+    "ingest:test": "node src/scripts/ingest-v2.js --limit=100",
+    "ingest:full": "node src/scripts/ingest-v2.js --skip-ai",
+    "ingest:artist": "node src/scripts/ingest-v2.js --limit=500",
+    "ingest:retag": "node src/scripts/ingest-v2.js --retag-errors --limit=100",
+    "ingest:dry": "node src/scripts/ingest-v2.js --dry-run --limit=500",
+    "ingest:legacy": "node src/scripts/ingest.js",
+
+    "sync": "node src/scripts/sync-queue.js",
+    "sync:bulk": "node src/scripts/bulk-sync.js",
+    "sync:bulk:status": "node src/scripts/bulk-sync.js --status",
+    "sync:bulk:dry": "node src/scripts/bulk-sync.js --dry-run",
+    "sync:bulk:collections": "node src/scripts/bulk-sync.js --collections",
+    "sync:status": "node src/scripts/sync-queue.js --status",
+    "sync:collections": "node src/scripts/sync-queue.js --collections",
+    "sync:reset": "node src/scripts/sync-queue.js --reset-errors",
+    "sync:legacy": "node src/scripts/sync-v2.js",
+    "sync:shopify": "node src/scripts/sync-to-shopify.js",
+
+    "tag:ai": "node src/scripts/run-ai-tagging.js",
+    "db:init": "node src/db/init.js",
+    "db:seed": "node src/db/seed.js",
+    "db:migrate": "node src/db/migrate.js",
+
+    "embed": "node src/scripts/generate-embeddings.js",
+    "embed:status": "node src/scripts/generate-embeddings.js --status",
+    "embed:force": "node src/scripts/generate-embeddings.js --force"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@shopify/shopify-api": "^11.0.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "googleapis": "^144.0.0",
+    "image-size": "^1.1.1",
+    "mime-types": "^2.1.35",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "p-limit": "^3.1.0",
+    "sharp": "^0.33.5",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

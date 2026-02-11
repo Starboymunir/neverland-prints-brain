@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neverland Prints — Verification Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface2: #242424;
+      --border: #333;
+      --text: #e8e8e8;
+      --text-dim: #888;
+      --accent: #7c5cfc;
+      --accent-light: #a78bfa;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --blue: #3b82f6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    header .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* ── Stat Cards ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+
+    .stat-card .label {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-card .value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent-light);
+    }
+
+    .stat-card .sub {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+    }
+
+    /* ── Sections ── */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .section h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* ── Status Bar ── */
+    .status-bar {
+      display: flex;
+      height: 24px;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 0.75rem;
+    }
+
+    .status-bar .segment {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: #fff;
+      min-width: 2px;
+      transition: width 0.5s ease;
+    }
+
+    .status-bar .segment.ready { background: var(--green); }
+    .status-bar .segment.tagged { background: var(--blue); }
+    .status-bar .segment.analyzed { background: var(--accent); }
+    .status-bar .segment.downloaded { background: var(--yellow); }
+    .status-bar .segment.pending { background: var(--text-dim); }
+    .status-bar .segment.error { background: var(--red); }
+
+    .status-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.75rem;
+    }
+
+    .status-legend .item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .status-legend .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    /* ── Distribution Charts ── */
+    .bar-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .bar-row .bar-label {
+      width: 120px;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .bar-row .bar-track {
+      flex: 1;
+      height: 20px;
+      background: var(--surface2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .bar-row .bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+      display: flex;
+      align-items: center;
+      padding-left: 6px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    /* ── Assets Table ── */
+    .assets-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .assets-table th {
+      text-align: left;
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .assets-table td {
+      padding: 0.6rem 0.75rem;
+      font-size: 0.85rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
+    .assets-table tr:hover td {
+      background: var(--surface2);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge.ready { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge.tagged { background: rgba(59,130,246,0.15); color: var(--blue); }
+    .badge.analyzed { background: rgba(124,92,252,0.15); color: var(--accent-light); }
+    .badge.pending { background: rgba(136,136,136,0.15); color: var(--text-dim); }
+    .badge.error { background: rgba(239,68,68,0.15); color: var(--red); }
+    .badge.synced { background: rgba(34,197,94,0.15); color: var(--green); }
+
+    .quality.excellent { color: var(--green); }
+    .quality.good { color: var(--blue); }
+    .quality.acceptable { color: var(--yellow); }
+    .quality.low { color: var(--red); }
+
+    /* ── Pagination ── */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .pagination button {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    .pagination button:hover { background: var(--accent); }
+    .pagination button:disabled { opacity: 0.4; cursor: default; }
+    .pagination .page-info { font-size: 0.8rem; color: var(--text-dim); }
+
+    /* ── Pipeline Runs ── */
+    .run-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+
+    .run-item:last-child { border-bottom: none; }
+
+    .run-type {
+      background: var(--surface2);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      min-width: 90px;
+      text-align: center;
+    }
+
+    /* ── Filters ── */
+    .filters {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .filters select, .filters input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 900px) {
+      .two-col { grid-template-columns: 1fr; }
+    }
+
+    .refresh-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .refresh-btn:hover { background: var(--accent-light); }
+
+    .loading {
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>
+      <span class="status-dot"></span>
+      Neverland Prints — Verification Dashboard
+    </h1>
+    <button class="refresh-btn" onclick="loadAll()">⟳ Refresh</button>
+  </header>
+
+  <div class="container">
+    <!-- Stat Cards -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card"><div class="label">Loading...</div><div class="value">—</div></div>
+    </div>
+
+    <!-- Pipeline Status Bar -->
+    <div class="section">
+      <h2>📊 Pipeline Status</h2>
+      <div class="status-bar" id="statusBar"></div>
+      <div class="status-legend" id="statusLegend"></div>
+    </div>
+
+    <!-- Two-column: Ratio + Style distributions -->
+    <div class="two-col">
+      <div class="section">
+        <h2>📐 Ratio Distribution</h2>
+        <div class="bar-chart" id="ratioChart"></div>
+      </div>
+      <div class="section">
+        <h2>🎨 Style Distribution</h2>
+        <div class="bar-chart" id="styleChart"></div>
+      </div>
+    </div>
+
+    <!-- Assets Table -->
+    <div class="section">
+      <h2>🖼️ Assets</h2>
+      <div class="filters">
+        <select id="filterStatus" onchange="loadAssets()">
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="downloaded">Downloaded</option>
+          <option value="analyzed">Analyzed</option>
+          <option value="tagged">Tagged</option>
+          <option value="ready">Ready</option>
+          <option value="error">Error</option>
+        </select>
+        <select id="filterRatio" onchange="loadAssets()">
+          <option value="">All Ratios</option>
+        </select>
+        <select id="filterStyle" onchange="loadAssets()">
+          <option value="">All Styles</option>
+        </select>
+        <input type="text" id="filterSearch" placeholder="Search filename..." onkeyup="debounceSearch()" />
+      </div>
+      <div id="assetsTableContainer"><div class="loading">Loading assets...</div></div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+
+    <!-- Recent Pipeline Runs -->
+    <div class="section">
+      <h2>🔄 Recent Pipeline Runs</h2>
+      <div id="pipelineRuns"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+
+  <script>
+    const API = "/api";
+    let currentPage = 1;
+    let searchTimeout = null;
+
+    function debounceSearch() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => { currentPage = 1; loadAssets(); }, 400);
+    }
+
+    async function fetchJSON(url) {
+      const res = await fetch(url);
+      return res.json();
+    }
+
+    // ── Load Stats ──
+    async function loadStats() {
+      const stats = await fetchJSON(`${API}/stats`);
+
+      const grid = document.getElementById("statsGrid");
+      grid.innerHTML = `
+        <div class="stat-card">
+          <div class="label">Total Assets</div>
+          <div class="value">${stats.totalAssets.toLocaleString()}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Total Variants</div>
+          <div class="value">${stats.totalVariants.toLocaleString()}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Synced to Shopify</div>
+          <div class="value">${(stats.shopifyStatus.synced || 0).toLocaleString()}</div>
+          <div class="sub">Pending: ${(stats.shopifyStatus.pending || 0).toLocaleString()}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Errors</div>
+          <div class="value" style="color: ${(stats.ingestionStatus.error || 0) > 0 ? 'var(--red)' : 'var(--green)'}">${(stats.ingestionStatus.error || 0)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Tagged by AI</div>
+          <div class="value">${((stats.ingestionStatus.tagged || 0) + (stats.ingestionStatus.ready || 0)).toLocaleString()}</div>
+        </div>
+      `;
+
+      // Status bar
+      const total = stats.totalAssets || 1;
+      const statusOrder = ["ready", "tagged", "analyzed", "downloaded", "pending", "error"];
+      const statusColors = { ready: "ready", tagged: "tagged", analyzed: "analyzed", downloaded: "downloaded", pending: "pending", error: "error" };
+
+      const bar = document.getElementById("statusBar");
+      bar.innerHTML = statusOrder
+        .filter(s => (stats.ingestionStatus[s] || 0) > 0)
+        .map(s => {
+          const pct = ((stats.ingestionStatus[s] || 0) / total * 100).toFixed(1);
+          return `<div class="segment ${statusColors[s]}" style="width: ${pct}%">${pct > 5 ? pct + '%' : ''}</div>`;
+        }).join("");
+
+      const legend = document.getElementById("statusLegend");
+      legend.innerHTML = statusOrder.map(s => {
+        const count = stats.ingestionStatus[s] || 0;
+        return `<div class="item"><div class="dot" style="background: var(--${s === 'ready' ? 'green' : s === 'tagged' ? 'blue' : s === 'analyzed' ? 'accent' : s === 'downloaded' ? 'yellow' : s === 'pending' ? 'text-dim' : 'red'})"></div>${s}: ${count}</div>`;
+      }).join("");
+
+      // Ratio chart
+      renderBarChart("ratioChart", stats.ratioDistribution);
+      populateFilter("filterRatio", Object.keys(stats.ratioDistribution));
+
+      // Style chart
+      renderBarChart("styleChart", stats.styleDistribution);
+      populateFilter("filterStyle", Object.keys(stats.styleDistribution));
+
+      return stats;
+    }
+
+    function renderBarChart(containerId, data) {
+      const container = document.getElementById(containerId);
+      const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+      const max = entries.length ? entries[0][1] : 1;
+
+      container.innerHTML = entries.map(([label, count]) => {
+        const pct = (count / max * 100).toFixed(0);
+        return `<div class="bar-row">
+          <div class="bar-label">${label}</div>
+          <div class="bar-track"><div class="bar-fill" style="width: ${pct}%">${count}</div></div>
+        </div>`;
+      }).join("");
+    }
+
+    function populateFilter(selectId, values) {
+      const select = document.getElementById(selectId);
+      const existing = select.value;
+      // Keep the first "All" option
+      while (select.options.length > 1) select.remove(1);
+      values.sort().forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
+      });
+      if (existing) select.value = existing;
+    }
+
+    // ── Load Assets ──
+    async function loadAssets() {
+      const status = document.getElementById("filterStatus").value;
+      const ratio = document.getElementById("filterRatio").value;
+      const style = document.getElementById("filterStyle").value;
+      const search = document.getElementById("filterSearch").value;
+
+      let url = `${API}/assets?page=${currentPage}&per_page=25`;
+      if (status) url += `&status=${status}`;
+      if (ratio) url += `&ratio_class=${ratio}`;
+      if (style) url += `&style=${style}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+
+      const { assets, total, page, totalPages } = await fetchJSON(url);
+
+      const container = document.getElementById("assetsTableContainer");
+
+      if (assets.length === 0) {
+        container.innerHTML = '<div class="loading">No assets found</div>';
+        document.getElementById("pagination").innerHTML = "";
+        return;
+      }
+
+      container.innerHTML = `
+        <table class="assets-table">
+          <thead>
+            <tr>
+              <th>Filename</th>
+              <th>Title</th>
+              <th>Dimensions</th>
+              <th>Ratio</th>
+              <th>Style</th>
+              <th>Era</th>
+              <th>Variants</th>
+              <th>Status</th>
+              <th>Shopify</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${assets.map(a => `
+              <tr>
+                <td title="${a.filepath || a.filename}">${truncate(a.filename, 30)}</td>
+                <td>${a.title || '—'}</td>
+                <td>${a.width_px && a.height_px ? a.width_px + '×' + a.height_px : '—'}</td>
+                <td>${a.ratio_class || '—'}</td>
+                <td>${a.style || '—'}</td>
+                <td>${a.era || '—'}</td>
+                <td>${(a.asset_variants || []).length}</td>
+                <td><span class="badge ${a.ingestion_status}">${a.ingestion_status}</span></td>
+                <td><span class="badge ${a.shopify_status}">${a.shopify_status}</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+
+      // Pagination
+      const pag = document.getElementById("pagination");
+      pag.innerHTML = `
+        <button ${page <= 1 ? 'disabled' : ''} onclick="currentPage--; loadAssets()">← Prev</button>
+        <span class="page-info">Page ${page} of ${totalPages} (${total} total)</span>
+        <button ${page >= totalPages ? 'disabled' : ''} onclick="currentPage++; loadAssets()">Next →</button>
+      `;
+    }
+
+    // ── Load Pipeline Runs ──
+    async function loadRuns() {
+      const { runs } = await fetchJSON(`${API}/pipeline-runs`);
+      const container = document.getElementById("pipelineRuns");
+
+      if (!runs || runs.length === 0) {
+        container.innerHTML = '<div class="loading">No pipeline runs yet</div>';
+        return;
+      }
+
+      container.innerHTML = runs.map(r => {
+        const duration = r.finished_at
+          ? Math.round((new Date(r.finished_at) - new Date(r.started_at)) / 1000) + 's'
+          : 'running...';
+        return `<div class="run-item">
+          <span class="run-type">${r.run_type}</span>
+          <span class="badge ${r.status === 'completed' ? 'ready' : r.status === 'running' ? 'tagged' : 'error'}">${r.status}</span>
+          <span>${r.processed_items || 0}/${r.total_items || 0}</span>
+          <span style="color:var(--text-dim)">${r.error_count || 0} errors</span>
+          <span style="color:var(--text-dim)">${duration}</span>
+          <span style="color:var(--text-dim);margin-left:auto">${new Date(r.started_at).toLocaleString()}</span>
+        </div>`;
+      }).join("");
+    }
+
+    function truncate(str, len) {
+      if (!str) return '—';
+      return str.length > len ? str.slice(0, len) + '…' : str;
+    }
+
+    async function loadAll() {
+      await Promise.all([loadStats(), loadAssets(), loadRuns()]);
+    }
+
+    // Initial load
+    loadAll();
+
+    // Auto-refresh every 15 seconds
+    setInterval(loadAll, 15000);
+  </script>
+</body>
+</html>

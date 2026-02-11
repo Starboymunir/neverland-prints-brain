@@ -1,0 +1,74 @@
+{
+  "small": {
+    "productId": "gid://shopify/Product/7905832861780",
+    "handle": "art-print-small",
+    "variants": {
+      "unframed": {
+        "id": "gid://shopify/ProductVariant/42927017099348",
+        "numericId": "42927017099348",
+        "price": "29.99",
+        "sku": "NP-SMALL-UNFRAMED"
+      },
+      "framed": {
+        "id": "gid://shopify/ProductVariant/42927017132116",
+        "numericId": "42927017132116",
+        "price": "39.99",
+        "sku": "NP-SMALL-FRAMED"
+      }
+    }
+  },
+  "medium": {
+    "productId": "gid://shopify/Product/7905833287764",
+    "handle": "art-print-medium",
+    "variants": {
+      "unframed": {
+        "id": "gid://shopify/ProductVariant/42927018377300",
+        "numericId": "42927018377300",
+        "price": "49.99",
+        "sku": "NP-MEDIUM-UNFRAMED"
+      },
+      "framed": {
+        "id": "gid://shopify/ProductVariant/42927018410068",
+        "numericId": "42927018410068",
+        "price": "64.99",
+        "sku": "NP-MEDIUM-FRAMED"
+      }
+    }
+  },
+  "large": {
+    "productId": "gid://shopify/Product/7905833746516",
+    "handle": "art-print-large",
+    "variants": {
+      "unframed": {
+        "id": "gid://shopify/ProductVariant/42927019360340",
+        "numericId": "42927019360340",
+        "price": "79.99",
+        "sku": "NP-LARGE-UNFRAMED"
+      },
+      "framed": {
+        "id": "gid://shopify/ProductVariant/42927019393108",
+        "numericId": "42927019393108",
+        "price": "99.99",
+        "sku": "NP-LARGE-FRAMED"
+      }
+    }
+  },
+  "extra_large": {
+    "productId": "gid://shopify/Product/7905834172500",
+    "handle": "art-print-extra-large",
+    "variants": {
+      "unframed": {
+        "id": "gid://shopify/ProductVariant/42927020802132",
+        "numericId": "42927020802132",
+        "price": "119.99",
+        "sku": "NP-XL-UNFRAMED"
+      },
+      "framed": {
+        "id": "gid://shopify/ProductVariant/42927020834900",
+        "numericId": "42927020834900",
+        "price": "149.99",
+        "sku": "NP-XL-FRAMED"
+      }
+    }
+  }
+}
