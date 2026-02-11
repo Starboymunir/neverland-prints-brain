@@ -157,7 +157,7 @@ router.get("/storefront/catalog", async (req, res) => {
         "id, title, drive_file_id, artist, style, mood, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, created_at",
         { count: "exact" }
       )
-      .eq("ingestion_status", "ready")
+      .in("ingestion_status", ["ready", "analyzed"])
       .not("drive_file_id", "is", null);
 
     // Filters
@@ -336,10 +336,12 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
  */
 router.get("/storefront/artists", async (req, res) => {
   try {
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || "200", 10)));
+
     const { data, error } = await supabase
       .from("assets")
       .select("artist")
-      .eq("ingestion_status", "ready")
+      .in("ingestion_status", ["ready", "analyzed"])
       .not("artist", "is", null);
 
     if (error) throw error;
@@ -350,11 +352,13 @@ router.get("/storefront/artists", async (req, res) => {
     });
 
     const artists = Object.entries(counts)
-      .map(([name, count]) => ({ name, count }))
+      .map(([name, count]) => ({ artist: name, name, count }))
       .sort((a, b) => b.count - a.count);
 
+    const limited = limit ? artists.slice(0, limit) : artists;
+
     res.set("Cache-Control", "public, max-age=3600");
-    res.json({ artists, total: artists.length });
+    res.json({ artists: limited, total: artists.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -368,9 +372,9 @@ router.get("/storefront/filters", async (req, res) => {
   try {
     // Fetch distinct values in parallel
     const [stylesRes, moodsRes, orientRes] = await Promise.all([
-      supabase.from("assets").select("style").eq("ingestion_status", "ready").not("style", "is", null),
-      supabase.from("assets").select("mood").eq("ingestion_status", "ready").not("mood", "is", null),
-      supabase.from("assets").select("ratio_class").eq("ingestion_status", "ready").not("ratio_class", "is", null),
+      supabase.from("assets").select("style").in("ingestion_status", ["ready", "analyzed"]).not("style", "is", null),
+      supabase.from("assets").select("mood").in("ingestion_status", ["ready", "analyzed"]).not("mood", "is", null),
+      supabase.from("assets").select("ratio_class").in("ingestion_status", ["ready", "analyzed"]).not("ratio_class", "is", null),
     ]);
 
     const unique = (data, key) => {
@@ -450,7 +454,7 @@ router.get("/storefront/similar-asset/:assetId", async (req, res) => {
       .from("assets")
       .select("id, title, drive_file_id, artist, style, mood, ratio_class, max_print_width_cm, max_print_height_cm")
       .neq("id", req.params.assetId)
-      .eq("ingestion_status", "ready");
+      .in("ingestion_status", ["ready", "analyzed"]);
 
     if (asset.style) query = query.eq("style", asset.style);
 
@@ -833,7 +837,7 @@ router.get("/storefront/search", async (req, res) => {
     const { data: results } = await supabase
       .from("assets")
       .select("id, title, drive_file_id, artist, style, mood, max_print_width_cm, max_print_height_cm")
-      .eq("ingestion_status", "ready")
+      .in("ingestion_status", ["ready", "analyzed"])
       .not("drive_file_id", "is", null)
       .or(`title.ilike.%${query}%,style.ilike.%${query}%,mood.ilike.%${query}%,artist.ilike.%${query}%`)
       .limit(limit);
