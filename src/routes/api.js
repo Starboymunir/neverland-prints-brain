@@ -336,7 +336,8 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
  */
 router.get("/storefront/artists", async (req, res) => {
   try {
-    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit || "200", 10)));
+    const limitParam = req.query.limit;
+    const limit = limitParam ? Math.max(1, parseInt(limitParam, 10)) : 0; // 0 = no limit
 
     const { data, error } = await supabase
       .from("assets")
@@ -355,7 +356,7 @@ router.get("/storefront/artists", async (req, res) => {
       .map(([name, count]) => ({ artist: name, name, count }))
       .sort((a, b) => b.count - a.count);
 
-    const limited = limit ? artists.slice(0, limit) : artists;
+    const limited = limit > 0 ? artists.slice(0, limit) : artists;
 
     res.set("Cache-Control", "public, max-age=3600");
     res.json({ artists: limited, total: artists.length });
