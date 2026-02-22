@@ -2,6 +2,7 @@
  * Daily Cron Jobs
  * ===============
  * Runs automated tasks on a schedule:
+ *   - Daily Google Drive scan + ingestion (new art → Supabase)
  *   - Daily Shopify sync (processes queued assets at ~900 variants/day)
  *   - Health checks
  *
@@ -23,7 +24,26 @@ const ROOT = path.join(__dirname, "..", "..");
 function startCronJobs() {
   console.log("⏰ Starting cron jobs...\n");
 
-  // Daily Shopify sync at 3:00 AM (server time)
+  // ── Daily Google Drive scan + ingestion at 1:00 AM ──
+  // Scans Drive for new images, gets dimensions, runs AI tagging, stores in Supabase
+  // Uses --limit=1000 to process in daily batches (the pipeline skips already-ingested files)
+  cron.schedule("0 1 * * *", () => {
+    console.log(`\n⏰ [${new Date().toISOString()}] Running daily Drive ingestion...`);
+    exec(
+      `node ${path.join(ROOT, "src/scripts/ingest-v2.js")} --limit=1000 --concurrency=5`,
+      { cwd: ROOT, timeout: 60 * 60 * 1000 }, // 60 min timeout (AI tagging can be slow)
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error("❌ Drive ingestion failed:", error.message);
+          if (stderr) console.error(stderr);
+        }
+        if (stdout) console.log(stdout);
+        console.log(`⏰ [${new Date().toISOString()}] Drive ingestion finished.`);
+      }
+    );
+  });
+
+  // ── Daily Shopify sync at 3:00 AM (server time) ──
   // Processes up to 900 variants per run to stay under the 1k/day limit
   cron.schedule("0 3 * * *", () => {
     console.log(`\n⏰ [${new Date().toISOString()}] Running daily Shopify sync...`);
@@ -56,7 +76,8 @@ function startCronJobs() {
     }
   });
 
-  console.log("   📅 Daily sync:    3:00 AM");
+  console.log("   📂 Drive ingest:  1:00 AM daily");
+  console.log("   📅 Shopify sync:  3:00 AM daily");
   console.log("   🏥 Health check:  every 6h\n");
 }
 
