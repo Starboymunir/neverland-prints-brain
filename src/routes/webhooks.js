@@ -11,10 +11,12 @@
 const express = require("express");
 const crypto = require("crypto");
 const supabase = require("../db/supabase");
+const PrintfulService = require("../services/printful");
 
 const router = express.Router();
 
 const SHOPIFY_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
+const printful = new PrintfulService();
 
 /**
  * Verify Shopify webhook signature (HMAC-SHA256)
@@ -153,6 +155,70 @@ router.post("/order-created", async (req, res) => {
             },
           });
         } catch (e) { /* ignore */ }
+      }
+
+      // ── AUTO-FULFILL via Printful ────────────────────────
+      if (process.env.PRINTFUL_API_KEY && order.shipping_address) {
+        console.log("   🖨️  Sending to Printful for fulfillment...");
+        for (const item of orderItems) {
+          try {
+            // Build high-res image URL from Drive file ID
+            // s0 = max resolution, no size cap
+            const imageUrl = item.driveFileId
+              ? `https://lh3.googleusercontent.com/d/${item.driveFileId}=s0`
+              : item.previewUrl;
+
+            if (!imageUrl) {
+              console.log(`   ⚠️  No image URL for "${item.artworkTitle}" — skip Printful`);
+              continue;
+            }
+
+            // Map size string to variant ID
+            // Default to 12×16 poster if size not mapped
+            const sizeKey = item.size.replace(/\s/g, "").replace(/cm/gi, "");
+            const mapping = PrintfulService.SIZE_MAP[sizeKey];
+            const variantId = mapping?.variantId || 994; // 12×16 fallback
+
+            const pfOrder = await printful.createOrder({
+              recipient: {
+                name: order.shipping_address.first_name + " " + order.shipping_address.last_name,
+                address1: order.shipping_address.address1,
+                address2: order.shipping_address.address2 || "",
+                city: order.shipping_address.city,
+                state_code: order.shipping_address.province_code || "",
+                country_code: order.shipping_address.country_code,
+                zip: order.shipping_address.zip,
+              },
+              imageUrl,
+              size: item.size,
+              title: item.artworkTitle,
+              externalId: `${item.orderId}-${item.lineItemId}`,
+              variantId,
+            });
+
+            console.log(`   🖨️  Printful order #${pfOrder.id} created for "${item.artworkTitle}"`);
+
+            // Update fulfillment record with Printful order ID
+            try {
+              await supabase
+                .from("fulfillment_orders")
+                .update({
+                  printful_order_id: String(pfOrder.id),
+                  status: "sent_to_printful",
+                })
+                .eq("shopify_order_id", item.orderId)
+                .eq("line_item_id", item.lineItemId);
+            } catch (e) { /* table may not exist */ }
+
+            // Auto-confirm if PRINTFUL_AUTO_CONFIRM is set
+            if (process.env.PRINTFUL_AUTO_CONFIRM === "true") {
+              await printful.confirmOrder(pfOrder.id);
+              console.log(`   ✅ Printful order #${pfOrder.id} auto-confirmed`);
+            }
+          } catch (pfErr) {
+            console.error(`   ❌ Printful error for "${item.artworkTitle}": ${pfErr.message.slice(0, 150)}`);
+          }
+        }
       }
     }
 

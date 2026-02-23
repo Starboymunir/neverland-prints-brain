@@ -1175,4 +1175,86 @@ router.get("/health", async (req, res) => {
   res.status(allOk ? 200 : 503).json(checks);
 });
 
+// ═══════════════════════════════════════════════════════════
+// DRIP SYNC CONTROL — monitor and control the auto-drip
+// ═══════════════════════════════════════════════════════════
+const drip = require("../scripts/sync-drip");
+
+// GET /api/sync/status — see drip sync state
+router.get("/sync/status", (req, res) => {
+  res.json(drip.getStatus());
+});
+
+// POST /api/sync/start — start drip if not running
+router.post("/sync/start", (req, res) => {
+  drip.startDrip().catch((e) => console.error("Drip fatal:", e.message));
+  res.json({ message: "Drip sync started", status: drip.getStatus() });
+});
+
+// POST /api/sync/stop — stop drip
+router.post("/sync/stop", (req, res) => {
+  drip.stopDrip();
+  res.json({ message: "Drip sync stopped", status: drip.getStatus() });
+});
+
+// POST /api/sync/pause — pause drip
+router.post("/sync/pause", (req, res) => {
+  drip.pauseDrip();
+  res.json({ message: "Drip sync paused", status: drip.getStatus() });
+});
+
+// POST /api/sync/resume — resume drip
+router.post("/sync/resume", (req, res) => {
+  drip.resumeDrip();
+  res.json({ message: "Drip sync resumed", status: drip.getStatus() });
+});
+
+// ═══════════════════════════════════════════════════════════
+// PRINTFUL — print provider status & orders
+// ═══════════════════════════════════════════════════════════
+const PrintfulService = require("../services/printful");
+const printful = new PrintfulService();
+
+// GET /api/printful/status — check Printful connection
+router.get("/printful/status", async (req, res) => {
+  try {
+    const status = await printful.verifyConnection();
+    res.json(status);
+  } catch (e) {
+    res.json({ connected: false, error: e.message });
+  }
+});
+
+// GET /api/printful/products — list available print products
+router.get("/printful/products", async (req, res) => {
+  try {
+    const products = await printful.getProducts();
+    res.json({ count: products.length, products });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/printful/orders — list recent Printful orders
+router.get("/printful/orders", async (req, res) => {
+  try {
+    const offset = parseInt(req.query.offset || "0", 10);
+    const limit = parseInt(req.query.limit || "20", 10);
+    const orders = await printful.listOrders(offset, limit);
+    res.json(orders);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/printful/estimate — estimate cost for a print
+router.post("/printful/estimate", async (req, res) => {
+  try {
+    const est = await printful.estimateCost(req.body);
+    res.json(est);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

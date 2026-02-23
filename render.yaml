@@ -1,0 +1,42 @@
+# Render deployment configuration
+# Deploys as a web service with background drip sync built-in
+services:
+  - type: web
+    name: neverland-prints-brain
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_KEY_PATH
+        sync: false
+      - key: GOOGLE_DRIVE_FOLDER_ID
+        sync: false
+      - key: SHOPIFY_STORE_DOMAIN
+        sync: false
+      - key: SHOPIFY_ADMIN_API_TOKEN
+        sync: false
+      - key: SHOPIFY_CLIENT_ID
+        sync: false
+      - key: SHOPIFY_CLIENT_SECRET
+        sync: false
+      - key: SHOPIFY_API_VERSION
+        value: "2024-10"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PRINTFUL_API_KEY
+        sync: false
+      - key: PRINTFUL_AUTO_CONFIRM
+        value: "false"
+    healthCheckPath: /api/health
+    autoDeploy: true

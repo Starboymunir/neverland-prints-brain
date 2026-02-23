@@ -187,30 +187,43 @@ class DriveService {
    */
   async listImagesFast(maxFiles = 100) {
     const pLimit = require("p-limit");
-    const limit = pLimit(10); // 10 concurrent Drive API calls
+    const limit = pLimit(30); // 30 concurrent Drive API calls for speed
     const collected = [];
-    let pageToken = null;
     const ROOT = config.google.driveFolderId;
 
-    console.log("   🔍 Fetching artist folders in batches...");
-
-    outer:
+    // Step 1: Fetch ALL artist folders first (paginated)
+    console.log("   🔍 Fetching all artist folders...");
+    const allArtistFolders = [];
+    let folderPageToken = null;
     do {
-      // Get a page of artist folders from root
       const foldersRes = await withRetry(() => this.drive.files.list({
         q: `'${ROOT}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
         fields: "nextPageToken, files(id, name)",
-        pageSize: 50, // 50 artists at a time
-        pageToken,
+        pageSize: 1000,
+        pageToken: folderPageToken,
       }), 5, "list artist folders");
+      const batch = foldersRes.data.files || [];
+      allArtistFolders.push(...batch);
+      folderPageToken = foldersRes.data.nextPageToken;
+      console.log(`   📁 Fetched ${allArtistFolders.length} artist folders...`);
+    } while (folderPageToken);
+    console.log(`   ✅ Total artist folders: ${allArtistFolders.length}`);
 
-      const artistFolders = foldersRes.data.files || [];
-      console.log(`   📁 Got ${artistFolders.length} artist folders (total images so far: ${collected.length})`);
+    // Apply limit to artists if maxFiles is small (for testing)
+    let artistsToProcess = allArtistFolders;
+    if (maxFiles > 0 && maxFiles < 100) {
+      artistsToProcess = allArtistFolders.slice(0, Math.ceil(maxFiles / 5));
+    }
 
-      // For each artist, scan their Above/Below subfolders concurrently
-      const tasks = artistFolders.map(artist => limit(async () => {
-        if (maxFiles > 0 && collected.length >= maxFiles) return;
+    // Step 2: Process all artists concurrently with high parallelism
+    console.log(`   🚀 Scanning images from ${artistsToProcess.length} artists (concurrency: 30)...`);
+    let artistsDone = 0;
+    const startScan = Date.now();
 
+    const tasks = artistsToProcess.map(artist => limit(async () => {
+      if (maxFiles > 0 && collected.length >= maxFiles) return;
+
+      try {
         // Get sub-folders (Above/Below)
         const subRes = await withRetry(() => this.drive.files.list({
           q: `'${artist.id}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
@@ -223,42 +236,56 @@ class DriveService {
 
           const qualityTier = tier.name.toLowerCase().includes("above") ? "high" : "standard";
 
-          // Get images in this tier folder
-          const imgRes = await withRetry(() => this.drive.files.list({
-            q: `'${tier.id}' in parents and trashed = false`,
-            fields: "files(id, name, mimeType, size, md5Checksum)",
-            pageSize: 100,
-          }), 5, `list images for ${artist.name}/${tier.name}`);
+          // Get ALL images in this tier folder (paginated)
+          let imgPageToken = null;
+          do {
+            const imgRes = await withRetry(() => this.drive.files.list({
+              q: `'${tier.id}' in parents and trashed = false`,
+              fields: "nextPageToken, files(id, name, mimeType, size, md5Checksum)",
+              pageSize: 1000,
+              pageToken: imgPageToken,
+            }), 5, `list images for ${artist.name}/${tier.name}`);
 
-          for (const file of (imgRes.data.files || [])) {
-            if (maxFiles > 0 && collected.length >= maxFiles) return;
-            if (file.name.startsWith("._")) continue;
-            if (file.name.toLowerCase().endsWith(".csv")) continue;
-            if (!this._isImageFile(file)) continue;
+            for (const file of (imgRes.data.files || [])) {
+              if (maxFiles > 0 && collected.length >= maxFiles) return;
+              if (file.name.startsWith("._")) continue;
+              if (file.name.toLowerCase().endsWith(".csv")) continue;
+              if (!this._isImageFile(file)) continue;
 
-            const parsed = this._parseFilename(file.name);
-            collected.push({
-              id: file.id,
-              name: file.name,
-              mimeType: file.mimeType,
-              size: parseInt(file.size || "0", 10),
-              md5: file.md5Checksum || null,
-              path: `${artist.name}/${tier.name}/${file.name}`,
-              artist: artist.name,
-              qualityTier,
-              parsedTitle: parsed.title,
-              parsedWidth: parsed.width,
-              parsedHeight: parsed.height,
-            });
-          }
+              const parsed = this._parseFilename(file.name);
+              collected.push({
+                id: file.id,
+                name: file.name,
+                mimeType: file.mimeType,
+                size: parseInt(file.size || "0", 10),
+                md5: file.md5Checksum || null,
+                path: `${artist.name}/${tier.name}/${file.name}`,
+                artist: artist.name,
+                qualityTier,
+                parsedTitle: parsed.title,
+                parsedWidth: parsed.width,
+                parsedHeight: parsed.height,
+              });
+            }
+
+            imgPageToken = imgRes.data.nextPageToken;
+          } while (imgPageToken);
         }
-      }));
+      } catch (err) {
+        console.error(`   ⚠️ Error scanning ${artist.name}: ${err.message}`);
+      }
 
-      await Promise.all(tasks);
+      artistsDone++;
+      if (artistsDone % 500 === 0) {
+        const elapsed = ((Date.now() - startScan) / 1000).toFixed(0);
+        console.log(`   📊 ${artistsDone}/${artistsToProcess.length} artists scanned | ${collected.length} images | ${elapsed}s`);
+      }
+    }));
 
-      if (maxFiles > 0 && collected.length >= maxFiles) break outer;
-      pageToken = foldersRes.data.nextPageToken;
-    } while (pageToken);
+    await Promise.all(tasks);
+
+    const totalElapsed = ((Date.now() - startScan) / 1000).toFixed(0);
+    console.log(`   ✅ Scan complete: ${collected.length} images from ${artistsDone} artists in ${totalElapsed}s`);
 
     // Trim to exact limit
     if (maxFiles > 0 && collected.length > maxFiles) {

@@ -15,6 +15,7 @@
 const cron = require("node-cron");
 const { execSync, exec } = require("child_process");
 const path = require("path");
+const { startDrip, getStatus } = require("./sync-drip");
 
 const ROOT = path.join(__dirname, "..", "..");
 
@@ -78,7 +79,13 @@ function startCronJobs() {
 
   console.log("   📂 Drive ingest:  1:00 AM daily");
   console.log("   📅 Shopify sync:  3:00 AM daily");
-  console.log("   🏥 Health check:  every 6h\n");
+  console.log("   🏥 Health check:  every 6h");
+
+  // ── Auto-start drip sync (runs continuously, self-heals on throttle) ──
+  console.log("   🚰 Drip sync:     starting now (auto-sleep on throttle)\n");
+  startDrip().catch((e) => {
+    console.error("❌ Drip sync fatal:", e.message);
+  });
 }
 
 module.exports = { startCronJobs };
