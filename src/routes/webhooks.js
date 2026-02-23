@@ -174,10 +174,9 @@ router.post("/order-created", async (req, res) => {
             }
 
             // Map size string to variant ID
-            // Default to 12×16 poster if size not mapped
             const sizeKey = item.size.replace(/\s/g, "").replace(/cm/gi, "");
-            const mapping = PrintfulService.SIZE_MAP[sizeKey];
-            const variantId = mapping?.variantId || 994; // 12×16 fallback
+            const mapping = PrintfulService.SIZE_MAP[sizeKey] || PrintfulService.DEFAULT_VARIANT;
+            const variantId = mapping.variantId;
 
             const pfOrder = await printful.createOrder({
               recipient: {

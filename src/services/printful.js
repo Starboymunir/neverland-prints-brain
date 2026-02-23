@@ -54,12 +54,12 @@ class PrintfulService {
   // ── Check connection ───────────────────────────────────
   async verifyConnection() {
     try {
-      const { result } = await this.request("GET", "/store");
+      // Use catalog endpoint — doesn't require store scope
+      const { result } = await this.request("GET", "/products/268");
       return {
         connected: true,
-        storeId: result.id,
-        storeName: result.name,
-        type: result.type,
+        product: result.product.title,
+        variants: result.variants.length,
       };
     } catch (e) {
       return { connected: false, error: e.message };
@@ -67,28 +67,34 @@ class PrintfulService {
   }
 
   // ── Map our size labels to Printful variant IDs ────────
-  // Fine Art Print sizes (Printful product 486 — Enhanced Matte Paper Poster as fallback)
-  // Printful uses inches; we'll map our cm sizes to nearest Printful size
+  // Enhanced Matte Paper Poster (cm) — Product 268
+  // These are the actual Printful variant IDs for poster sizes
   static SIZE_MAP = {
-    // Our sizes (cm) → Printful variant info
-    // Using "Enhanced Matte Paper Poster" (product 1) since it's widely available
-    "20×20": { variantId: 10163, size: '8"×8"' },
-    "30×30": { variantId: 994, size: '12"×12"' },
-    "50×50": { variantId: 995, size: '18"×18"' },
-    "70×70": { variantId: null, size: null }, // custom quote
+    // Exact cm matches → Printful variant IDs
+    "21×30":  { variantId: 8947,  size: "21×30 cm",  product: 268 },
+    "30×40":  { variantId: 8948,  size: "30×40 cm",  product: 268 },
+    "30×42":  { variantId: 19516, size: "A2 (42×59.4 cm)", product: 268 },
+    "50×70":  { variantId: 8952,  size: "50×70 cm",  product: 268 },
+    "59×84":  { variantId: 19515, size: "A1 (59.4×84.1 cm)", product: 268 },
+    "61×91":  { variantId: 8953,  size: "61×91 cm",  product: 268 },
+    "70×100": { variantId: 8954,  size: "70×100 cm", product: 268 },
 
-    // Portrait
-    "20×30": { variantId: 10163, size: '8"×12"' },
-    "30×40": { variantId: 994, size: '12"×16"' },
-    "40×60": { variantId: 10075, size: '16"×24"' },
-    "60×80": { variantId: 10076, size: '24"×36"' },
-
-    // Landscape (same but flipped)
-    "30×20": { variantId: 10163, size: '12"×8"' },
-    "40×30": { variantId: 994, size: '16"×12"' },
-    "60×40": { variantId: 10075, size: '24"×16"' },
-    "80×60": { variantId: 10076, size: '36"×24"' },
+    // Common resolution-engine output sizes → nearest Printful match
+    "20×20":  { variantId: 8947,  size: "21×30 cm",  product: 268 },
+    "30×30":  { variantId: 8948,  size: "30×40 cm",  product: 268 },
+    "50×50":  { variantId: 8952,  size: "50×70 cm",  product: 268 },
+    "20×30":  { variantId: 8947,  size: "21×30 cm",  product: 268 },
+    "40×60":  { variantId: 8952,  size: "50×70 cm",  product: 268 },
+    "60×80":  { variantId: 8953,  size: "61×91 cm",  product: 268 },
+    "30×20":  { variantId: 8947,  size: "21×30 cm",  product: 268 },
+    "40×30":  { variantId: 8948,  size: "30×40 cm",  product: 268 },
+    "60×40":  { variantId: 8952,  size: "50×70 cm",  product: 268 },
+    "80×60":  { variantId: 8953,  size: "61×91 cm",  product: 268 },
+    "90×60":  { variantId: 8953,  size: "61×91 cm",  product: 268 },
   };
+
+  // Default fallback: 30×40 cm poster
+  static DEFAULT_VARIANT = { variantId: 8948, size: "30×40 cm", product: 268 };
 
   // ── Get available products ─────────────────────────────
   async getProducts() {
