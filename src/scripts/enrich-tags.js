@@ -29,10 +29,10 @@ const hasFlag = (n) => args.includes(`--${n}`);
 const LIMIT = parseInt(getArg("limit") || "0", 10);
 const FORCE = hasFlag("force");
 const UPDATE_SHOPIFY = hasFlag("update-shopify");
-const BATCH_SIZE = 50;        // items per OpenAI call
-const CONCURRENCY = 10;       // parallel API calls
+const BATCH_SIZE = 20;        // items per OpenAI call
+const CONCURRENCY = 8;        // parallel API calls
 const DB_CONCURRENCY = 25;    // parallel Supabase updates
-const API_TIMEOUT_MS = 90000; // 90s timeout per OpenAI call
+const API_TIMEOUT_MS = 120000; // 120s timeout per OpenAI call
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -247,9 +247,17 @@ async function main() {
 
     // Process all chunks concurrently via OpenAI, collect updates
     const allUpdates = [];
+    
+    function withTimeout(promise, ms, label) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms)),
+      ]);
+    }
+    
     const apiPromises = chunks.map(async (chunk, ci) => {
       try {
-        const results = await processBatch(chunk);
+        const results = await withTimeout(processBatch(chunk), API_TIMEOUT_MS, `chunk ${ci}`);
         for (let i = 0; i < Math.min(results.length, chunk.length); i++) {
           allUpdates.push({ asset: chunk[i], result: results[i] });
         }
