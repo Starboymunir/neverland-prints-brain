@@ -51,7 +51,7 @@ function buildTags(asset) {
   ].filter(Boolean);
 }
 
-async function pushToShopify(asset) {
+async function pushToShopify(asset, retries = 3) {
   const tags = buildTags(asset);
   const tagStr = tags.join(", ");
 
@@ -77,6 +77,12 @@ async function pushToShopify(asset) {
     // Product deleted from Shopify — clear stale ID
     await supabase.from("assets").update({ shopify_product_id: null }).eq("id", asset.id);
     return "stale";
+  }
+
+  if (res.status === 502 || res.status === 503) {
+    // Temporary Shopify issue — wait and retry once
+    await sleep(3000);
+    return pushToShopify(asset);
   }
 
   if (!res.ok) {
