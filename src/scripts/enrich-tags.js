@@ -30,8 +30,9 @@ const LIMIT = parseInt(getArg("limit") || "0", 10);
 const FORCE = hasFlag("force");
 const UPDATE_SHOPIFY = hasFlag("update-shopify");
 const BATCH_SIZE = 50;        // items per OpenAI call
-const CONCURRENCY = 20;       // parallel API calls
-const DB_CONCURRENCY = 50;    // parallel Supabase updates
+const CONCURRENCY = 10;       // parallel API calls
+const DB_CONCURRENCY = 25;    // parallel Supabase updates
+const API_TIMEOUT_MS = 90000; // 90s timeout per OpenAI call
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -109,6 +110,8 @@ ${items}`;
 async function processBatch(assets, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -118,7 +121,8 @@ async function processBatch(assets, retries = 3) {
         temperature: 0.3,
         max_tokens: 16000,
         response_format: { type: "json_object" },
-      });
+      }, { signal: controller.signal });
+      clearTimeout(timer);
 
       const text = response.choices[0].message.content;
       let parsed = JSON.parse(text);
@@ -223,8 +227,16 @@ async function main() {
       fetchQuery = fetchQuery.is("style", null);
     }
     
-    const { data: assets, error } = await fetchQuery;
-    if (error) throw error;
+    let assets;
+    try {
+      const res = await fetchQuery;
+      if (res.error) { console.error(`   ⚠️  Fetch error: ${res.error.message}`); break; }
+      assets = res.data;
+    } catch (fetchErr) {
+      console.error(`   ⚠️  Fetch exception: ${fetchErr.message?.slice(0, 100)}`);
+      await sleep(5000);
+      continue;
+    }
     if (!assets?.length) break;
 
     // Split into batches of BATCH_SIZE and process concurrently
@@ -248,26 +260,31 @@ async function main() {
     });
     await Promise.all(apiPromises);
 
-    // Batch DB writes via upsert (much faster than individual updates)
-    const UPSERT_BATCH = 500;
-    for (let u = 0; u < allUpdates.length; u += UPSERT_BATCH) {
-      const slice = allUpdates.slice(u, u + UPSERT_BATCH);
-      const rows = slice.map(({ asset, result: r }) => ({
-        id: asset.id,
-        style: r.style || null,
-        mood: r.mood || null,
-        subject: r.subject || null,
-        era: r.era || null,
-        palette: r.palette || null,
-        ai_tags: r.tags || [],
-      }));
-
-      const { error: uErr } = await supabase.from("assets").upsert(rows, { onConflict: "id" });
-      if (uErr) {
-        errors += slice.length;
-        console.error(`   ⚠️  DB batch: ${uErr.message.slice(0, 120)}`);
-      } else {
-        tagged += slice.length;
+    // Parallel individual updates (avoids NOT NULL constraint issues with upsert)
+    const updateQueue = [...allUpdates];
+    const DB_BATCH = DB_CONCURRENCY;
+    for (let u = 0; u < updateQueue.length; u += DB_BATCH) {
+      const slice = updateQueue.slice(u, u + DB_BATCH);
+      const results = await Promise.allSettled(
+        slice.map(({ asset, result: r }) =>
+          supabase.from("assets").update({
+            style: r.style || null,
+            mood: r.mood || null,
+            subject: r.subject || null,
+            era: r.era || null,
+            palette: r.palette || null,
+            ai_tags: r.tags || [],
+          }).eq("id", asset.id)
+        )
+      );
+      for (const res of results) {
+        if (res.status === "fulfilled" && !res.value.error) {
+          tagged++;
+        } else {
+          errors++;
+          const msg = res.status === "rejected" ? res.reason?.message : res.value?.error?.message;
+          if (errors <= 5) console.error(`   ⚠️  DB: ${(msg || "unknown").slice(0, 120)}`);
+        }
       }
     }
 
