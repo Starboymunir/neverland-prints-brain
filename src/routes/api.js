@@ -1210,6 +1210,37 @@ router.post("/sync/resume", (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// DRIVE AUTO-SYNC — monitor Drive for new files
+// ═══════════════════════════════════════════════════════════
+const driveWatcher = require("../scripts/drive-watcher");
+
+// GET /api/drive/status — get watcher state
+router.get("/drive/status", (req, res) => {
+  res.json(driveWatcher.getWatcherStatus());
+});
+
+// POST /api/drive/sync — trigger an immediate Drive→Supabase sync
+router.post("/drive/sync", async (req, res) => {
+  const fullScan = req.body?.full === true;
+  res.json({ message: fullScan ? "Full scan started" : "Delta sync started", starting: true });
+  // Run async (don't block the response)
+  driveWatcher.runOnce(fullScan).catch(e => console.error("Drive sync error:", e.message));
+});
+
+// POST /api/drive/start-watcher — start the persistent polling watcher
+router.post("/drive/start-watcher", (req, res) => {
+  const interval = parseInt(req.body?.interval || "300", 10);
+  driveWatcher.startWatcher(interval).catch(e => console.error("Watcher error:", e.message));
+  res.json({ message: `Drive watcher started (polling every ${interval}s)`, status: driveWatcher.getWatcherStatus() });
+});
+
+// POST /api/drive/stop-watcher — stop the persistent polling watcher
+router.post("/drive/stop-watcher", (req, res) => {
+  driveWatcher.stopWatcher();
+  res.json({ message: "Drive watcher stopped", status: driveWatcher.getWatcherStatus() });
+});
+
+// ═══════════════════════════════════════════════════════════
 // PRINTFUL — print provider status & orders
 // ═══════════════════════════════════════════════════════════
 const PrintfulService = require("../services/printful");
@@ -1254,6 +1285,270 @@ router.post("/printful/estimate", async (req, res) => {
     res.json(est);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ──────────────────────────────────────
+// Bulk Price Editor
+// ──────────────────────────────────────
+
+/**
+ * GET /api/prices — Get current price map
+ * Returns the skeleton price map (all size tiers and their prices).
+ */
+router.get("/prices", (req, res) => {
+  try {
+    const mapPath = path.join(__dirname, "..", "config", "skeleton-price-map.json");
+    const priceMap = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
+    res.json({
+      prices: priceMap,
+      tiers: Object.keys(priceMap).map(key => ({
+        key,
+        price: priceMap[key].price,
+        sku: priceMap[key].sku,
+        tier: priceMap[key].tier,
+        framed: priceMap[key].framed,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/prices — Update price map (local config)
+ * Body: { prices: { "small_unframed": "34.99", "medium_unframed": "54.99", ... } }
+ * Only updates the price fields provided.
+ */
+router.put("/prices", async (req, res) => {
+  try {
+    const { prices } = req.body;
+    if (!prices || typeof prices !== "object") {
+      return res.status(400).json({ error: "Provide { prices: { tier_key: new_price } }" });
+    }
+
+    const mapPath = path.join(__dirname, "..", "config", "skeleton-price-map.json");
+    const priceMap = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
+
+    const updated = [];
+    for (const [key, newPrice] of Object.entries(prices)) {
+      if (!priceMap[key]) {
+        continue; // skip unknown keys
+      }
+      const price = parseFloat(newPrice);
+      if (isNaN(price) || price < 0) continue;
+      priceMap[key].price = price.toFixed(2);
+      updated.push({ key, price: priceMap[key].price });
+    }
+
+    fs.writeFileSync(mapPath, JSON.stringify(priceMap, null, 2));
+
+    res.json({
+      message: `Updated ${updated.length} price tiers`,
+      updated,
+      currentPrices: priceMap,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/prices/apply-shopify — Push updated prices to all synced Shopify products
+ * This updates variant prices on Shopify products based on their metafield data.
+ * 
+ * Body (optional): 
+ *   { tier: "small_unframed" }   — only update one tier
+ *   { limit: 100 }               — process N products at a time
+ *   { dryRun: true }             — preview without changes
+ *
+ * Since we use single-variant products with price determined by quality_tier,
+ * this updates the default variant price on each Shopify product.
+ */
+router.post("/prices/apply-shopify", async (req, res) => {
+  const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
+  const TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN;
+  const API_VER = process.env.SHOPIFY_API_VERSION || "2024-10";
+  const BASE_URL = `https://${SHOP}/admin/api/${API_VER}`;
+  
+  const dryRun = req.body?.dryRun === true;
+  const limit = parseInt(req.body?.limit || "500", 10);
+
+  try {
+    const mapPath = path.join(__dirname, "..", "config", "skeleton-price-map.json");
+    const priceMap = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
+
+    // Get synced products from Supabase
+    const { data: assets, error } = await supabase
+      .from("assets")
+      .select("id, shopify_product_id, quality_tier, ratio_class")
+      .not("shopify_product_id", "is", null)
+      .limit(limit);
+
+    if (error) throw error;
+
+    // Price determination logic (same as sync scripts)
+    function getPrice(asset) {
+      // For now, all products use the small_unframed tier price
+      // since we create single-variant products
+      return priceMap.small_unframed?.price || "29.99";
+    }
+
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
+    const results = [];
+
+    for (const asset of assets) {
+      const newPrice = getPrice(asset);
+      
+      if (dryRun) {
+        results.push({
+          shopify_product_id: asset.shopify_product_id,
+          newPrice,
+          status: "dry-run",
+        });
+        updated++;
+        continue;
+      }
+
+      try {
+        // Get product to find variant ID
+        const prodRes = await fetch(`${BASE_URL}/products/${asset.shopify_product_id}.json?fields=id,variants`, {
+          headers: { "X-Shopify-Access-Token": TOKEN },
+        });
+        
+        if (prodRes.status === 429) {
+          await new Promise(r => setTimeout(r, 2000));
+          skipped++;
+          continue;
+        }
+        if (!prodRes.ok) { skipped++; continue; }
+        
+        const prodData = await prodRes.json();
+        const variant = prodData.product?.variants?.[0];
+        if (!variant) { skipped++; continue; }
+
+        // Update variant price
+        const updateRes = await fetch(`${BASE_URL}/variants/${variant.id}.json`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": TOKEN,
+          },
+          body: JSON.stringify({
+            variant: {
+              id: variant.id,
+              price: newPrice,
+            },
+          }),
+        });
+
+        if (updateRes.ok) {
+          updated++;
+        } else if (updateRes.status === 429) {
+          await new Promise(r => setTimeout(r, 2000));
+          skipped++;
+        } else {
+          errors++;
+        }
+
+        // Rate limit: ~2 req/sec (each product = 2 calls)
+        await new Promise(r => setTimeout(r, 600));
+      } catch (e) {
+        errors++;
+      }
+    }
+
+    res.json({
+      message: dryRun ? "Dry run complete" : `Price update complete`,
+      total: assets.length,
+      updated,
+      skipped,
+      errors,
+      dryRun,
+      ...(dryRun && results.length <= 20 ? { preview: results.slice(0, 20) } : {}),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/prices/bulk-update-tags — Push enriched tags to all synced Shopify products
+ * Reads updated tags from Supabase and pushes them to Shopify.
+ *
+ * Body (optional):
+ *   { limit: 500 }    — process N products at a time
+ *   { dryRun: true }  — preview without changes
+ */
+router.post("/prices/bulk-update-tags", async (req, res) => {
+  const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
+  const TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN;
+  const API_VER = process.env.SHOPIFY_API_VERSION || "2024-10";
+  const BASE_URL = `https://${SHOP}/admin/api/${API_VER}`;
+
+  const dryRun = req.body?.dryRun === true;
+  const limit = parseInt(req.body?.limit || "500", 10);
+
+  try {
+    const { data: assets, error } = await supabase
+      .from("assets")
+      .select("id, shopify_product_id, ratio_class, quality_tier, style, era, mood, subject, palette, ai_tags")
+      .not("shopify_product_id", "is", null)
+      .not("style", "is", null)
+      .limit(limit);
+
+    if (error) throw error;
+
+    let updated = 0;
+    let errors = 0;
+
+    for (const asset of assets) {
+      const tags = [
+        asset.ratio_class?.replace(/_/g, " "),
+        asset.quality_tier === "high" ? "museum grade" : "gallery grade",
+        asset.style, asset.era, asset.mood, asset.subject, asset.palette,
+        "art print", "fine art", "wall art",
+        ...(asset.ai_tags || []),
+      ].filter(Boolean);
+
+      if (dryRun) { updated++; continue; }
+
+      try {
+        const updateRes = await fetch(`${BASE_URL}/products/${asset.shopify_product_id}.json`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": TOKEN,
+          },
+          body: JSON.stringify({
+            product: { id: parseInt(asset.shopify_product_id), tags: tags.join(", ") },
+          }),
+        });
+
+        if (updateRes.ok) {
+          updated++;
+        } else if (updateRes.status === 429) {
+          await new Promise(r => setTimeout(r, 2000));
+        } else {
+          errors++;
+        }
+        await new Promise(r => setTimeout(r, 500));
+      } catch (e) {
+        errors++;
+      }
+    }
+
+    res.json({
+      message: dryRun ? "Dry run complete" : "Tag push complete",
+      total: assets.length,
+      updated,
+      errors,
+      dryRun,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

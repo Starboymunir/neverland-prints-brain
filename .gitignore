@@ -8,6 +8,7 @@ Thumbs.db
 temp/
 downloads/
 *.jsonl
+.drive-sync-token.json
 neverland-theme/
 theme/
 upwork-chat.txt

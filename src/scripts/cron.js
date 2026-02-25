@@ -16,6 +16,7 @@ const cron = require("node-cron");
 const { execSync, exec } = require("child_process");
 const path = require("path");
 const { startDrip, getStatus } = require("./sync-drip");
+const { startWatcher: startDriveWatcher } = require("./drive-watcher");
 
 const ROOT = path.join(__dirname, "..", "..");
 
@@ -82,9 +83,15 @@ function startCronJobs() {
   console.log("   🏥 Health check:  every 6h");
 
   // ── Auto-start drip sync (runs continuously, self-heals on throttle) ──
-  console.log("   🚰 Drip sync:     starting now (auto-sleep on throttle)\n");
+  console.log("   🚰 Drip sync:     starting now (auto-sleep on throttle)");
   startDrip().catch((e) => {
     console.error("❌ Drip sync fatal:", e.message);
+  });
+
+  // ── Auto-start Drive watcher (polls every 5 minutes for new files) ──
+  console.log("   👁️  Drive watcher: polling every 5 minutes\n");
+  startDriveWatcher(300).catch((e) => {
+    console.error("❌ Drive watcher fatal:", e.message);
   });
 }
 
