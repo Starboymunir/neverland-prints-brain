@@ -132,16 +132,49 @@ class ThrottleError extends Error {
   constructor(msg) { super(msg); this.name = "ThrottleError"; }
 }
 
+// ── Generate description from AI metadata when description column is null ──
+function generateDescriptionFromMeta(asset) {
+  const title = asset.title || "Untitled";
+  const artist = asset.artist || "Unknown Artist";
+  const style = asset.style;
+  const mood = asset.mood;
+  const subject = asset.subject;
+  const era = asset.era;
+  const palette = asset.palette;
+  const an = (w) => /^[aeiou]/i.test(w) ? "An" : "A";
+
+  const parts = [];
+  if (style && subject) {
+    parts.push(`${an(style)} ${style.toLowerCase()} ${subject.toLowerCase()} by ${artist}.`);
+  } else if (style) {
+    parts.push(`${an(style)} ${style.toLowerCase()} work by ${artist}.`);
+  } else if (subject) {
+    parts.push(`${an(subject)} ${subject.toLowerCase()} by ${artist}.`);
+  } else {
+    parts.push(`A work by ${artist}.`);
+  }
+  if (era && era !== "Unknown") {
+    parts.push(`Created during the ${era.toLowerCase()} period.`);
+  }
+  if (mood && palette) {
+    parts.push(`This piece evokes a ${mood.toLowerCase()} atmosphere with ${palette.toLowerCase()}.`);
+  } else if (mood) {
+    parts.push(`This piece evokes a ${mood.toLowerCase()} atmosphere.`);
+  } else if (palette) {
+    parts.push(`Featuring ${palette.toLowerCase()}.`);
+  }
+  parts.push("Printed on premium museum-quality archival paper with vivid, lightfast inks.");
+  return parts.join(" ");
+}
+
 // ── Build Product Payload ────────────────────────────────
 // Single default variant — sizes served from Supabase by the theme
 function buildProduct(asset) {
   const title = (asset.title || "Untitled").slice(0, 255);
   const artist = asset.artist || "Unknown Artist";
 
-  const desc = asset.description || "";
-  const body_html = desc
-    ? `<div class="np-desc"><p class="np-ai">${desc}</p><p>Museum-quality fine art print by <strong>${artist}</strong>.</p><p>Premium 310gsm cotton-rag archival paper, 200+ year lightfast inks.</p></div>`
-    : `<p>Museum-quality fine art print by <strong>${artist}</strong>.</p><p>Premium 310gsm cotton-rag archival paper.</p>`;
+  const desc = asset.description || generateDescriptionFromMeta(asset);
+  const body_html = `<div class="np-desc"><p class="np-ai">${desc}</p><p>Museum-quality fine art print by <strong>${artist}</strong>.</p><p>Premium 310gsm cotton-rag archival paper, 200+ year lightfast inks.</p></div>`;
 
   const tags = [
     asset.ratio_class?.replace(/_/g, " "),

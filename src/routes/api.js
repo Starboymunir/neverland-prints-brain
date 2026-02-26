@@ -22,6 +22,51 @@ const EmbeddingService = require("../services/embedding");
 
 const router = express.Router();
 
+// ── Generate a rich description from AI metadata when description is null ──
+function generateDescriptionFromMeta(asset) {
+  const title = asset.title || "Untitled";
+  const artist = asset.artist || "Unknown Artist";
+  const style = asset.style;
+  const mood = asset.mood;
+  const subject = asset.subject;
+  const era = asset.era;
+  const palette = asset.palette;
+  const an = (w) => /^[aeiou]/i.test(w) ? "An" : "A";
+
+  // Build a natural-language description from available metadata
+  const parts = [];
+
+  // Opening line
+  if (style && subject) {
+    parts.push(`${an(style)} ${style.toLowerCase()} ${subject.toLowerCase()} by ${artist}.`);
+  } else if (style) {
+    parts.push(`${an(style)} ${style.toLowerCase()} work by ${artist}.`);
+  } else if (subject) {
+    parts.push(`${an(subject)} ${subject.toLowerCase()} by ${artist}.`);
+  } else {
+    parts.push(`A work by ${artist}.`);
+  }
+
+  // Era context
+  if (era && era !== "Unknown") {
+    parts.push(`Created during the ${era.toLowerCase()} period.`);
+  }
+
+  // Mood & palette
+  if (mood && palette) {
+    parts.push(`This piece evokes a ${mood.toLowerCase()} atmosphere with ${palette.toLowerCase()}.`);
+  } else if (mood) {
+    parts.push(`This piece evokes a ${mood.toLowerCase()} atmosphere.`);
+  } else if (palette) {
+    parts.push(`Featuring ${palette.toLowerCase()}.`);
+  }
+
+  // Print quality callout
+  parts.push("Printed on premium museum-quality archival paper with vivid, lightfast inks.");
+
+  return parts.join(" ");
+}
+
 // Initialize image proxy (lazy)
 let imageProxy = null;
 async function getImageProxy() {
@@ -295,12 +340,15 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
       priceMap = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
     } catch (e) {}
 
+    // Use stored description, or generate one from AI metadata
+    const description = asset.description || generateDescriptionFromMeta(asset);
+
     res.set("Cache-Control", "public, max-age=300");
     res.json({
       id: asset.id,
       title: asset.title,
       artist: asset.artist,
-      description: asset.description || "",
+      description,
       style: asset.style,
       mood: asset.mood,
       palette: asset.palette,
