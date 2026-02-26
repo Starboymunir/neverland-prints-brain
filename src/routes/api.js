@@ -464,12 +464,12 @@ router.get("/storefront/collections", async (req, res) => {
     // Define the curated collections with their filter criteria
     const collectionDefs = [
       { handle: "all-art-prints", title: "All Art Prints", filter: {}, featured: true },
-      { handle: "portrait-prints", title: "Portrait Prints", filter: { ratio_class: "portrait" } },
-      { handle: "landscape-prints", title: "Landscape Prints", filter: { ratio_class: "landscape" } },
-      { handle: "museum-grade", title: "Museum Grade", filter: { quality_tier: "museum" } },
-      { handle: "gallery-grade", title: "Gallery Grade", filter: { quality_tier: "gallery" }, featured: true },
+      { handle: "portrait-prints", title: "Portrait Prints", filter: { orientation: "portrait" } },
+      { handle: "landscape-prints", title: "Landscape Prints", filter: { orientation: "landscape" } },
+      { handle: "museum-grade", title: "Museum Grade", filter: { quality_tier: "high" } },
+      { handle: "gallery-grade", title: "Gallery Grade", filter: { quality_tier: "standard" }, featured: true },
       { handle: "new-arrivals", title: "New Arrivals", filter: { sort: "newest" } },
-      { handle: "square-prints", title: "Square Prints", filter: { ratio_class: "square" } },
+      { handle: "square-prints", title: "Square Prints", filter: { orientation: "square" } },
     ];
 
     // Fetch counts and a sample image for each collection in parallel
@@ -482,8 +482,8 @@ router.get("/storefront/collections", async (req, res) => {
           .not("style", "is", null)
           .not("drive_file_id", "is", null);
 
-        // Apply specific filters
-        if (col.filter.ratio_class) query = query.eq("ratio_class", col.filter.ratio_class);
+        // Apply specific filters (use ilike for orientation prefix matching)
+        if (col.filter.orientation) query = query.ilike("ratio_class", `${col.filter.orientation}%`);
         if (col.filter.quality_tier) query = query.eq("quality_tier", col.filter.quality_tier);
 
         // Get 1 random sample for the image
@@ -496,7 +496,7 @@ router.get("/storefront/collections", async (req, res) => {
             .in("ingestion_status", ["ready", "analyzed"])
             .not("style", "is", null)
             .not("drive_file_id", "is", null);
-          if (col.filter.ratio_class) countQ = countQ.eq("ratio_class", col.filter.ratio_class);
+          if (col.filter.orientation) countQ = countQ.ilike("ratio_class", `${col.filter.orientation}%`);
           if (col.filter.quality_tier) countQ = countQ.eq("quality_tier", col.filter.quality_tier);
           const { count: total } = await countQ;
           const offset = Math.floor(Math.random() * Math.max(1, (total || 1) - 1));
@@ -511,7 +511,7 @@ router.get("/storefront/collections", async (req, res) => {
         // Build the catalog URL with filter params
         let url = "/pages/catalog";
         const params = [];
-        if (col.filter.ratio_class) params.push(`orientation=${col.filter.ratio_class}`);
+        if (col.filter.orientation) params.push(`orientation=${col.filter.orientation}`);
         if (col.filter.quality_tier) params.push(`quality=${col.filter.quality_tier}`);
         if (col.filter.sort) params.push(`sort=${col.filter.sort}`);
         if (params.length) url += "?" + params.join("&");
