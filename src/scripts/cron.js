@@ -78,9 +78,22 @@ function startCronJobs() {
     }
   });
 
+  // ── Keep-alive self-ping (prevents Render free tier spin-down) ──
+  // Render free tier spins down after 15min of no HTTP requests.
+  // This pings our own health endpoint every 10 minutes to stay alive.
+  const PORT = process.env.PORT || 3000;
+  setInterval(async () => {
+    try {
+      await fetch(`http://localhost:${PORT}/api/health`);
+    } catch {
+      // ignore — server might not be ready yet
+    }
+  }, 10 * 60 * 1000); // every 10 minutes
+
   console.log("   📂 Drive ingest:  1:00 AM daily");
   console.log("   📅 Shopify sync:  3:00 AM daily");
   console.log("   🏥 Health check:  every 6h");
+  console.log("   💓 Keep-alive:    self-ping every 10min");
 
   // ── Auto-start drip sync (runs continuously, self-heals on throttle) ──
   console.log("   🚰 Drip sync:     starting now (auto-sleep on throttle)");
