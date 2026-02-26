@@ -203,7 +203,8 @@ router.get("/storefront/catalog", async (req, res) => {
         { count: "exact" }
       )
       .in("ingestion_status", ["ready", "analyzed"])
-      .not("drive_file_id", "is", null);
+      .not("drive_file_id", "is", null)
+      .not("style", "is", null); // Only show enriched assets with AI metadata
 
     // Filters
     if (artist) query = query.eq("artist", artist);
