@@ -455,6 +455,87 @@ router.get("/storefront/filters", async (req, res) => {
 });
 
 /**
+ * GET /api/storefront/collections
+ * Returns curated collections for the homepage bento grid.
+ * Each collection has a title, filter URL, product count, and sample image.
+ */
+router.get("/storefront/collections", async (req, res) => {
+  try {
+    // Define the curated collections with their filter criteria
+    const collectionDefs = [
+      { handle: "all-art-prints", title: "All Art Prints", filter: {}, featured: true },
+      { handle: "portrait-prints", title: "Portrait Prints", filter: { ratio_class: "portrait" } },
+      { handle: "landscape-prints", title: "Landscape Prints", filter: { ratio_class: "landscape" } },
+      { handle: "museum-grade", title: "Museum Grade", filter: { quality_tier: "museum" } },
+      { handle: "gallery-grade", title: "Gallery Grade", filter: { quality_tier: "gallery" }, featured: true },
+      { handle: "new-arrivals", title: "New Arrivals", filter: { sort: "newest" } },
+      { handle: "square-prints", title: "Square Prints", filter: { ratio_class: "square" } },
+    ];
+
+    // Fetch counts and a sample image for each collection in parallel
+    const results = await Promise.all(
+      collectionDefs.map(async (col) => {
+        let query = supabase
+          .from("assets")
+          .select("id, drive_file_id, title", { count: "exact" })
+          .in("ingestion_status", ["ready", "analyzed"])
+          .not("style", "is", null)
+          .not("drive_file_id", "is", null);
+
+        // Apply specific filters
+        if (col.filter.ratio_class) query = query.eq("ratio_class", col.filter.ratio_class);
+        if (col.filter.quality_tier) query = query.eq("quality_tier", col.filter.quality_tier);
+
+        // Get 1 random sample for the image
+        query = query.limit(1);
+        if (col.filter.sort !== "newest") {
+          // Use a random offset for variety
+          let countQ = supabase
+            .from("assets")
+            .select("id", { count: "exact", head: true })
+            .in("ingestion_status", ["ready", "analyzed"])
+            .not("style", "is", null)
+            .not("drive_file_id", "is", null);
+          if (col.filter.ratio_class) countQ = countQ.eq("ratio_class", col.filter.ratio_class);
+          if (col.filter.quality_tier) countQ = countQ.eq("quality_tier", col.filter.quality_tier);
+          const { count: total } = await countQ;
+          const offset = Math.floor(Math.random() * Math.max(1, (total || 1) - 1));
+          query = query.range(offset, offset);
+        } else {
+          query = query.order("created_at", { ascending: false });
+        }
+
+        const { data, count } = await query;
+        const sample = data?.[0];
+
+        // Build the catalog URL with filter params
+        let url = "/pages/catalog";
+        const params = [];
+        if (col.filter.ratio_class) params.push(`orientation=${col.filter.ratio_class}`);
+        if (col.filter.quality_tier) params.push(`quality=${col.filter.quality_tier}`);
+        if (col.filter.sort) params.push(`sort=${col.filter.sort}`);
+        if (params.length) url += "?" + params.join("&");
+
+        return {
+          handle: col.handle,
+          title: col.title,
+          url,
+          count: count || 0,
+          featured: col.featured || false,
+          image: sample ? `https://lh3.googleusercontent.com/d/${sample.drive_file_id}=s800` : null,
+        };
+      })
+    );
+
+    res.set("Cache-Control", "public, max-age=1800"); // 30 min cache
+    res.json({ collections: results });
+  } catch (err) {
+    console.error("Collections endpoint error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/storefront/similar-asset/:assetId
  * Similar artworks by Supabase asset ID (not Shopify product ID).
  */
