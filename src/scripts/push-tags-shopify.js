@@ -136,11 +136,18 @@ async function main() {
   console.log("═".repeat(60));
 
   // Count eligible: has shopify_product_id AND has style (enriched)
-  const { count: eligible } = await supabase
-    .from("assets")
-    .select("id", { count: "exact", head: true })
-    .not("shopify_product_id", "is", null)
-    .not("style", "is", null);
+  let eligible = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const { count, error } = await supabase
+      .from("assets")
+      .select("id", { count: "exact", head: true })
+      .not("shopify_product_id", "is", null)
+      .not("style", "is", null);
+    if (count !== null) { eligible = count; break; }
+    console.log(`  ⚠️ Count query returned null (attempt ${attempt}): ${error?.message || 'timeout'}`);
+    await sleep(3000 * attempt);
+  }
+  if (eligible === null) throw new Error("Could not get eligible count after 3 attempts");
 
   const total = LIMIT > 0 ? Math.min(LIMIT, eligible) : eligible;
 
