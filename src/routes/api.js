@@ -217,9 +217,9 @@ router.get("/storefront/catalog", async (req, res) => {
     if (orientation) query = query.eq("ratio_class", orientation);
     if (era) query = query.eq("era", era);
     if (subject) query = query.eq("subject", subject);
-    if (country) query = query.contains("ai_tags", [country]);
-    if (continent) query = query.contains("ai_tags", [continent]);
-    if (tag) query = query.contains("ai_tags", [tag]);
+    if (country) query = query.filter("ai_tags", "cs", JSON.stringify([country]));
+    if (continent) query = query.filter("ai_tags", "cs", JSON.stringify([continent]));
+    if (tag) query = query.filter("ai_tags", "cs", JSON.stringify([tag]));
     if (search) {
       query = query.or(
         `title.ilike.%${search}%,style.ilike.%${search}%,mood.ilike.%${search}%,artist.ilike.%${search}%,era.ilike.%${search}%,subject.ilike.%${search}%`
