@@ -507,87 +507,101 @@ router.get("/storefront/filters", async (req, res) => {
  */
 router.get("/storefront/collections", async (req, res) => {
   try {
-    // Define the curated collections with their filter criteria
-    const collectionDefs = [
-      { handle: "all-art-prints", title: "All Art Prints", filter: {}, featured: true },
-      { handle: "portrait-prints", title: "Portrait Prints", filter: { orientation: "portrait" } },
-      { handle: "landscape-prints", title: "Landscape Prints", filter: { orientation: "landscape" } },
-      { handle: "museum-grade", title: "Museum Grade", filter: { quality_tier: "high" } },
-      { handle: "gallery-grade", title: "Gallery Grade", filter: { quality_tier: "standard" }, featured: true },
-      { handle: "new-arrivals", title: "New Arrivals", filter: { sort: "newest" } },
-      { handle: "square-prints", title: "Square Prints", filter: { orientation: "square" } },
-      // New lifestyle/theme collections
-      { handle: "dark-academia", title: "Dark Academia", filter: { moods: ["Dark", "Melancholic", "Mysterious"], palette: "Dark & Moody" } },
-      { handle: "flora-fauna", title: "Flora & Fauna", filter: { subjects: ["Botanical", "Animal", "Nature"] }, featured: true },
-      { handle: "portraits-figures", title: "Portraits & Figures", filter: { subjects: ["Portrait", "Figure Study", "Self Portrait"] } },
+    // ── Client-curated collection definitions ──
+    // Subject-based collections
+    const subjectCollections = [
+      { handle: "vintage-posters-advertising", title: "Vintage Posters & Advertising", filter: { subjects: ["Advertising", "Commercial Art"] }, featured: true },
+      { handle: "flora-fauna", title: "Botanical & Zoology", filter: { subjects: ["Botanical", "Animal", "Nature"] }, featured: true },
       { handle: "landscapes-seascapes", title: "Landscapes & Seascapes", filter: { subjects: ["Landscape", "Seascape", "Cityscape"] } },
-      { handle: "mythology-history", title: "Mythology, History & Religion", filter: { subjects: ["Mythology", "Allegory", "Religious", "Historical"] }, featured: true },
+      { handle: "portraits-figures", title: "Portraits & Figures", filter: { subjects: ["Portrait", "Figure Study", "Self-Portrait"] } },
+      { handle: "mythology-history-religion", title: "Mythology, History & Religion", filter: { subjects: ["Mythology", "Allegory", "Religious", "Historical"] }, featured: true },
+      { handle: "japanese-art-ukiyo-e", title: "Japanese Woodblock Prints", filter: { styles: ["Ukiyo-e"] } },
     ];
+
+    // Era & movement collections
+    const eraCollections = [
+      { handle: "renaissance", title: "Renaissance", filter: { styles: ["Renaissance"] }, featured: true },
+      { handle: "baroque", title: "Baroque", filter: { styles: ["Baroque", "Flemish Baroque"] } },
+      { handle: "romanticism", title: "Romanticism", filter: { styles: ["Romanticism"] } },
+      { handle: "impressionism", title: "Impressionism", filter: { styles: ["Impressionism"] } },
+      { handle: "post-impressionism", title: "Post-Impressionism", filter: { styles: ["Post-Impressionism"] } },
+      { handle: "art-nouveau", title: "Art Nouveau", filter: { styles: ["Art Nouveau"] } },
+      { handle: "fauvism-expressionism", title: "Fauvism & Expressionism", filter: { styles: ["Fauvism", "Expressionism"] } },
+    ];
+
+    // Lifestyle & marketing collections
+    const lifestyleCollections = [
+      { handle: "the-paper-anniversary", title: "The Paper Anniversary", filter: { moods: ["Romantic", "Elegant", "Warm"] } },
+      { handle: "the-nursery-new-arrival", title: "The Nursery & New Arrival", filter: { subjects: ["Child", "Animal", "Nature", "Botanical"], moods: ["Joyful", "Whimsical"] }, orMode: true },
+      { handle: "the-housewarming-collection", title: "The Housewarming Collection", filter: { styles: ["Impressionism", "Post-Impressionism", "Realism", "Romanticism"] } },
+      { handle: "the-stoics-office", title: "The Stoic's Office", filter: { moods: ["Contemplative", "Powerful", "Philosophical"] } },
+      { handle: "dark-academia", title: "Dark Academia", filter: { moods: ["Dark", "Melancholic", "Mysterious"] }, featured: true },
+      { handle: "quiet-luxury", title: "Quiet Luxury", filter: { palettes: ["Muted Pastels", "Monochrome", "Light & Airy"] } },
+      { handle: "the-kitchen-curator", title: "The Kitchen Curator", filter: { subjects: ["Still Life", "Botanical"] } },
+      { handle: "the-focus-state", title: "The Focus State", filter: { moods: ["Serene", "Contemplative", "Peaceful"] } },
+      { handle: "the-conversation-starter", title: "The Conversation Starter", filter: { moods: ["Dramatic", "Dynamic", "Powerful"] } },
+      { handle: "spring-refresh", title: "The Spring Refresh", filter: { subjects: ["Botanical", "Nature"], palettes: ["Green & Natural", "Vibrant Multi-Color"] }, orMode: true },
+      { handle: "the-macabre-mystical", title: "The Macabre & Mystical", filter: { moods: ["Dark", "Mysterious", "Ethereal"] } },
+      { handle: "the-wanderlust-collection", title: "The Wanderlust Collection", filter: { subjects: ["Landscape", "Seascape", "Cityscape"] }, featured: true },
+    ];
+
+    const collectionDefs = [...subjectCollections, ...eraCollections, ...lifestyleCollections];
+
+    // Helper: apply Supabase filters to a query
+    function applyFilters(q, filter, orMode) {
+      if (orMode) {
+        // OR mode: combine filters from different columns with OR logic
+        const orClauses = [];
+        if (filter.subjects) orClauses.push(`subject.in.(${filter.subjects.join(",")})`);
+        if (filter.moods) orClauses.push(`mood.in.(${filter.moods.join(",")})`);
+        if (filter.styles) orClauses.push(`style.in.(${filter.styles.join(",")})`);
+        if (filter.palettes) orClauses.push(`palette.in.(${filter.palettes.join(",")})`);
+        if (filter.eras) orClauses.push(`era.in.(${filter.eras.join(",")})`);
+        if (orClauses.length > 0) q = q.or(orClauses.join(","));
+      } else {
+        // AND mode: each filter narrows results
+        if (filter.subjects) q = q.in("subject", filter.subjects);
+        if (filter.moods) q = q.in("mood", filter.moods);
+        if (filter.styles) q = q.in("style", filter.styles);
+        if (filter.palettes) q = q.in("palette", filter.palettes);
+        if (filter.eras) q = q.in("era", filter.eras);
+      }
+      if (filter.orientation) q = q.ilike("ratio_class", `${filter.orientation}%`);
+      if (filter.quality_tier) q = q.eq("quality_tier", filter.quality_tier);
+      return q;
+    }
 
     // Fetch counts and a sample image for each collection in parallel
     const results = await Promise.all(
       collectionDefs.map(async (col) => {
-        let query = supabase
+        // Count query
+        let countQ = supabase
           .from("assets")
-          .select("id, drive_file_id, title", { count: "exact" })
+          .select("id", { count: "exact", head: true })
           .in("ingestion_status", ["ready", "analyzed"])
           .not("style", "is", null)
           .not("drive_file_id", "is", null);
+        countQ = applyFilters(countQ, col.filter, col.orMode);
+        const { count: total } = await countQ;
 
-        // Apply specific filters (use ilike for orientation prefix matching)
-        if (col.filter.orientation) query = query.ilike("ratio_class", `${col.filter.orientation}%`);
-        if (col.filter.quality_tier) query = query.eq("quality_tier", col.filter.quality_tier);
-        if (col.filter.moods) query = query.in("mood", col.filter.moods);
-        if (col.filter.subjects) query = query.in("subject", col.filter.subjects);
-        if (col.filter.styles) query = query.in("style", col.filter.styles);
-        if (col.filter.palette) query = query.eq("palette", col.filter.palette);
-        if (col.filter.era) query = query.eq("era", col.filter.era);
-
-        // Get 1 random sample for the image
-        query = query.limit(1);
-        if (col.filter.sort !== "newest") {
-          // Use a random offset for variety
-          let countQ = supabase
-            .from("assets")
-            .select("id", { count: "exact", head: true })
-            .in("ingestion_status", ["ready", "analyzed"])
-            .not("style", "is", null)
-            .not("drive_file_id", "is", null);
-          if (col.filter.orientation) countQ = countQ.ilike("ratio_class", `${col.filter.orientation}%`);
-          if (col.filter.quality_tier) countQ = countQ.eq("quality_tier", col.filter.quality_tier);
-          if (col.filter.moods) countQ = countQ.in("mood", col.filter.moods);
-          if (col.filter.subjects) countQ = countQ.in("subject", col.filter.subjects);
-          if (col.filter.styles) countQ = countQ.in("style", col.filter.styles);
-          if (col.filter.palette) countQ = countQ.eq("palette", col.filter.palette);
-          if (col.filter.era) countQ = countQ.eq("era", col.filter.era);
-          const { count: total } = await countQ;
-          const offset = Math.floor(Math.random() * Math.max(1, (total || 1) - 1));
-          query = query.range(offset, offset);
-        } else {
-          query = query.order("created_at", { ascending: false });
-        }
-
-        const { data, count } = await query;
+        // Sample image query (random offset for variety)
+        let sampleQ = supabase
+          .from("assets")
+          .select("id, drive_file_id, title")
+          .in("ingestion_status", ["ready", "analyzed"])
+          .not("style", "is", null)
+          .not("drive_file_id", "is", null);
+        sampleQ = applyFilters(sampleQ, col.filter, col.orMode);
+        const offset = Math.floor(Math.random() * Math.max(1, (total || 1) - 1));
+        sampleQ = sampleQ.range(offset, offset).limit(1);
+        const { data } = await sampleQ;
         const sample = data?.[0];
-
-        // Build the URL — new collections link to Shopify collection pages
-        let url;
-        if (col.filter.moods || col.filter.subjects || col.filter.styles || col.filter.palette || col.filter.era) {
-          url = `/collections/${col.handle}`;
-        } else {
-          url = "/pages/catalog";
-          const params = [];
-          if (col.filter.orientation) params.push(`orientation=${col.filter.orientation}`);
-          if (col.filter.quality_tier) params.push(`quality=${col.filter.quality_tier}`);
-          if (col.filter.sort) params.push(`sort=${col.filter.sort}`);
-          if (params.length) url += "?" + params.join("&");
-        }
 
         return {
           handle: col.handle,
           title: col.title,
-          url,
-          count: count || 0,
+          url: `/collections/${col.handle}`,
+          count: total || 0,
           featured: col.featured || false,
           image: sample ? `https://lh3.googleusercontent.com/d/${sample.drive_file_id}=s800` : null,
         };
