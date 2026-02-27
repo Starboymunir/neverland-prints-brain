@@ -192,6 +192,10 @@ router.get("/storefront/catalog", async (req, res) => {
     const style = req.query.style;
     const mood = req.query.mood;
     const orientation = req.query.orientation;
+    const era = req.query.era;
+    const subject = req.query.subject;
+    const country = req.query.country;
+    const continent = req.query.continent;
     const sort = req.query.sort || "newest";
     const search = req.query.q || req.query.search;
     const tag = req.query.tag;
@@ -199,7 +203,7 @@ router.get("/storefront/catalog", async (req, res) => {
     let query = supabase
       .from("assets")
       .select(
-        "id, title, drive_file_id, artist, style, mood, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, created_at",
+        "id, title, drive_file_id, artist, style, mood, era, subject, ai_tags, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, created_at",
         { count: "exact" }
       )
       .in("ingestion_status", ["ready", "analyzed"])
@@ -211,10 +215,14 @@ router.get("/storefront/catalog", async (req, res) => {
     if (style) query = query.eq("style", style);
     if (mood) query = query.eq("mood", mood);
     if (orientation) query = query.eq("ratio_class", orientation);
-    if (tag) query = query.contains("tags", [tag]);
+    if (era) query = query.eq("era", era);
+    if (subject) query = query.eq("subject", subject);
+    if (country) query = query.contains("ai_tags", [country]);
+    if (continent) query = query.contains("ai_tags", [continent]);
+    if (tag) query = query.contains("ai_tags", [tag]);
     if (search) {
       query = query.or(
-        `title.ilike.%${search}%,style.ilike.%${search}%,mood.ilike.%${search}%,artist.ilike.%${search}%`
+        `title.ilike.%${search}%,style.ilike.%${search}%,mood.ilike.%${search}%,artist.ilike.%${search}%,era.ilike.%${search}%,subject.ilike.%${search}%`
       );
     }
 
@@ -248,14 +256,22 @@ router.get("/storefront/catalog", async (req, res) => {
     if (error) throw error;
 
     // Compute price tier for each asset
+    const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
     const items = (data || []).map((a) => {
       const tier = computePriceTier(a.max_print_width_cm, a.max_print_height_cm);
+      const tags = Array.isArray(a.ai_tags) ? a.ai_tags : [];
+      const itemContinent = tags.find(t => KNOWN_CONTINENTS.includes(t)) || null;
+      const itemCountry = tags.find(t => !KNOWN_CONTINENTS.includes(t) && t !== "Unknown" && typeof t === "string" && t.length > 1) || null;
       return {
         id: a.id,
         title: a.title,
         artist: a.artist,
         style: a.style,
         mood: a.mood,
+        era: a.era,
+        subject: a.subject,
+        country: itemCountry,
+        continent: itemContinent,
         orientation: a.ratio_class,
         quality: a.quality_tier,
         image: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`,
@@ -287,7 +303,7 @@ router.get("/storefront/catalog", async (req, res) => {
       page,
       perPage,
       totalPages: Math.ceil((count || 0) / perPage),
-      filters: { artist, style, mood, orientation, sort, q: search, tag },
+      filters: { artist, style, mood, orientation, era, subject, country, continent, sort, q: search, tag },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -416,15 +432,18 @@ router.get("/storefront/artists", async (req, res) => {
 
 /**
  * GET /api/storefront/filters
- * Returns available filter values (styles, moods, orientations).
+ * Returns available filter values (styles, moods, orientations, eras, subjects, countries, continents).
  */
 router.get("/storefront/filters", async (req, res) => {
   try {
     // Fetch distinct values in parallel
-    const [stylesRes, moodsRes, orientRes] = await Promise.all([
+    const [stylesRes, moodsRes, orientRes, erasRes, subjectsRes, tagsRes] = await Promise.all([
       supabase.from("assets").select("style").in("ingestion_status", ["ready", "analyzed"]).not("style", "is", null),
       supabase.from("assets").select("mood").in("ingestion_status", ["ready", "analyzed"]).not("mood", "is", null),
       supabase.from("assets").select("ratio_class").in("ingestion_status", ["ready", "analyzed"]).not("ratio_class", "is", null),
+      supabase.from("assets").select("era").in("ingestion_status", ["ready", "analyzed"]).not("era", "is", null),
+      supabase.from("assets").select("subject").in("ingestion_status", ["ready", "analyzed"]).not("subject", "is", null),
+      supabase.from("assets").select("ai_tags").in("ingestion_status", ["ready", "analyzed"]).not("ai_tags", "is", null),
     ]);
 
     const unique = (data, key) => {
@@ -437,11 +456,38 @@ router.get("/storefront/filters", async (req, res) => {
         .sort((a, b) => b.count - a.count);
     };
 
+    // Extract countries and continents from ai_tags
+    const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
+    const countryCounts = {};
+    const continentCounts = {};
+    (tagsRes.data || []).forEach((r) => {
+      const tags = Array.isArray(r.ai_tags) ? r.ai_tags : [];
+      tags.forEach((tag) => {
+        if (KNOWN_CONTINENTS.includes(tag)) {
+          continentCounts[tag] = (continentCounts[tag] || 0) + 1;
+        } else if (typeof tag === "string" && tag.length > 1 && tag !== "Unknown") {
+          countryCounts[tag] = (countryCounts[tag] || 0) + 1;
+        }
+      });
+    });
+
+    const countries = Object.entries(countryCounts)
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const continents = Object.entries(continentCounts)
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+
     res.set("Cache-Control", "public, max-age=3600");
     res.json({
       styles: unique(stylesRes.data, "style"),
       moods: unique(moodsRes.data, "mood"),
       orientations: unique(orientRes.data, "ratio_class"),
+      eras: unique(erasRes.data, "era"),
+      subjects: unique(subjectsRes.data, "subject"),
+      countries,
+      continents,
       priceTiers: [
         { tier: "small", label: "Small (≤24×17cm)", price: "$29.99", framedPrice: "$39.99" },
         { tier: "medium", label: "Medium (≤42×30cm)", price: "$49.99", framedPrice: "$64.99" },
