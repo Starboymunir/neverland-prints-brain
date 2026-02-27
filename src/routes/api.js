@@ -470,6 +470,12 @@ router.get("/storefront/collections", async (req, res) => {
       { handle: "gallery-grade", title: "Gallery Grade", filter: { quality_tier: "standard" }, featured: true },
       { handle: "new-arrivals", title: "New Arrivals", filter: { sort: "newest" } },
       { handle: "square-prints", title: "Square Prints", filter: { orientation: "square" } },
+      // New lifestyle/theme collections
+      { handle: "dark-academia", title: "Dark Academia", filter: { moods: ["Dark", "Melancholic", "Mysterious"], palette: "Dark & Moody" } },
+      { handle: "flora-fauna", title: "Flora & Fauna", filter: { subjects: ["Botanical", "Animal", "Nature"] }, featured: true },
+      { handle: "portraits-figures", title: "Portraits & Figures", filter: { subjects: ["Portrait", "Figure Study", "Self Portrait"] } },
+      { handle: "landscapes-seascapes", title: "Landscapes & Seascapes", filter: { subjects: ["Landscape", "Seascape", "Cityscape"] } },
+      { handle: "mythology-history", title: "Mythology, History & Religion", filter: { subjects: ["Mythology", "Allegory", "Religious", "Historical"] }, featured: true },
     ];
 
     // Fetch counts and a sample image for each collection in parallel
@@ -485,6 +491,11 @@ router.get("/storefront/collections", async (req, res) => {
         // Apply specific filters (use ilike for orientation prefix matching)
         if (col.filter.orientation) query = query.ilike("ratio_class", `${col.filter.orientation}%`);
         if (col.filter.quality_tier) query = query.eq("quality_tier", col.filter.quality_tier);
+        if (col.filter.moods) query = query.in("mood", col.filter.moods);
+        if (col.filter.subjects) query = query.in("subject", col.filter.subjects);
+        if (col.filter.styles) query = query.in("style", col.filter.styles);
+        if (col.filter.palette) query = query.eq("palette", col.filter.palette);
+        if (col.filter.era) query = query.eq("era", col.filter.era);
 
         // Get 1 random sample for the image
         query = query.limit(1);
@@ -498,6 +509,11 @@ router.get("/storefront/collections", async (req, res) => {
             .not("drive_file_id", "is", null);
           if (col.filter.orientation) countQ = countQ.ilike("ratio_class", `${col.filter.orientation}%`);
           if (col.filter.quality_tier) countQ = countQ.eq("quality_tier", col.filter.quality_tier);
+          if (col.filter.moods) countQ = countQ.in("mood", col.filter.moods);
+          if (col.filter.subjects) countQ = countQ.in("subject", col.filter.subjects);
+          if (col.filter.styles) countQ = countQ.in("style", col.filter.styles);
+          if (col.filter.palette) countQ = countQ.eq("palette", col.filter.palette);
+          if (col.filter.era) countQ = countQ.eq("era", col.filter.era);
           const { count: total } = await countQ;
           const offset = Math.floor(Math.random() * Math.max(1, (total || 1) - 1));
           query = query.range(offset, offset);
@@ -508,13 +524,18 @@ router.get("/storefront/collections", async (req, res) => {
         const { data, count } = await query;
         const sample = data?.[0];
 
-        // Build the catalog URL with filter params
-        let url = "/pages/catalog";
-        const params = [];
-        if (col.filter.orientation) params.push(`orientation=${col.filter.orientation}`);
-        if (col.filter.quality_tier) params.push(`quality=${col.filter.quality_tier}`);
-        if (col.filter.sort) params.push(`sort=${col.filter.sort}`);
-        if (params.length) url += "?" + params.join("&");
+        // Build the URL — new collections link to Shopify collection pages
+        let url;
+        if (col.filter.moods || col.filter.subjects || col.filter.styles || col.filter.palette || col.filter.era) {
+          url = `/collections/${col.handle}`;
+        } else {
+          url = "/pages/catalog";
+          const params = [];
+          if (col.filter.orientation) params.push(`orientation=${col.filter.orientation}`);
+          if (col.filter.quality_tier) params.push(`quality=${col.filter.quality_tier}`);
+          if (col.filter.sort) params.push(`sort=${col.filter.sort}`);
+          if (params.length) url += "?" + params.join("&");
+        }
 
         return {
           handle: col.handle,
