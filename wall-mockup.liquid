@@ -1,0 +1,195 @@
+{% comment %}
+  WALL MOCKUP — Static photorealistic room scenes with real catalog art
+  Art is baked into the images by gpt-image-1, no CSS overlay needed
+{% endcomment %}
+
+<section class="section wall-mockup-section">
+  <div class="wm-container">
+    <div class="wm-header">
+      <span class="wm-eyebrow">{{ section.settings.eyebrow }}</span>
+      <h2 class="wm-title">{{ section.settings.title }}</h2>
+      <p class="wm-sub">{{ section.settings.subtitle }}</p>
+    </div>
+
+    <div class="wm-grid">
+      <!-- Living Room -->
+      <div class="wm-room wm-room--wide">
+        <div class="wm-scene">
+          <img
+            src="{{ 'mockup-living-room.jpg' | asset_url }}"
+            alt="The Starry Night by Vincent van Gogh in a dark walnut frame above a mid-century sofa"
+            class="wm-photo"
+            loading="lazy"
+            width="1536"
+            height="1024"
+          >
+        </div>
+        <div class="wm-caption">
+          <div class="wm-cap-left">
+            <span class="wm-cap-title">The Starry Night</span>
+            <span class="wm-cap-artist">Vincent van Gogh · Post-Impressionism</span>
+          </div>
+          <a href="/pages/catalog" class="wm-cap-btn">Shop this look</a>
+        </div>
+      </div>
+
+      <!-- Bedroom -->
+      <div class="wm-room">
+        <div class="wm-scene">
+          <img
+            src="{{ 'mockup-bedroom.jpg' | asset_url }}"
+            alt="Girl with a Pearl Earring by Johannes Vermeer in a dark walnut frame above a bedroom nightstand"
+            class="wm-photo"
+            loading="lazy"
+            width="1536"
+            height="1024"
+          >
+        </div>
+        <div class="wm-caption">
+          <div class="wm-cap-left">
+            <span class="wm-cap-title">Girl with a Pearl Earring</span>
+            <span class="wm-cap-artist">Johannes Vermeer · Baroque</span>
+          </div>
+          <a href="/pages/catalog" class="wm-cap-btn">Shop this look</a>
+        </div>
+      </div>
+
+      <!-- Dining Room -->
+      <div class="wm-room">
+        <div class="wm-scene">
+          <img
+            src="{{ 'mockup-dining-room.jpg' | asset_url }}"
+            alt="The Great Wave off Kanagawa by Katsushika Hokusai in a dark walnut frame on a moody dining room wall"
+            class="wm-photo"
+            loading="lazy"
+            width="1536"
+            height="1024"
+          >
+        </div>
+        <div class="wm-caption wm-caption--dark">
+          <div class="wm-cap-left">
+            <span class="wm-cap-title">The Great Wave off Kanagawa</span>
+            <span class="wm-cap-artist">Katsushika Hokusai · Ukiyo-e</span>
+          </div>
+          <a href="/pages/catalog" class="wm-cap-btn wm-cap-btn--light">Shop this look</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="wm-cta-row">
+      <a href="/pages/catalog" class="btn btn--primary btn--large wm-cta">
+        <span>{{ section.settings.cta_text }}</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .wall-mockup-section { padding: 80px 0; background: var(--bg-cream, #faf8f4); }
+  .wm-container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+  /* Header */
+  .wm-header { text-align: center; margin-bottom: 48px; }
+  .wm-eyebrow {
+    display: block; font-size: .72rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--gold, #b49b64); margin-bottom: 10px;
+  }
+  .wm-title {
+    font-family: var(--font-display, Georgia, serif);
+    font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 500;
+    color: var(--text-dark, #1a1a2e); margin: 0 0 12px;
+  }
+  .wm-sub {
+    font-size: 1rem; color: rgba(26,26,46,.6);
+    max-width: 560px; margin: 0 auto; line-height: 1.6;
+  }
+
+  /* Grid */
+  .wm-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 24px; margin-bottom: 40px;
+  }
+  .wm-room {
+    border-radius: 12px; overflow: hidden;
+    background: #e8e2d8;
+    box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    transition: transform .3s ease, box-shadow .3s ease;
+  }
+  .wm-room:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 32px rgba(0,0,0,.14);
+  }
+  .wm-room--wide { grid-column: 1 / -1; }
+
+  /* Photo */
+  .wm-scene { line-height: 0; overflow: hidden; }
+  .wm-photo {
+    display: block; width: 100%; height: auto;
+    transition: transform .6s ease;
+  }
+  .wm-room:hover .wm-photo { transform: scale(1.02); }
+
+  /* Caption */
+  .wm-caption {
+    padding: 16px 20px;
+    display: flex; justify-content: space-between; align-items: center;
+    background: #fff; border-top: 1px solid rgba(0,0,0,.06);
+  }
+  .wm-cap-left { min-width: 0; }
+  .wm-cap-title {
+    display: block;
+    font-family: var(--font-display, Georgia, serif);
+    font-size: .95rem; font-weight: 500;
+    color: var(--text-dark, #1a1a2e);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .wm-cap-artist {
+    display: block; margin-top: 2px;
+    font-size: .75rem; color: rgba(26,26,46,.45);
+    letter-spacing: .03em;
+  }
+  .wm-cap-btn {
+    flex-shrink: 0; margin-left: 16px;
+    font-size: .78rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: var(--gold, #b49b64); text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color .2s;
+  }
+  .wm-cap-btn:hover { border-bottom-color: var(--gold, #b49b64); }
+
+  /* Dark caption variant */
+  .wm-caption--dark { background: #1a1a2e; border-top-color: rgba(255,255,255,.08); }
+  .wm-caption--dark .wm-cap-title { color: #fff; }
+  .wm-caption--dark .wm-cap-artist { color: rgba(255,255,255,.4); }
+  .wm-cap-btn--light { color: rgba(255,255,255,.7); }
+  .wm-cap-btn--light:hover { border-bottom-color: rgba(255,255,255,.5); }
+
+  /* CTA */
+  .wm-cta-row { text-align: center; margin-top: 16px; }
+  .wm-cta { gap: 8px; }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    .wall-mockup-section { padding: 48px 0; }
+    .wm-grid { grid-template-columns: 1fr; }
+    .wm-room--wide { grid-column: auto; }
+    .wm-header { margin-bottom: 32px; }
+    .wm-cap-btn { display: none; }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "Wall Mockup",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow text", "default": "Visualise Your Space" },
+    { "type": "text", "id": "title", "label": "Heading", "default": "See It On Your Wall" },
+    { "type": "text", "id": "subtitle", "label": "Subtitle", "default": "Every piece, framed or unframed, designed to transform your space." },
+    { "type": "text", "id": "cta_text", "label": "Button text", "default": "Shop Framed Prints" }
+  ],
+  "presets": [{ "name": "Wall Mockup" }]
+}
+{% endschema %}

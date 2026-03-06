@@ -1,0 +1,36 @@
+{% comment %} MEDIA SHOWCASE — Full-bleed video/image visual break (PopMotif style) {% endcomment %}
+
+<section class="media-showcase" data-animate="fade-up">
+  <div class="media-showcase__bg" id="media-showcase-bg">
+    {%- if section.settings.video -%}
+      <video class="media-showcase__video" playsinline autoplay muted loop>
+        {{ section.settings.video | video_sources }}
+      </video>
+    {%- elsif section.settings.image -%}
+      <img src="{{ section.settings.image | image_url: width: 1920 }}" alt="{{ section.settings.image.alt }}" loading="lazy">
+    {%- else -%}
+      {%- assign ms_coll = collections['gallery-grade'] -%}
+      {%- unless ms_coll -%}{%- assign ms_coll = collections['all-art-prints'] -%}{%- endunless -%}
+      {%- assign ms_product = ms_coll.products[28] -%}
+      {%- if ms_product and ms_product.featured_image -%}
+        <img src="{{ ms_product.featured_image | image_url: width: 1920 }}" alt="{{ ms_product.title | escape }}" loading="lazy" style="width:100%;height:100%;object-fit:cover;">
+      {%- elsif ms_product and ms_product.metafields.neverland.drive_file_id != blank -%}
+        <img src="https://lh3.googleusercontent.com/d/{{ ms_product.metafields.neverland.drive_file_id }}=s1200" alt="{{ ms_product.title | escape }}" loading="lazy" style="width:100%;height:100%;object-fit:cover;">
+      {%- else -%}
+        <div class="media-showcase__placeholder"></div>
+      {%- endif -%}
+    {%- endif -%}
+  </div>
+  <div class="media-showcase__overlay"></div>
+</section>
+
+{% schema %}
+{
+  "name": "Media Showcase",
+  "settings": [
+    { "type": "image_picker", "id": "image", "label": "Background image" },
+    { "type": "video", "id": "video", "label": "Background video (autoplay, muted)" }
+  ],
+  "presets": [{ "name": "Media Showcase" }]
+}
+{% endschema %}

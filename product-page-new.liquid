@@ -1,0 +1,629 @@
+{%- comment -%}
+  PRODUCT PAGE — Premium art print product page
+  Inspired by Pop Motif — gallery-quality UX with frame preview, size guide, lifestyle sections
+{%- endcomment -%}
+
+{%- assign current_variant = product.selected_or_first_available_variant -%}
+{%- assign img_src = '' -%}
+{%- assign img_srcset = '' -%}
+{%- if product.featured_image -%}
+  {%- assign img_src = product.featured_image | image_url: width: 1200 -%}
+  {%- capture img_srcset -%}{{ product.featured_image | image_url: width: 600 }} 600w, {{ product.featured_image | image_url: width: 900 }} 900w, {{ product.featured_image | image_url: width: 1200 }} 1200w, {{ product.featured_image | image_url: width: 1600 }} 1600w{%- endcapture -%}
+{%- elsif product.metafields.neverland.drive_file_id != blank -%}
+  {%- assign did = product.metafields.neverland.drive_file_id -%}
+  {%- assign img_src = 'https://lh3.googleusercontent.com/d/' | append: did | append: '=s1200' -%}
+  {%- capture img_srcset -%}https://lh3.googleusercontent.com/d/{{ did }}=s600 600w, https://lh3.googleusercontent.com/d/{{ did }}=s900 900w, https://lh3.googleusercontent.com/d/{{ did }}=s1200 1200w, https://lh3.googleusercontent.com/d/{{ did }}=s1600 1600w{%- endcapture -%}
+{%- endif -%}
+
+<section class="pp" itemscope itemtype="https://schema.org/Product">
+  <div class="container">
+
+    {%- comment -%} ── Breadcrumbs ── {%- endcomment -%}
+    <nav class="pp-breadcrumbs" aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/">Home</a></li>
+        {%- if product.collections.size > 0 -%}
+          <li><a href="{{ product.collections.first.url }}">{{ product.collections.first.title }}</a></li>
+        {%- else -%}
+          <li><a href="/collections/all">Shop</a></li>
+        {%- endif -%}
+        <li aria-current="page">{{ product.title | truncate: 50 }}</li>
+      </ol>
+    </nav>
+
+    <div class="pp-layout">
+
+      {%- comment -%} ═══ LEFT: Gallery ═══ {%- endcomment -%}
+      <div class="pp-gallery">
+
+        {%- comment -%} Main image with frame preview {%- endcomment -%}
+        <div class="pp-gallery__main">
+          <div class="pp-frame" id="pp-frame" data-frame="none">
+            <div class="pp-frame__mat">
+              {%- if img_src != '' -%}
+                <img
+                  id="pp-main-img"
+                  src="{{ img_src }}"
+                  srcset="{{ img_srcset }}"
+                  sizes="(max-width: 768px) 92vw, (max-width: 1200px) 50vw, 600px"
+                  alt="{{ product.featured_image.alt | default: product.title | escape }}"
+                  loading="eager"
+                  fetchpriority="high"
+                  itemprop="image"
+                >
+              {%- else -%}
+                <div class="pp-frame__placeholder">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                  <span>No image available</span>
+                </div>
+              {%- endif -%}
+            </div>
+          </div>
+
+          {%- comment -%} Zoom button {%- endcomment -%}
+          {%- if img_src != '' -%}
+            <button class="pp-gallery__zoom" id="pp-zoom-btn" type="button" aria-label="Zoom image">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+            </button>
+          {%- endif -%}
+        </div>
+
+        {%- comment -%} Frame style selector {%- endcomment -%}
+        <div class="pp-frames" id="pp-frames">
+          <span class="pp-frames__label">Preview Frame Style</span>
+          <div class="pp-frames__options">
+            <button type="button" class="pp-frames__btn is-active" data-frame="none" title="Unframed">
+              <span class="pp-frames__swatch pp-frames__swatch--none">
+                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="Unframed" loading="lazy">{%- endif -%}
+              </span>
+              <span class="pp-frames__name">Unframed</span>
+            </button>
+            <button type="button" class="pp-frames__btn" data-frame="black" title="Black Frame">
+              <span class="pp-frames__swatch pp-frames__swatch--black">
+                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="Black frame" loading="lazy">{%- endif -%}
+              </span>
+              <span class="pp-frames__name">Black</span>
+            </button>
+            <button type="button" class="pp-frames__btn" data-frame="white" title="White Frame">
+              <span class="pp-frames__swatch pp-frames__swatch--white">
+                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="White frame" loading="lazy">{%- endif -%}
+              </span>
+              <span class="pp-frames__name">White</span>
+            </button>
+            <button type="button" class="pp-frames__btn" data-frame="natural" title="Natural Wood">
+              <span class="pp-frames__swatch pp-frames__swatch--natural">
+                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="Natural frame" loading="lazy">{%- endif -%}
+              </span>
+              <span class="pp-frames__name">Natural</span>
+            </button>
+            <button type="button" class="pp-frames__btn" data-frame="walnut" title="Walnut">
+              <span class="pp-frames__swatch pp-frames__swatch--walnut">
+                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="Walnut frame" loading="lazy">{%- endif -%}
+              </span>
+              <span class="pp-frames__name">Walnut</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {%- comment -%} ═══ RIGHT: Product Details ═══ {%- endcomment -%}
+      <div class="pp-details">
+
+        {%- comment -%} Artist {%- endcomment -%}
+        <p class="pp-artist" itemprop="brand">{{ product.vendor }}</p>
+
+        {%- comment -%} Title {%- endcomment -%}
+        <h1 class="pp-title" itemprop="name">{{ product.title }}</h1>
+
+        {%- comment -%} Price {%- endcomment -%}
+        <div class="pp-price" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+          <meta itemprop="priceCurrency" content="{{ shop.currency }}">
+          <span class="pp-price__current" id="pp-price" itemprop="price" content="{{ current_variant.price | divided_by: 100.0 }}">{{ current_variant.price | money }}</span>
+          {%- if current_variant.compare_at_price > current_variant.price -%}
+            <span class="pp-price__was" id="pp-compare-price">{{ current_variant.compare_at_price | money }}</span>
+            <span class="pp-price__badge">Sale</span>
+          {%- else -%}
+            <span class="pp-price__was" id="pp-compare-price" style="display:none;"></span>
+          {%- endif -%}
+          <link itemprop="availability" href="https://schema.org/{% if current_variant.available %}InStock{% else %}OutOfStock{% endif %}">
+        </div>
+
+        {%- comment -%} Divider {%- endcomment -%}
+        <hr class="pp-divider">
+
+        {%- comment -%} Size selector with size guide {%- endcomment -%}
+        {%- if product.variants.size > 1 -%}
+          <div class="pp-option">
+            <div class="pp-option__head">
+              <span class="pp-option__label">Print Size</span>
+              <button type="button" class="pp-option__guide" id="pp-size-guide-trigger">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                Size Guide
+              </button>
+            </div>
+            <div class="pp-option__pills" id="pp-variants">
+              {%- for variant in product.variants -%}
+                <button
+                  type="button"
+                  class="pp-pill{% if variant == current_variant %} is-selected{% endif %}"
+                  data-variant-id="{{ variant.id }}"
+                  data-price="{{ variant.price | money }}"
+                  data-compare-price="{% if variant.compare_at_price > variant.price %}{{ variant.compare_at_price | money }}{% endif %}"
+                  data-available="{{ variant.available }}"
+                >
+                  {{ variant.title }}
+                </button>
+              {%- endfor -%}
+            </div>
+          </div>
+        {%- endif -%}
+
+        {%- comment -%} Add to Cart {%- endcomment -%}
+        <form method="post" action="/cart/add" class="pp-cart-form" id="pp-cart-form">
+          <input type="hidden" name="id" id="pp-variant-id" value="{{ current_variant.id }}">
+          <input type="hidden" name="quantity" value="1">
+          <button type="submit" class="pp-add-to-cart" id="pp-atc"{% unless current_variant.available %} disabled{% endunless %}>
+            {%- if current_variant.available -%}
+              <span class="pp-atc__text">Add to Cart</span>
+              <span class="pp-atc__sep">—</span>
+              <span class="pp-atc__price" id="pp-atc-price">{{ current_variant.price | money }}</span>
+            {%- else -%}
+              <span class="pp-atc__text">Sold Out</span>
+            {%- endif -%}
+          </button>
+        </form>
+
+        {%- comment -%} Trust badges {%- endcomment -%}
+        <div class="pp-trust">
+          <div class="pp-trust__item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            <span>Satisfaction Guaranteed</span>
+          </div>
+          <div class="pp-trust__item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            <span>Worldwide Shipping</span>
+          </div>
+          <div class="pp-trust__item">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span>Ships in 3–5 Days</span>
+          </div>
+        </div>
+
+        {%- comment -%} Product meta specs {%- endcomment -%}
+        <div class="pp-specs">
+          {%- if product.metafields.neverland.ratio_class != blank -%}
+            <div class="pp-specs__row">
+              <span class="pp-specs__label">Orientation</span>
+              <span class="pp-specs__value">{{ product.metafields.neverland.ratio_class | replace: '_', ' ' | capitalize }}</span>
+            </div>
+          {%- endif -%}
+          {%- if product.metafields.neverland.max_print_cm != blank -%}
+            <div class="pp-specs__row">
+              <span class="pp-specs__label">Max Print Size</span>
+              <span class="pp-specs__value">{{ product.metafields.neverland.max_print_cm }}</span>
+            </div>
+          {%- endif -%}
+          {%- if product.metafields.neverland.quality_tier != blank -%}
+            <div class="pp-specs__row">
+              <span class="pp-specs__label">Print Quality</span>
+              <span class="pp-specs__value">{{ product.metafields.neverland.quality_tier | capitalize }} Grade</span>
+            </div>
+          {%- endif -%}
+          <div class="pp-specs__row">
+            <span class="pp-specs__label">Artist</span>
+            <span class="pp-specs__value">{{ product.vendor }}</span>
+          </div>
+        </div>
+
+        {%- comment -%} Accordion {%- endcomment -%}
+        <div class="pp-accordion" id="pp-accordion">
+          <div class="pp-accordion__item">
+            <button class="pp-accordion__trigger is-open" type="button">
+              <span>About This Print</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="pp-accordion__body is-open">
+              <div class="pp-accordion__text">{{ product.description }}</div>
+            </div>
+          </div>
+
+          <div class="pp-accordion__item">
+            <button class="pp-accordion__trigger" type="button">
+              <span>Materials &amp; Quality</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="pp-accordion__body">
+              <div class="pp-accordion__text">
+                <ul>
+                  <li>Premium 310gsm cotton-rag archival paper</li>
+                  <li>Giclée printing with pigment-based inks</li>
+                  <li>Rated 200+ years lightfastness</li>
+                  <li>Vibrant, accurate colour reproduction</li>
+                  <li>Textured matte finish</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="pp-accordion__item">
+            <button class="pp-accordion__trigger" type="button">
+              <span>Shipping &amp; Returns</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="pp-accordion__body">
+              <div class="pp-accordion__text">
+                <ul>
+                  <li>Worldwide shipping — rates calculated at checkout</li>
+                  <li>Ships flat in rigid protective packaging</li>
+                  <li>Printed on demand — 3–5 business days production</li>
+                  <li>30-day satisfaction guarantee</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {%- comment -%} ═══ Below-fold: Lifestyle Sections ═══ {%- endcomment -%}
+  <div class="pp-lifestyle">
+
+    {%- comment -%} Section 1: Gallery Quality Paper {%- endcomment -%}
+    <div class="pp-lsec pp-lsec--alt">
+      <div class="container">
+        <div class="pp-lsec__row">
+          <div class="pp-lsec__media">
+            <div class="pp-lsec__img-wrap">
+              {%- if img_src != '' -%}
+                <img src="{{ img_src }}" alt="Gallery quality art paper" loading="lazy">
+              {%- endif -%}
+            </div>
+          </div>
+          <div class="pp-lsec__text">
+            <span class="pp-lsec__eyebrow">Premium Materials</span>
+            <h2 class="pp-lsec__title">Gallery Quality Art Paper</h2>
+            <p class="pp-lsec__desc">Every print is produced on premium 310gsm cotton-rag archival paper using 12-colour giclée technology — the same process used by the world's leading galleries and museums.</p>
+            <div class="pp-lsec__features">
+              <div class="pp-lsec__feat">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                <div>
+                  <strong>Textured Paper</strong>
+                  <span>310gsm cotton-rag</span>
+                </div>
+              </div>
+              <div class="pp-lsec__feat">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                <div>
+                  <strong>Fade Resistant</strong>
+                  <span>200+ year lightfastness</span>
+                </div>
+              </div>
+              <div class="pp-lsec__feat">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                <div>
+                  <strong>Vivid Detail</strong>
+                  <span>12-colour giclée process</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {%- comment -%} Section 2: Custom Framing {%- endcomment -%}
+    <div class="pp-lsec">
+      <div class="container">
+        <div class="pp-lsec__row pp-lsec__row--reverse">
+          <div class="pp-lsec__media">
+            <div class="pp-lsec__img-wrap pp-lsec__img-wrap--framed">
+              {%- if img_src != '' -%}
+                <div class="pp-lsec__framed-art" data-frame="black">
+                  <div class="pp-lsec__framed-mat">
+                    <img src="{{ img_src }}" alt="Custom framed art print" loading="lazy">
+                  </div>
+                </div>
+              {%- endif -%}
+            </div>
+          </div>
+          <div class="pp-lsec__text">
+            <span class="pp-lsec__eyebrow">Bespoke Framing</span>
+            <h2 class="pp-lsec__title">Custom Framed To Order</h2>
+            <p class="pp-lsec__desc">Choose from premium timber frame finishes — black, white, natural oak, or walnut. Each frame is handcrafted with precision and fitted with crystal-clear acrylic glazing for enduring protection.</p>
+            <div class="pp-lsec__features">
+              <div class="pp-lsec__feat">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10"/></svg>
+                <div>
+                  <strong>Handcrafted Frames</strong>
+                  <span>Premium timber finishes</span>
+                </div>
+              </div>
+              <div class="pp-lsec__feat">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                <div>
+                  <strong>Acrylic Glazing</strong>
+                  <span>Crystal-clear protection</span>
+                </div>
+              </div>
+              <div class="pp-lsec__feat">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                <div>
+                  <strong>Ready to Hang</strong>
+                  <span>Arrives wall-ready</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {%- comment -%} Section 3: Happiness Guaranteed {%- endcomment -%}
+    <div class="pp-lsec pp-lsec--dark">
+      <div class="container">
+        <div class="pp-lsec__row">
+          <div class="pp-lsec__text pp-lsec__text--centered">
+            <span class="pp-lsec__eyebrow">Our Promise</span>
+            <h2 class="pp-lsec__title">Happiness Guaranteed</h2>
+            <p class="pp-lsec__desc">We believe great art should be accessible to everyone. If you're not completely in love with your print, we'll make it right — no questions asked.</p>
+            <div class="pp-lsec__badges">
+              <div class="pp-lsec__badge">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                <span>Quality Warranty</span>
+              </div>
+              <div class="pp-lsec__badge">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                <span>30-Day Returns</span>
+              </div>
+              <div class="pp-lsec__badge">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                <span>Worldwide Delivery</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {%- comment -%} ═══ You May Also Like ═══ {%- endcomment -%}
+  {%- assign rec_coll = product.collections.first -%}
+  {%- unless rec_coll -%}{%- assign rec_coll = collections['all-art-prints'] -%}{%- endunless -%}
+  {%- if rec_coll -%}
+    <div class="pp-related">
+      <div class="container">
+        <div class="pp-related__head">
+          <h2 class="pp-related__title">You May Also Like</h2>
+          <a href="{{ rec_coll.url }}" class="pp-related__link">
+            View All
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+        </div>
+        <div class="pp-related__grid" id="pp-related-grid">
+          {%- assign rec_count = 0 -%}
+          {%- for rec_product in rec_coll.products limit: 12 -%}
+            {%- if rec_product.id == product.id -%}{%- continue -%}{%- endif -%}
+            {%- if rec_count >= 8 -%}{%- break -%}{%- endif -%}
+            {%- assign rec_count = rec_count | plus: 1 -%}
+
+            {%- assign rec_img = '' -%}
+            {%- if rec_product.featured_image -%}
+              {%- assign rec_img = rec_product.featured_image | image_url: width: 500 -%}
+            {%- elsif rec_product.metafields.neverland.drive_file_id != blank -%}
+              {%- assign rec_img = 'https://lh3.googleusercontent.com/d/' | append: rec_product.metafields.neverland.drive_file_id | append: '=s500' -%}
+            {%- endif -%}
+
+            <a href="{{ rec_product.url }}" class="pp-rcard">
+              <div class="pp-rcard__img">
+                {%- if rec_img != '' -%}
+                  <img src="{{ rec_img }}" alt="{{ rec_product.title | escape }}" loading="lazy" width="500" height="500">
+                {%- else -%}
+                  <div class="pp-rcard__placeholder"></div>
+                {%- endif -%}
+              </div>
+              <div class="pp-rcard__info">
+                <span class="pp-rcard__artist">{{ rec_product.vendor }}</span>
+                <span class="pp-rcard__title">{{ rec_product.title | truncate: 40 }}</span>
+                <span class="pp-rcard__price">{{ rec_product.price_min | money }}</span>
+              </div>
+            </a>
+          {%- endfor -%}
+        </div>
+      </div>
+    </div>
+  {%- endif -%}
+
+  {%- comment -%} ═══ Image Zoom Lightbox ═══ {%- endcomment -%}
+  <div class="pp-lightbox" id="pp-lightbox" aria-hidden="true">
+    <div class="pp-lightbox__overlay"></div>
+    <div class="pp-lightbox__content">
+      <img id="pp-lightbox-img" src="" alt="">
+      <button class="pp-lightbox__close" id="pp-lightbox-close" type="button" aria-label="Close">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+
+  {%- comment -%} ═══ Size Guide Modal ═══ {%- endcomment -%}
+  <div class="pp-modal" id="pp-size-guide" aria-hidden="true">
+    <div class="pp-modal__overlay"></div>
+    <div class="pp-modal__dialog">
+      <div class="pp-modal__header">
+        <h3 class="pp-modal__title">Size Guide</h3>
+        <button class="pp-modal__close" id="pp-size-guide-close" type="button" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="pp-modal__body">
+        <div class="pp-size-table">
+          <table>
+            <thead>
+              <tr><th>Size</th><th>Dimensions (cm)</th><th>Dimensions (in)</th><th>Best For</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Small</td><td>21 × 30 cm</td><td>8.3 × 11.7 in</td><td>Shelves, desks, small walls</td></tr>
+              <tr><td>Medium</td><td>30 × 42 cm</td><td>11.7 × 16.5 in</td><td>Gallery walls, bedrooms</td></tr>
+              <tr><td>Large</td><td>42 × 59 cm</td><td>16.5 × 23.4 in</td><td>Living rooms, feature walls</td></tr>
+              <tr><td>Extra Large</td><td>59 × 84 cm</td><td>23.4 × 33.1 in</td><td>Statement pieces, large walls</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="pp-size-note">Actual dimensions may vary slightly based on the artwork's aspect ratio. All sizes include a small white border for framing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ── Frame Preview ── */
+  var ppFrame = document.getElementById('pp-frame');
+  var frameBtns = document.querySelectorAll('.pp-frames__btn');
+  frameBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var frame = this.getAttribute('data-frame');
+      frameBtns.forEach(function(b) { b.classList.remove('is-active'); });
+      this.classList.add('is-active');
+      if (ppFrame) ppFrame.setAttribute('data-frame', frame);
+    });
+  });
+
+  /* ── Variant Selector ── */
+  var variantPills = document.querySelectorAll('.pp-pill');
+  var priceEl = document.getElementById('pp-price');
+  var comparePriceEl = document.getElementById('pp-compare-price');
+  var variantInput = document.getElementById('pp-variant-id');
+  var atcBtn = document.getElementById('pp-atc');
+  var atcPrice = document.getElementById('pp-atc-price');
+
+  variantPills.forEach(function(pill) {
+    pill.addEventListener('click', function() {
+      if (this.getAttribute('data-available') === 'false') return;
+      variantPills.forEach(function(p) { p.classList.remove('is-selected'); });
+      this.classList.add('is-selected');
+
+      var vid = this.getAttribute('data-variant-id');
+      var price = this.getAttribute('data-price');
+      var comparePrice = this.getAttribute('data-compare-price');
+
+      if (variantInput) variantInput.value = vid;
+      if (priceEl) priceEl.textContent = price;
+      if (atcPrice) atcPrice.textContent = price;
+
+      if (comparePriceEl) {
+        if (comparePrice) {
+          comparePriceEl.textContent = comparePrice;
+          comparePriceEl.style.display = '';
+        } else {
+          comparePriceEl.style.display = 'none';
+        }
+      }
+
+      // Update URL without reload
+      if (window.history && window.history.replaceState) {
+        var url = new URL(window.location);
+        url.searchParams.set('variant', vid);
+        window.history.replaceState({}, '', url);
+      }
+    });
+  });
+
+  /* ── Accordion ── */
+  document.querySelectorAll('.pp-accordion__trigger').forEach(function(trigger) {
+    trigger.addEventListener('click', function() {
+      var body = this.nextElementSibling;
+      var isOpen = this.classList.contains('is-open');
+
+      // Close all in this accordion
+      this.closest('.pp-accordion').querySelectorAll('.pp-accordion__trigger').forEach(function(t) {
+        t.classList.remove('is-open');
+        if (t.nextElementSibling) t.nextElementSibling.classList.remove('is-open');
+      });
+
+      if (!isOpen) {
+        this.classList.add('is-open');
+        if (body) body.classList.add('is-open');
+      }
+    });
+  });
+
+  /* ── Image Lightbox ── */
+  var lightbox = document.getElementById('pp-lightbox');
+  var lightboxImg = document.getElementById('pp-lightbox-img');
+  var lightboxClose = document.getElementById('pp-lightbox-close');
+  var zoomBtn = document.getElementById('pp-zoom-btn');
+  var mainImg = document.getElementById('pp-main-img');
+
+  function openLightbox() {
+    if (!lightbox || !mainImg) return;
+    // Use higher resolution for zoom
+    var src = mainImg.src;
+    if (src.includes('cdn.shopify.com')) {
+      src = src.replace(/width=\d+/, 'width=2400');
+    } else if (src.includes('googleusercontent.com')) {
+      src = src.replace(/=s\d+/, '=s2400');
+    }
+    lightboxImg.src = src;
+    lightboxImg.alt = mainImg.alt;
+    lightbox.classList.add('is-open');
+    lightbox.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    if (!lightbox) return;
+    lightbox.classList.remove('is-open');
+    lightbox.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  if (zoomBtn) zoomBtn.addEventListener('click', openLightbox);
+  if (mainImg) mainImg.addEventListener('click', openLightbox);
+  if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
+  if (lightbox) {
+    lightbox.querySelector('.pp-lightbox__overlay')?.addEventListener('click', closeLightbox);
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeLightbox();
+  });
+
+  /* ── Size Guide Modal ── */
+  var sizeModal = document.getElementById('pp-size-guide');
+  var sizeGuideTrigger = document.getElementById('pp-size-guide-trigger');
+  var sizeGuideClose = document.getElementById('pp-size-guide-close');
+
+  function openSizeGuide() {
+    if (!sizeModal) return;
+    sizeModal.classList.add('is-open');
+    sizeModal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeSizeGuide() {
+    if (!sizeModal) return;
+    sizeModal.classList.remove('is-open');
+    sizeModal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  if (sizeGuideTrigger) sizeGuideTrigger.addEventListener('click', openSizeGuide);
+  if (sizeGuideClose) sizeGuideClose.addEventListener('click', closeSizeGuide);
+  if (sizeModal) {
+    sizeModal.querySelector('.pp-modal__overlay')?.addEventListener('click', closeSizeGuide);
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeSizeGuide();
+  });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Product Page",
+  "settings": [],
+  "presets": [{ "name": "Product Page" }]
+}
+{% endschema %}

@@ -1,0 +1,92 @@
+{% comment %} 3D ART FRAME — Rotating framed artwork with real 3D depth, PopMotif-inspired {% endcomment %}
+
+{%- assign f3d_coll = collections['gallery-grade'] -%}
+{%- unless f3d_coll -%}{%- assign f3d_coll = collections['all-art-prints'] -%}{%- endunless -%}
+{%- assign f3d_product = f3d_coll.products[0] -%}
+{%- assign f3d_src = '' -%}
+{%- assign f3d_title = 'Artwork' -%}
+{%- assign f3d_artist = '' -%}
+{%- if f3d_product -%}
+  {%- assign f3d_title = f3d_product.title -%}
+  {%- assign f3d_artist = f3d_product.vendor -%}
+  {%- if f3d_product.featured_image -%}
+    {%- assign f3d_src = f3d_product.featured_image | image_url: width: 800 -%}
+  {%- elsif f3d_product.metafields.neverland.drive_file_id != blank -%}
+    {%- assign f3d_src = 'https://lh3.googleusercontent.com/d/' | append: f3d_product.metafields.neverland.drive_file_id | append: '=s800' -%}
+  {%- endif -%}
+{%- endif -%}
+
+<section class="section--lg frame3d-section" data-animate="fade-up">
+  <!-- Ambient glow -->
+  <div class="frame3d__glow frame3d__glow--1"></div>
+  <div class="frame3d__glow frame3d__glow--2"></div>
+
+  <div class="container">
+    <div class="frame3d__layout">
+      <!-- Left: text -->
+      <div class="frame3d__text" data-animate="fade-right">
+        <span class="frame3d__eyebrow">{% if section.settings.eyebrow != blank %}{{ section.settings.eyebrow }}{% else %}Museum-Grade Printing{% endif %}</span>
+        <h2 class="frame3d__title">{% if section.settings.title != blank %}{{ section.settings.title }}{% else %}Art That Belongs<br>On Your Wall{% endif %}</h2>
+        <p class="frame3d__desc">{% if section.settings.description != blank %}{{ section.settings.description }}{% else %}Every print is produced using 12-colour gicl&eacute;e technology on archival-grade paper &mdash; the same process used by the world&rsquo;s leading galleries. See the difference real quality makes.{% endif %}</p>
+        <a href="{{ section.settings.cta_url | default: '/pages/catalog' }}" class="btn btn--white btn--large frame3d__cta">
+          <span>{{ section.settings.cta_text | default: 'Explore the Collection' }}</span>
+        </a>
+      </div>
+
+      <!-- Right: 3D rotating frame -->
+      <div class="frame3d__stage" data-animate="zoom-in">
+        <div class="frame3d__scene">
+          <div class="frame3d__card">
+            <!-- Front face: ornate frame + art -->
+            <div class="frame3d__front">
+              <div class="frame3d__mat">
+                <img id="frame3d-artwork" src="{{ f3d_src }}" alt="{{ f3d_title | escape }}" style="{% if f3d_src == '' %}opacity:0;{% endif %}transition:opacity 0.4s ease;">
+                <div class="frame3d__shimmer"></div>
+              </div>
+            </div>
+            <!-- Back face: branded gallery panel -->
+            <div class="frame3d__back">
+              <div class="frame3d__back-brand">
+                <div class="frame3d__back-seal">
+                  <svg viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                </div>
+                <span class="frame3d__back-logo">Neverland</span>
+                <div class="frame3d__back-divider"></div>
+                <span class="frame3d__back-tagline">Museum-Grade Art Prints</span>
+              </div>
+            </div>
+            <!-- Right edge depth -->
+            <div class="frame3d__edge frame3d__edge--right"></div>
+            <!-- Bottom edge depth -->
+            <div class="frame3d__edge frame3d__edge--bottom"></div>
+            <!-- Left edge depth -->
+            <div class="frame3d__edge frame3d__edge--left"></div>
+            <!-- Top edge depth -->
+            <div class="frame3d__edge frame3d__edge--top"></div>
+          </div>
+          <!-- Floor shadow -->
+          <div class="frame3d__shadow"></div>
+        </div>
+        <!-- Art label below frame -->
+        <div class="frame3d__label">
+          <span class="frame3d__label-title" id="frame3d-title">{{ f3d_title }}</span>
+          <span class="frame3d__label-artist" id="frame3d-artist">{{ f3d_artist }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "3D Art Frame",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow text", "default": "Museum-Grade Printing" },
+    { "type": "text", "id": "title", "label": "Heading", "default": "Art That Belongs On Your Wall" },
+    { "type": "textarea", "id": "description", "label": "Description" },
+    { "type": "text", "id": "cta_text", "label": "Button text", "default": "Explore the Collection" },
+    { "type": "url", "id": "cta_url", "label": "Button link" }
+  ],
+  "presets": [{ "name": "3D Art Frame" }]
+}
+{% endschema %}

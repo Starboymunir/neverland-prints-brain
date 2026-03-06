@@ -1,0 +1,143 @@
+<style>
+  .cart-table th,
+  .cart-table td { padding-left: 12px; padding-right: 12px; }
+  .cart-table th:first-child,
+  .cart-table td:first-child { padding-left: 0; }
+  .cart-table th:last-child,
+  .cart-table td:last-child { padding-right: 0; }
+  .cart-qty { display: inline-flex; max-width: 110px; gap: 6px; padding: 4px 6px; }
+  .cart-qty button { flex-shrink: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .cart-qty__value { min-width: 18px; }
+  @media (max-width: 768px) {
+    .cart-table, .cart-table thead, .cart-table tbody, .cart-table tr, .cart-table th, .cart-table td {
+      display: block; width: 100%;
+    }
+    .cart-table thead { display: none; }
+    .cart-table td { padding: 6px 0; border: none; text-align: left; }
+    .cart-table td:first-child { padding-top: 16px; border-top: 1px solid var(--border); }
+    .cart-table td:last-child { padding-bottom: 16px; }
+    .cart-qty { max-width: 120px; }
+  }
+</style>
+<section class="page-section">
+  <div class="container">
+    {%- if cart.item_count > 0 -%}
+      <h1 style="margin-bottom:40px;">Your Cart ({{ cart.item_count }})</h1>
+
+      <table class="cart-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Price</th>
+            <th>Quantity</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {%- for item in cart.items -%}
+            {%- comment -%} Check for skeleton product line item properties {%- endcomment -%}
+            {%- assign is_skeleton = false -%}
+            {%- assign artwork_name = '' -%}
+            {%- assign artwork_artist = '' -%}
+            {%- assign artwork_size = '' -%}
+            {%- assign artwork_frame = '' -%}
+            {%- assign artwork_frame_color = '' -%}
+            {%- assign artwork_preview = '' -%}
+            {%- assign artwork_asset_id = '' -%}
+
+            {%- for prop in item.properties -%}
+              {%- if prop.first == 'Artwork' -%}
+                {%- assign is_skeleton = true -%}
+                {%- assign artwork_name = prop.last -%}
+              {%- elsif prop.first == 'Artist' -%}
+                {%- assign artwork_artist = prop.last -%}
+              {%- elsif prop.first == 'Size' -%}
+                {%- assign artwork_size = prop.last -%}
+              {%- elsif prop.first == 'Frame' -%}
+                {%- assign artwork_frame = prop.last -%}
+              {%- elsif prop.first == 'Frame Color' -%}
+                {%- assign artwork_frame_color = prop.last -%}
+              {%- elsif prop.first == '_preview' -%}
+                {%- assign artwork_preview = prop.last -%}
+              {%- elsif prop.first == '_asset_id' -%}
+                {%- assign artwork_asset_id = prop.last -%}
+              {%- endif -%}
+            {%- endfor -%}
+
+            <tr data-line-key="{{ item.key }}">
+              <td>
+                <div class="cart-item">
+                  <div class="cart-item__image">
+                    {%- if is_skeleton and artwork_preview != blank -%}
+                      <a href="/pages/art?id={{ artwork_asset_id }}">
+                        <img src="{{ artwork_preview }}" alt="{{ artwork_name | escape }}" loading="lazy">
+                      </a>
+                    {%- elsif item.product.metafields.neverland.drive_file_id != blank -%}
+                      <img src="https://lh3.googleusercontent.com/d/{{ item.product.metafields.neverland.drive_file_id }}=s200" alt="{{ item.title | escape }}">
+                    {%- elsif item.image -%}
+                      <img src="{{ item.image | image_url: width: 200 }}" alt="{{ item.title | escape }}">
+                    {%- endif -%}
+                  </div>
+                  <div>
+                    {%- if is_skeleton -%}
+                      <a href="/pages/art?id={{ artwork_asset_id }}" class="cart-item__title">{{ artwork_name }}</a>
+                      {%- if artwork_artist != blank -%}
+                        <div class="cart-item__variant" style="color:var(--text-muted);">{{ artwork_artist }}</div>
+                      {%- endif -%}
+                      <div class="cart-item__variant">
+                        {{ artwork_size }}{% if artwork_frame != blank %} · {{ artwork_frame }}{% endif %}{% if artwork_frame_color != blank and artwork_frame_color != 'None' %} · {{ artwork_frame_color }}{% endif %}
+                      </div>
+                    {%- else -%}
+                      <div class="cart-item__title">{{ item.product.title }}</div>
+                      <div class="cart-item__variant">{{ item.variant.title }}</div>
+                    {%- endif -%}
+                  </div>
+                </div>
+              </td>
+              <td>{{ item.price | money }}</td>
+              <td>
+                <div class="cart-qty">
+                  <button data-action="minus">−</button>
+                  <span class="cart-qty__value">{{ item.quantity }}</span>
+                  <button data-action="plus">+</button>
+                </div>
+              </td>
+              <td>{{ item.line_price | money }}</td>
+            </tr>
+          {%- endfor -%}
+        </tbody>
+      </table>
+
+      <div class="cart-summary">
+        <div class="cart-summary__row">
+          <span>Subtotal</span>
+          <span>{{ cart.total_price | money }}</span>
+        </div>
+        <div class="cart-summary__row" style="color:var(--text-muted);font-size:0.82rem;">
+          <span>Shipping</span>
+          <span>Calculated at checkout</span>
+        </div>
+        <div class="cart-summary__row cart-summary__total">
+          <span>Total</span>
+          <span>{{ cart.total_price | money }}</span>
+        </div>
+        <form action="/checkout" method="post" style="margin-top:20px;">
+          <button type="submit" class="add-to-cart">Checkout</button>
+        </form>
+      </div>
+    {%- else -%}
+      <div class="empty-state">
+        <h2>Your cart is empty</h2>
+        <p>Discover our collection of museum-quality fine art prints.</p>
+        <a href="/pages/catalog" class="btn btn--primary"><span>Browse All Prints</span></a>
+      </div>
+    {%- endif -%}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Cart",
+  "settings": []
+}
+{% endschema %}

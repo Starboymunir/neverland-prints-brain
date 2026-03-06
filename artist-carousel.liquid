@@ -1,0 +1,84 @@
+{%- comment -%}
+  ARTIST CAROUSEL — Server-rendered artist cards using Shopify product vendors.
+  No API calls needed. Pulls unique artists from the gallery-grade collection.
+{%- endcomment -%}
+
+{%- assign source_collection = collections['gallery-grade'] -%}
+{%- unless source_collection -%}
+  {%- assign source_collection = collections['all-art-prints'] -%}
+{%- endunless -%}
+
+<section class="section carousel-section is-visible" style="opacity:1;transform:none;">
+  <div class="container">
+    <div class="section-head is-visible" style="opacity:1;transform:none;">
+      <div class="section-head__row">
+        <h2 class="section-head__title">{{ section.settings.title | default: 'Popular Artists' }}</h2>
+        <div class="swiper-arrows">
+          <button class="swiper-arrow swiper-arrow--prev" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="swiper-arrow swiper-arrow--next" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="artist-carousel swiper" id="artist-carousel-swiper" style="opacity:1;transform:none;">
+    <div class="swiper-wrapper" id="artist-carousel-slides">
+      {%- assign seen_artists = '' -%}
+      {%- for product in source_collection.products limit: 100 -%}
+        {%- assign artist_name = product.vendor -%}
+        {%- if artist_name == blank or artist_name == 'Neverland Prints' -%}{%- continue -%}{%- endif -%}
+
+        {%- comment -%} Skip already-seen artists {%- endcomment -%}
+        {%- assign artist_check = '|' | append: artist_name | append: '|' -%}
+        {%- if seen_artists contains artist_check -%}{%- continue -%}{%- endif -%}
+        {%- assign seen_artists = seen_artists | append: artist_check -%}
+
+        {%- comment -%} Get initials for fallback {%- endcomment -%}
+        {%- assign name_parts = artist_name | split: ' ' -%}
+        {%- assign initials = '' -%}
+        {%- for part in name_parts limit: 2 -%}
+          {%- assign initials = initials | append: part | truncate: 1, '' -%}
+        {%- endfor -%}
+        {%- assign initials = initials | upcase -%}
+
+        <div class="swiper-slide artist-slide">
+          <a href="/pages/catalog?artist={{ artist_name | url_encode }}" class="artist-slide__link">
+            <div class="artist-slide__img">
+              {%- if product.featured_image -%}
+                <img src="{{ product.featured_image | image_url: width: 400 }}" alt="{{ artist_name | escape }}" loading="lazy" width="400" height="400" decoding="async">
+              {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                <img src="https://lh3.googleusercontent.com/d/{{ product.metafields.neverland.drive_file_id }}=s400" alt="{{ artist_name | escape }}" loading="lazy" width="400" height="400" decoding="async">
+              {%- else -%}
+                <div style="width:100%;height:100%;background:var(--bg-alt);display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:var(--text);">{{ initials }}</div>
+              {%- endif -%}
+            </div>
+            <div class="artist-slide__info">
+              <h3 class="artist-slide__name">{{ artist_name }}</h3>
+            </div>
+          </a>
+        </div>
+
+        {%- comment -%} Limit to 20 unique artists {%- endcomment -%}
+        {%- assign artist_count = seen_artists | split: '|' | size | minus: 1 -%}
+        {%- if artist_count >= 20 -%}{%- break -%}{%- endif -%}
+      {%- endfor -%}
+    </div>
+    <div class="swiper-pagination"></div>
+  </div>
+
+  <div class="container" style="text-align:center;margin-top:2.5rem;">
+    <a href="/pages/artists" class="btn btn--primary"><span>{{ section.settings.link_text | default: 'View All Artists' }}</span></a>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Artist Carousel",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Popular Artists" },
+    { "type": "text", "id": "link_text", "label": "Link text", "default": "View All Artists" },
+    { "type": "url", "id": "link_url", "label": "Link URL" }
+  ],
+  "presets": [{ "name": "Artist Carousel" }]
+}
+{% endschema %}

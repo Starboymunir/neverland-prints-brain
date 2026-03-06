@@ -1,0 +1,144 @@
+/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ *
+ * This file may be updated by the Shopify admin theme editor
+ * or related systems. Please exercise caution as any changes
+ * made to this file may be overwritten.
+ * ------------------------------------------------------------
+ */
+{
+  "sections": {
+    "hero": {
+      "type": "hero",
+      "settings": {
+        "title": "The Art Your Home <em>Deserves</em>",
+        "cta_text": "Explore Collection",
+        "cta_url": "/pages/catalog"
+      }
+    },
+    "marquee": {
+      "type": "marquee",
+      "settings": {}
+    },
+    "art-showcase": {
+      "type": "art-showcase",
+      "settings": {
+        "title": "Art That Speaks",
+        "subtitle": "Thousands of museum-quality pieces from the world\u2019s most celebrated artists \u2014 ready for your walls.",
+        "cta_text": "Browse All Art",
+        "cta_url": "/pages/catalog"
+      }
+    },
+    "collection-carousel": {
+      "type": "collection-carousel",
+      "settings": {
+        "title": "Popular Collections",
+        "link_text": "View All Collections"
+      }
+    },
+    "artist-carousel": {
+      "type": "artist-carousel",
+      "settings": {
+        "title": "Popular Artists",
+        "link_text": "View All Artists"
+      }
+    },
+    "art-made-easy": {
+      "type": "art-made-easy",
+      "settings": {
+        "title": "Gallery Quality. In Every Home.",
+        "cta_text": "Shop Art",
+        "cta_url": "/pages/catalog"
+      }
+    },
+    "media-showcase": {
+      "type": "media-showcase",
+      "settings": {}
+    },
+    "countup": {
+      "type": "countup",
+      "settings": {
+        "num1": "12",
+        "label1": "years in business",
+        "num2": "30000+",
+        "label2": "delighted customers",
+        "num3": "60000+",
+        "label3": "artworks delivered"
+      }
+    },
+    "wall-mockup": {
+      "type": "wall-mockup",
+      "settings": {
+        "eyebrow": "Visualise Your Space",
+        "title": "See It On Your Wall",
+        "subtitle": "Every piece, framed or unframed, designed to transform your space.",
+        "cta_text": "Shop Framed Prints",
+        "cta_url": "/pages/catalog"
+      }
+    },
+    "art-frame-3d": {
+      "type": "art-frame-3d",
+      "settings": {
+        "eyebrow": "Museum-Grade Printing",
+        "title": "Art That Belongs On Your Wall",
+        "cta_text": "Explore the Collection",
+        "cta_url": "/pages/catalog"
+      }
+    },
+    "bestsellers": {
+      "type": "bestsellers",
+      "settings": {
+        "title": "Bestsellers",
+        "link_text": "Shop All"
+      }
+    },
+    "new-arrivals": {
+      "type": "new-arrivals",
+      "settings": {
+        "title": "New Arrivals",
+        "link_text": "View All"
+      }
+    },
+    "where-pros-shop": {
+      "type": "where-pros-shop",
+      "settings": {
+        "title": "Where The Pros Shop"
+      }
+    },
+    "ugc": {
+      "type": "ugc",
+      "settings": {
+        "title": "Our Art In Your Homes"
+      }
+    },
+    "reviews": {
+      "type": "reviews",
+      "settings": {
+        "title": "What Our Customers Say"
+      }
+    },
+    "features": {
+      "type": "features-bar",
+      "settings": {}
+    }
+  },
+  "order": [
+    "hero",
+    "marquee",
+    "art-showcase",
+    "wall-mockup",
+    "collection-carousel",
+    "artist-carousel",
+    "art-made-easy",
+    "media-showcase",
+    "countup",
+    "art-frame-3d",
+    "bestsellers",
+    "new-arrivals",
+    "where-pros-shop",
+    "ugc",
+    "reviews",
+    "features"
+  ]
+}

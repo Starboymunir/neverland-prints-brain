@@ -1,0 +1,87 @@
+{%- comment -%}
+  COLLECTION BENTO — Server-rendered bento-grid of curated collections.
+  No API calls. Uses Shopify Liquid to render collections with product images.
+{%- endcomment -%}
+
+{%- assign featured_handles = 'landscapes-seascapes,portraits-figures,vintage-posters-advertising,flora-fauna,mythology-history-religion,japanese-art-ukiyo-e,renaissance-art' | split: ',' -%}
+
+<section class="section collection-bento is-visible" style="opacity:1;transform:none;">
+  <div class="container">
+    <div class="section-head is-visible" style="opacity:1;transform:none;">
+      <div class="section-head__row">
+        <div>
+          <p class="collection-bento__eyebrow">Curated For You</p>
+          <h2 class="section-head__title">{{ section.settings.title | default: 'Popular Collections' }}</h2>
+        </div>
+        <a href="/collections" class="btn btn--outline btn--small collection-bento__viewall">
+          <span>{{ section.settings.link_text | default: 'View All Collections' }}</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <div class="bento-grid is-visible" id="bento-grid" style="opacity:1;transform:none;">
+      {%- for handle in featured_handles -%}
+        {%- assign col = collections[handle] -%}
+        {%- if col -%}
+          {%- assign is_featured = false -%}
+          {%- if forloop.index == 1 or forloop.index == 5 -%}{%- assign is_featured = true -%}{%- endif -%}
+
+          {%- comment -%} Get count as formatted string {%- endcomment -%}
+          {%- assign count = col.all_products_count -%}
+          {%- if count >= 10000 -%}
+            {%- assign count_k = count | divided_by: 1000 -%}
+            {%- assign count_display = count_k | append: 'K' -%}
+          {%- elsif count >= 1000 -%}
+            {%- assign count_k = count | times: 10 | divided_by: 1000 | times: 1.0 | divided_by: 10.0 -%}
+            {%- assign count_display = count | divided_by: 100 -%}
+            {%- assign count_remainder = count | modulo: 1000 | divided_by: 100 -%}
+            {%- assign count_whole = count | divided_by: 1000 -%}
+            {%- if count_remainder > 0 -%}
+              {%- assign count_display = count_whole | append: '.' | append: count_remainder | append: 'K' -%}
+            {%- else -%}
+              {%- assign count_display = count_whole | append: 'K' -%}
+            {%- endif -%}
+          {%- else -%}
+            {%- assign count_display = count -%}
+          {%- endif -%}
+
+          {%- comment -%} Use first product image as tile background {%- endcomment -%}
+          {%- assign tile_product = col.products.first -%}
+
+          <a href="{{ col.url }}" class="bento-tile{% if is_featured %} bento-tile--featured{% endif %}" style="opacity:1;transform:none;">
+            <div class="bento-tile__media">
+              {%- if col.image -%}
+                <img src="{{ col.image | image_url: width: 800 }}" alt="{{ col.title | escape }}" loading="lazy" class="bento-tile__img" width="800" height="600">
+              {%- elsif tile_product and tile_product.featured_image -%}
+                <img src="{{ tile_product.featured_image | image_url: width: 800 }}" alt="{{ col.title | escape }}" loading="lazy" class="bento-tile__img" width="800" height="600">
+              {%- elsif tile_product and tile_product.metafields.neverland.drive_file_id != blank -%}
+                <img src="https://lh3.googleusercontent.com/d/{{ tile_product.metafields.neverland.drive_file_id }}=s800" alt="{{ col.title | escape }}" loading="lazy" class="bento-tile__img" width="800" height="600">
+              {%- else -%}
+                <div class="bento-tile__placeholder"></div>
+              {%- endif -%}
+            </div>
+            <div class="bento-tile__overlay"></div>
+            <div class="bento-tile__content">
+              <span class="bento-tile__count">{{ count_display }} prints</span>
+              <h3 class="bento-tile__title">{{ col.title }}</h3>
+              <span class="bento-tile__cta" style="opacity:1;transform:none;">Explore <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span>
+            </div>
+            {%- if is_featured -%}<div class="bento-tile__accent"></div>{%- endif -%}
+          </a>
+        {%- endif -%}
+      {%- endfor -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Collection Bento Grid",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Popular Collections" },
+    { "type": "text", "id": "link_text", "label": "View all text", "default": "View All Collections" }
+  ],
+  "presets": [{ "name": "Collection Bento Grid" }]
+}
+{% endschema %}

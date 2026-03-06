@@ -1,0 +1,87 @@
+{% comment %} HERO — Full-bleed collage of famous masterworks with bottom-left text overlay {% endcomment %}
+
+<section class="hero" data-api-base="https://neverland-prints-brain.onrender.com">
+  <!-- Background collage of famous paintings -->
+  <div class="hero__bg" id="hero-bg">
+    {%- if section.settings.image -%}
+      <img src="{{ section.settings.image | image_url: width: 1920 }}" alt="{{ section.settings.image.alt }}" loading="eager" fetchpriority="high">
+    {%- else -%}
+      <div class="hero__bg-placeholder" id="hero-bg-placeholder">
+        <div class="hero__collage" id="hero-collage">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-starry-night.jpg?v=1772168194&width=480" alt="The Starry Night – Van Gogh" loading="eager" fetchpriority="high" class="hero__collage-img hero__collage-img--1" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-girl-pearl-earring.jpg?v=1772168340&width=480" alt="Girl with a Pearl Earring – Vermeer" loading="eager" class="hero__collage-img hero__collage-img--2" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-great-wave.jpg?v=1772168217&width=480" alt="The Great Wave – Hokusai" loading="eager" class="hero__collage-img hero__collage-img--3" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-creation-adam.jpg?v=1772168222&width=480" alt="The Creation of Adam – Michelangelo" loading="eager" class="hero__collage-img hero__collage-img--4" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-birth-venus.jpg?v=1772168232&width=480" alt="The Birth of Venus – Botticelli" loading="lazy" class="hero__collage-img hero__collage-img--5" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-the-scream.jpg?v=1772168348&width=480" alt="The Scream – Edvard Munch" loading="lazy" class="hero__collage-img hero__collage-img--6" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-night-watch.jpg?v=1772168238&width=480" alt="The Night Watch – Rembrandt" loading="lazy" class="hero__collage-img hero__collage-img--7" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-the-kiss.jpg?v=1772168356&width=480" alt="The Kiss – Gustav Klimt" loading="lazy" class="hero__collage-img hero__collage-img--8" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-school-athens.jpg?v=1772168242&width=480" alt="The School of Athens – Raphael" loading="lazy" class="hero__collage-img hero__collage-img--9" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-liberty-leading.jpg?v=1772168246&width=480" alt="Liberty Leading the People – Delacroix" loading="lazy" class="hero__collage-img hero__collage-img--10" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-ophelia.jpg?v=1772168250&width=480" alt="Ophelia – John Everett Millais" loading="lazy" class="hero__collage-img hero__collage-img--11" width="480" height="360">
+          <img src="https://cdn.shopify.com/s/files/1/0675/4300/7316/files/hero-last-supper.jpg?v=1772168254&width=480" alt="The Last Supper – Leonardo da Vinci" loading="lazy" class="hero__collage-img hero__collage-img--12" width="480" height="360">
+        </div>
+      </div>
+    {%- endif -%}
+  </div>
+
+  {%- if section.settings.mobile_image -%}
+    <div class="hero__bg hero__bg--mobile">
+      <img src="{{ section.settings.mobile_image | image_url: width: 800 }}" alt="{{ section.settings.mobile_image.alt }}" loading="eager" fetchpriority="high">
+    </div>
+  {%- endif -%}
+
+  <!-- Bottom gradient overlay -->
+  <div class="hero__gradient"></div>
+
+  <!-- Floating collection badge — top area visual element -->
+  <div class="hero__top-badges" data-animate="fade-down">
+    <div class="hero__badge">
+      <span class="hero__badge-num">{{ section.settings.badge_1_num | default: '101K+' }}</span>
+      <span class="hero__badge-label">{{ section.settings.badge_1_label | default: 'Artworks' }}</span>
+    </div>
+    <div class="hero__badge-divider"></div>
+    <div class="hero__badge">
+      <span class="hero__badge-num">{{ section.settings.badge_2_num | default: '300+' }}</span>
+      <span class="hero__badge-label">{{ section.settings.badge_2_label | default: 'Artists' }}</span>
+    </div>
+    <div class="hero__badge-divider"></div>
+    <div class="hero__badge">
+      <span class="hero__badge-num">{{ section.settings.badge_3_num | default: '12-Colour' }}</span>
+      <span class="hero__badge-label">{{ section.settings.badge_3_label | default: 'Giclée Printing' }}</span>
+    </div>
+  </div>
+
+  <!-- Hero content — bottom-left aligned -->
+  <div class="container hero__content" data-animate="fade-up">
+    <h1 class="hero__title" data-animate="fade-up">{{ section.settings.title | default: 'Museum Standards, Home Delivery' }}</h1>
+    {%- if section.settings.cta_text != blank -%}
+      <a href="{{ section.settings.cta_url | default: '/pages/catalog' }}" class="btn btn--primary btn--large hero__cta" data-animate="fade-up">
+        <span>{{ section.settings.cta_text | default: 'Shop Art' }}</span>
+      </a>
+    {%- endif -%}
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Hero Banner",
+  "settings": [
+    { "type": "image_picker", "id": "image", "label": "Desktop background image" },
+    { "type": "image_picker", "id": "mobile_image", "label": "Mobile background image" },
+    { "type": "text", "id": "title", "label": "Heading", "default": "Museum Standards, Home Delivery" },
+    { "type": "text", "id": "cta_text", "label": "Button text", "default": "Shop Art" },
+    { "type": "url", "id": "cta_url", "label": "Button link" },
+    { "type": "header", "content": "Badge 1" },
+    { "type": "text", "id": "badge_1_num", "label": "Badge 1 number", "default": "101K+" },
+    { "type": "text", "id": "badge_1_label", "label": "Badge 1 label", "default": "Artworks" },
+    { "type": "header", "content": "Badge 2" },
+    { "type": "text", "id": "badge_2_num", "label": "Badge 2 number", "default": "300+" },
+    { "type": "text", "id": "badge_2_label", "label": "Badge 2 label", "default": "Artists" },
+    { "type": "header", "content": "Badge 3" },
+    { "type": "text", "id": "badge_3_num", "label": "Badge 3 number", "default": "12-Colour" },
+    { "type": "text", "id": "badge_3_label", "label": "Badge 3 label", "default": "Giclée Printing" }
+  ],
+  "presets": [{ "name": "Hero Banner" }]
+}
+{% endschema %}

@@ -1,0 +1,372 @@
+{% comment %}
+  ART DETAIL — API-driven product page
+  Fetches artwork data from Supabase via our API using ?id= query param.
+  Cart adds skeleton product variant + line item properties.
+  Uses pp- class prefix to share CSS with product-page.liquid.
+{% endcomment %}
+
+{%- assign api_base = section.settings.api_base | default: 'https://neverland-prints-brain.onrender.com' -%}
+
+<section class="pp art-detail-page" data-api-base="{{ api_base }}" id="art-detail">
+  <div class="container">
+
+    {%- comment -%} Loading State {%- endcomment -%}
+    <div class="art-detail__loading" id="art-loading">
+      <div class="catalog-loading__spinner" style="width:40px;height:40px;border-width:4px;margin:80px auto;"></div>
+    </div>
+
+    {%- comment -%} Content (hidden until loaded) {%- endcomment -%}
+    <div id="art-content" style="display:none;">
+
+      {%- comment -%} Breadcrumbs {%- endcomment -%}
+      <nav class="pp-breadcrumbs" aria-label="Breadcrumb">
+        <ol>
+          <li><a href="/">Home</a></li>
+          <li><a href="/pages/catalog">All Prints</a></li>
+          <li aria-current="page" id="art-breadcrumb-title">Loading…</li>
+        </ol>
+      </nav>
+
+      <div class="pp-layout">
+
+        {%- comment -%} ═══ LEFT: Gallery ═══ {%- endcomment -%}
+        <div class="pp-gallery">
+          <div class="pp-gallery__main">
+            <div class="pp-frame" id="pp-frame" data-frame="none">
+              <div class="pp-frame__mat">
+                <img id="art-image" src="" srcset="" sizes="(max-width: 768px) 92vw, (max-width: 1200px) 50vw, 600px" alt="" loading="eager" fetchpriority="high">
+                <img src="{{ 'watermark-1.png' | asset_url }}" alt="" class="pp-watermark" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40%;max-width:220px;opacity:0.13;pointer-events:none;user-select:none;-webkit-user-drag:none;">
+              </div>
+            </div>
+            <button class="pp-gallery__zoom" id="pp-zoom-btn" type="button" aria-label="Zoom image">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
+            </button>
+          </div>
+
+          {%- comment -%} Frame style selector — hidden until Framed is selected {%- endcomment -%}
+          <div class="pp-frames" id="pp-frames" style="display:none;">
+            <span class="pp-frames__label">Preview Frame Style</span>
+            <div class="pp-frames__options">
+              <button type="button" class="pp-frames__btn is-active" data-frame="none" title="Unframed">
+                <span class="pp-frames__swatch pp-frames__swatch--none">
+                  <img id="art-swatch-none" src="" alt="Unframed" loading="lazy">
+                </span>
+                <span class="pp-frames__name">Unframed</span>
+              </button>
+              <button type="button" class="pp-frames__btn" data-frame="black" title="Black Frame">
+                <span class="pp-frames__swatch pp-frames__swatch--black">
+                  <img id="art-swatch-black" src="" alt="Black frame" loading="lazy">
+                </span>
+                <span class="pp-frames__name">Black</span>
+              </button>
+              <button type="button" class="pp-frames__btn" data-frame="white" title="White Frame">
+                <span class="pp-frames__swatch pp-frames__swatch--white">
+                  <img id="art-swatch-white" src="" alt="White frame" loading="lazy">
+                </span>
+                <span class="pp-frames__name">White</span>
+              </button>
+              <button type="button" class="pp-frames__btn" data-frame="natural" title="Natural Wood">
+                <span class="pp-frames__swatch pp-frames__swatch--natural">
+                  <img id="art-swatch-natural" src="" alt="Natural frame" loading="lazy">
+                </span>
+                <span class="pp-frames__name">Natural</span>
+              </button>
+              <button type="button" class="pp-frames__btn" data-frame="walnut" title="Walnut">
+                <span class="pp-frames__swatch pp-frames__swatch--walnut">
+                  <img id="art-swatch-walnut" src="" alt="Walnut frame" loading="lazy">
+                </span>
+                <span class="pp-frames__name">Walnut</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {%- comment -%} ═══ RIGHT: Details ═══ {%- endcomment -%}
+        <div class="pp-details">
+
+          <p class="pp-artist" id="art-artist"></p>
+          <h1 class="pp-title" id="art-title"></h1>
+
+          {%- comment -%} Price {%- endcomment -%}
+          <div class="pp-price">
+            <span class="pp-price__current" id="art-price"></span>
+            <span class="pp-price__was" id="art-compare-price"></span>
+          </div>
+
+          <hr class="pp-divider">
+
+          {%- comment -%} Size selector (populated by JS from API variants) {%- endcomment -%}
+          <div class="pp-option" id="art-size-section" style="display:none;">
+            <div class="pp-option__head">
+              <span class="pp-option__label">Size</span>
+              <span class="pp-option__value" id="art-size-display"></span>
+            </div>
+            <div class="pp-option__pills" id="art-size-options">
+              {%- comment -%} Rendered by JS {%- endcomment -%}
+            </div>
+          </div>
+
+          {%- comment -%} Frame selector (Unframed / Framed) {%- endcomment -%}
+          <div class="pp-option" id="art-frame-section">
+            <div class="pp-option__head">
+              <span class="pp-option__label">Frame</span>
+              <span class="pp-option__value" id="art-frame-display">Unframed</span>
+            </div>
+            <div class="pp-option__pills" id="art-frame-options">
+              <button type="button" class="pp-pill is-selected" data-frame="unframed">Unframed</button>
+              <button type="button" class="pp-pill" data-frame="framed">Framed</button>
+            </div>
+          </div>
+
+          {%- comment -%} Add to Cart {%- endcomment -%}
+          <button type="button" class="pp-add-to-cart" id="art-add-to-cart">
+            <span class="pp-atc__text">Add to Cart</span>
+            <span class="pp-atc__sep">—</span>
+            <span class="pp-atc__price" id="art-cart-price">$29.99</span>
+          </button>
+
+          {%- comment -%} Adding feedback {%- endcomment -%}
+          <div class="art-detail__feedback" id="art-feedback" style="display:none;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+            <span>Added to cart!</span>
+            <a href="/cart">View Cart</a>
+          </div>
+
+          {%- comment -%} Trust badges {%- endcomment -%}
+          <div class="pp-trust">
+            <div class="pp-trust__item">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+              <span>Satisfaction Guaranteed</span>
+            </div>
+            <div class="pp-trust__item">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+              <span>Worldwide Shipping</span>
+            </div>
+            <div class="pp-trust__item">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>Ships in 3–5 Days</span>
+            </div>
+          </div>
+
+          {%- comment -%} Print Specs {%- endcomment -%}
+          <div class="pp-specs" id="art-meta">
+            {%- comment -%} Rendered by JS {%- endcomment -%}
+          </div>
+
+          {%- comment -%} Accordion {%- endcomment -%}
+          <div class="pp-accordion" id="pp-accordion">
+            <div class="pp-accordion__item">
+              <button class="pp-accordion__trigger is-open" type="button">
+                <span>About This Print</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="pp-accordion__body is-open">
+                <div class="pp-accordion__text" id="art-description"></div>
+              </div>
+            </div>
+
+            <div class="pp-accordion__item">
+              <button class="pp-accordion__trigger" type="button">
+                <span>Materials &amp; Quality</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="pp-accordion__body">
+                <div class="pp-accordion__text">
+                  <ul>
+                    <li>Premium 310gsm cotton-rag archival paper</li>
+                    <li>Giclée printing with pigment-based inks</li>
+                    <li>Rated 200+ years lightfastness</li>
+                    <li>Vibrant, accurate colour reproduction</li>
+                    <li>Textured matte finish</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div class="pp-accordion__item">
+              <button class="pp-accordion__trigger" type="button">
+                <span>Shipping &amp; Returns</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="pp-accordion__body">
+                <div class="pp-accordion__text">
+                  <ul>
+                    <li>Worldwide shipping available — rates calculated at checkout</li>
+                    <li>Ships flat in rigid protective packaging</li>
+                    <li>Printed on demand — 3–5 business days production</li>
+                    <li>30-day satisfaction guarantee</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {%- comment -%} Lifestyle Sections (below the fold) {%- endcomment -%}
+    <div class="pp-lifestyle" id="art-lifestyle" style="display:none;">
+      {%- comment -%} Gallery Quality Art Paper {%- endcomment -%}
+      <div class="pp-lsec pp-lsec--alt">
+        <div class="container">
+          <div class="pp-lsec__row">
+            <div class="pp-lsec__media">
+              <div class="pp-lsec__img-wrap pp-lsec__img-wrap--framed">
+                <div class="pp-lsec__framed-art" data-frame="black">
+                  <div class="pp-lsec__framed-mat">
+                    <img id="art-lifestyle-img" src="" alt="Gallery quality print" loading="lazy">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="pp-lsec__text">
+              <span class="pp-lsec__eyebrow">Premium Materials</span>
+              <h2 class="pp-lsec__title">Gallery Quality Art Paper</h2>
+              <p class="pp-lsec__desc">Every print is produced on premium 310gsm cotton-rag archival paper using 12-colour giclée technology — the same process used by the world's leading galleries and museums.</p>
+              <div class="pp-lsec__features">
+                <div class="pp-lsec__feat">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+                  <div><strong>Textured Paper</strong><span>310gsm cotton-rag</span></div>
+                </div>
+                <div class="pp-lsec__feat">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  <div><strong>Fade Resistant</strong><span>200+ year lightfastness</span></div>
+                </div>
+                <div class="pp-lsec__feat">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                  <div><strong>Vivid Detail</strong><span>12-colour giclée process</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {%- comment -%} Custom Framed {%- endcomment -%}
+      <div class="pp-lsec">
+        <div class="container">
+          <div class="pp-lsec__row pp-lsec__row--reverse">
+            <div class="pp-lsec__media">
+              <div class="pp-lsec__img-wrap pp-lsec__img-wrap--framed">
+                <div class="pp-lsec__framed-art" data-frame="black">
+                  <div class="pp-lsec__framed-mat">
+                    <img id="art-lifestyle-img2" src="" alt="Custom framed art print" loading="lazy">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="pp-lsec__text">
+              <span class="pp-lsec__eyebrow">Bespoke Framing</span>
+              <h2 class="pp-lsec__title">Custom Framed To Order</h2>
+              <p class="pp-lsec__desc">Choose from premium timber frame finishes — black, white, natural oak, or walnut. Each frame is handcrafted with precision and fitted with crystal-clear acrylic glazing for enduring protection.</p>
+              <div class="pp-lsec__features">
+                <div class="pp-lsec__feat">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                  <div><strong>Handcrafted Frames</strong><span>Premium timber finishes</span></div>
+                </div>
+                <div class="pp-lsec__feat">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <div><strong>Acrylic Glazing</strong><span>Crystal-clear protection</span></div>
+                </div>
+                <div class="pp-lsec__feat">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                  <div><strong>Ready to Hang</strong><span>Arrives wall-ready</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {%- comment -%} Happiness Guaranteed {%- endcomment -%}
+      <div class="pp-lsec pp-lsec--dark">
+        <div class="container">
+          <div class="pp-lsec__row">
+            <div class="pp-lsec__text pp-lsec__text--centered">
+              <span class="pp-lsec__eyebrow">Our Promise</span>
+              <h2 class="pp-lsec__title">Happiness Guaranteed</h2>
+              <p class="pp-lsec__desc">We believe great art should be accessible to everyone. If you're not completely in love with your print, we'll make it right — no questions asked.</p>
+              <div class="pp-lsec__badges">
+                <div class="pp-lsec__badge">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                  <span>Quality Warranty</span>
+                </div>
+                <div class="pp-lsec__badge">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="22 2 12 12 9 9"/></svg>
+                  <span>30-Day Returns</span>
+                </div>
+                <div class="pp-lsec__badge">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                  <span>Worldwide Delivery</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {%- comment -%} Similar Artworks {%- endcomment -%}
+    <div class="pp-related" id="art-similar" style="display:none;">
+      <div class="pp-related__head">
+        <h2 class="pp-related__title" data-animate="fade-up">You May Also Like</h2>
+        <a href="/pages/catalog" class="pp-related__link" id="art-similar-link">
+          View All
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+      <div class="pp-related__grid" id="art-similar-grid" data-stagger>
+        {%- comment -%} Rendered by JS {%- endcomment -%}
+      </div>
+    </div>
+
+    {%- comment -%} Not Found State {%- endcomment -%}
+    <div class="empty-state" id="art-not-found" style="display:none;">
+      <h2>Artwork Not Found</h2>
+      <p>This artwork may have been removed or the link is invalid.</p>
+      <a href="/pages/catalog" class="btn btn--primary"><span>Browse All Prints</span></a>
+    </div>
+
+    {%- comment -%} Lightbox {%- endcomment -%}
+    <div class="pp-lightbox" id="pp-lightbox">
+      <div class="pp-lightbox__overlay" id="pp-lightbox-close"></div>
+      <div class="pp-lightbox__content">
+        <img id="pp-lightbox-img" src="" alt="">
+        <button class="pp-lightbox__close" type="button" aria-label="Close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<style>
+  .art-detail__loading {
+    min-height: 400px; display: flex; align-items: center; justify-content: center;
+  }
+  .art-detail__feedback {
+    display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+    background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px;
+    color: #166534; margin-top: 12px;
+  }
+  .art-detail__feedback a {
+    margin-left: auto; font-weight: 600; color: #166534;
+    text-decoration: underline;
+  }
+</style>
+
+{% schema %}
+{
+  "name": "Art Detail",
+  "settings": [
+    {
+      "type": "text",
+      "id": "api_base",
+      "label": "API Base URL",
+      "default": "https://neverland-prints-brain.onrender.com"
+    }
+  ],
+  "presets": [{ "name": "Art Detail" }]
+}
+{% endschema %}

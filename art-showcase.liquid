@@ -1,0 +1,164 @@
+{%- comment -%}
+  ART SHOWCASE — Cinematic floating gallery with infinite-scroll rows.
+  Server-rendered with real products from Shopify collections. No API calls.
+{%- endcomment -%}
+
+{%- assign showcase_collection = collections['all-art-prints'] -%}
+
+<section class="art-showcase section" id="art-showcase">
+  <div class="art-showcase__glow art-showcase__glow--1"></div>
+  <div class="art-showcase__glow art-showcase__glow--2"></div>
+
+  <div class="container">
+    <div class="art-showcase__header is-visible" style="opacity:1;transform:none;">
+      <p class="art-showcase__eyebrow">Explore The Collection</p>
+      <h2 class="art-showcase__title">{{ section.settings.title | default: 'Art That Speaks' }}</h2>
+      <p class="art-showcase__subtitle">
+        {%- if section.settings.subtitle != blank -%}
+          {{ section.settings.subtitle }}
+        {%- else -%}
+          Thousands of museum-quality pieces from the world&rsquo;s most celebrated artists &mdash; ready for your walls.
+        {%- endif -%}
+      </p>
+    </div>
+  </div>
+
+  <div class="art-showcase__perspective">
+    {%- comment -%} Row 1 — scrolls left {%- endcomment -%}
+    <div class="art-showcase__row art-showcase__row--1" data-direction="left">
+      <div class="art-showcase__track" id="showcase-row-1">
+        {%- for product in showcase_collection.products limit: 6 -%}
+          <a href="{{ product.url }}" class="showcase-frame">
+            <div class="showcase-frame__img">
+              {%- if product.featured_image -%}
+                <img src="{{ product.featured_image | image_url: width: 500 }}" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                <img src="https://lh3.googleusercontent.com/d/{{ product.metafields.neverland.drive_file_id }}=s500" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- else -%}
+                <div class="showcase-frame__shimmer"></div>
+              {%- endif -%}
+            </div>
+            <div class="showcase-frame__info">
+              <span class="showcase-frame__title">{{ product.title | truncate: 40 }}</span>
+              <span class="showcase-frame__artist">{{ product.vendor }}</span>
+            </div>
+          </a>
+        {%- endfor -%}
+        {%- comment -%} Duplicate for infinite scroll {%- endcomment -%}
+        {%- for product in showcase_collection.products limit: 6 -%}
+          <a href="{{ product.url }}" class="showcase-frame" aria-hidden="true">
+            <div class="showcase-frame__img">
+              {%- if product.featured_image -%}
+                <img src="{{ product.featured_image | image_url: width: 500 }}" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                <img src="https://lh3.googleusercontent.com/d/{{ product.metafields.neverland.drive_file_id }}=s500" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- endif -%}
+            </div>
+            <div class="showcase-frame__info">
+              <span class="showcase-frame__title">{{ product.title | truncate: 40 }}</span>
+              <span class="showcase-frame__artist">{{ product.vendor }}</span>
+            </div>
+          </a>
+        {%- endfor -%}
+      </div>
+    </div>
+
+    {%- comment -%} Row 2 — scrolls right (offset) {%- endcomment -%}
+    <div class="art-showcase__row art-showcase__row--2" data-direction="right">
+      <div class="art-showcase__track art-showcase__track--reverse" id="showcase-row-2">
+        {%- for product in showcase_collection.products limit: 6 offset: 6 -%}
+          <a href="{{ product.url }}" class="showcase-frame">
+            <div class="showcase-frame__img">
+              {%- if product.featured_image -%}
+                <img src="{{ product.featured_image | image_url: width: 500 }}" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                <img src="https://lh3.googleusercontent.com/d/{{ product.metafields.neverland.drive_file_id }}=s500" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- else -%}
+                <div class="showcase-frame__shimmer"></div>
+              {%- endif -%}
+            </div>
+            <div class="showcase-frame__info">
+              <span class="showcase-frame__title">{{ product.title | truncate: 40 }}</span>
+              <span class="showcase-frame__artist">{{ product.vendor }}</span>
+            </div>
+          </a>
+        {%- endfor -%}
+        {%- for product in showcase_collection.products limit: 6 offset: 6 -%}
+          <a href="{{ product.url }}" class="showcase-frame" aria-hidden="true">
+            <div class="showcase-frame__img">
+              {%- if product.featured_image -%}
+                <img src="{{ product.featured_image | image_url: width: 500 }}" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                <img src="https://lh3.googleusercontent.com/d/{{ product.metafields.neverland.drive_file_id }}=s500" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- endif -%}
+            </div>
+            <div class="showcase-frame__info">
+              <span class="showcase-frame__title">{{ product.title | truncate: 40 }}</span>
+              <span class="showcase-frame__artist">{{ product.vendor }}</span>
+            </div>
+          </a>
+        {%- endfor -%}
+      </div>
+    </div>
+
+    {%- comment -%} Row 3 — scrolls left (slower) {%- endcomment -%}
+    <div class="art-showcase__row art-showcase__row--3" data-direction="left">
+      <div class="art-showcase__track" id="showcase-row-3">
+        {%- for product in showcase_collection.products limit: 6 offset: 12 -%}
+          <a href="{{ product.url }}" class="showcase-frame">
+            <div class="showcase-frame__img">
+              {%- if product.featured_image -%}
+                <img src="{{ product.featured_image | image_url: width: 500 }}" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                <img src="https://lh3.googleusercontent.com/d/{{ product.metafields.neverland.drive_file_id }}=s500" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- else -%}
+                <div class="showcase-frame__shimmer"></div>
+              {%- endif -%}
+            </div>
+            <div class="showcase-frame__info">
+              <span class="showcase-frame__title">{{ product.title | truncate: 40 }}</span>
+              <span class="showcase-frame__artist">{{ product.vendor }}</span>
+            </div>
+          </a>
+        {%- endfor -%}
+        {%- for product in showcase_collection.products limit: 6 offset: 12 -%}
+          <a href="{{ product.url }}" class="showcase-frame" aria-hidden="true">
+            <div class="showcase-frame__img">
+              {%- if product.featured_image -%}
+                <img src="{{ product.featured_image | image_url: width: 500 }}" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                <img src="https://lh3.googleusercontent.com/d/{{ product.metafields.neverland.drive_file_id }}=s500" alt="{{ product.title | escape }}" loading="lazy" width="500" height="400" decoding="async">
+              {%- endif -%}
+            </div>
+            <div class="showcase-frame__info">
+              <span class="showcase-frame__title">{{ product.title | truncate: 40 }}</span>
+              <span class="showcase-frame__artist">{{ product.vendor }}</span>
+            </div>
+          </a>
+        {%- endfor -%}
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="art-showcase__cta-wrap is-visible" style="opacity:1;transform:none;">
+      <a href="{{ section.settings.cta_url | default: '/pages/catalog' }}" class="btn btn--primary btn--large art-showcase__cta">
+        <span>{{ section.settings.cta_text | default: 'Browse All Art' }}</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Art Showcase",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Art That Speaks" },
+    { "type": "textarea", "id": "subtitle", "label": "Subtitle", "default": "Thousands of museum-quality pieces from the world's most celebrated artists — ready for your walls." },
+    { "type": "text", "id": "cta_text", "label": "Button text", "default": "Browse All Art" },
+    { "type": "url", "id": "cta_url", "label": "Button link" }
+  ],
+  "presets": [{ "name": "Art Showcase" }]
+}
+{% endschema %}

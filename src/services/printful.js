@@ -232,6 +232,115 @@ class PrintfulService {
     });
     return result;
   }
+
+  // ══════════════════════════════════════════════════════════
+  //  MOCKUP GENERATOR
+  // ══════════════════════════════════════════════════════════
+
+  /**
+   * Create a mockup generation task.
+   * Uses Printful's Mockup Generator API (v2):
+   *   POST /mockup-generator/create-task/{product_id}
+   *
+   * @param {Object} opts
+   * @param {string} opts.imageUrl  - Publicly-accessible image URL
+   * @param {number} [opts.productId=1] - Printful catalog product ID (1=poster)
+   * @param {number[]} [opts.variantIds=[7]] - Which variants to mock up
+   * @param {string} [opts.placement='default'] - File placement
+   * @returns {{ task_key: string }} Task key for polling
+   */
+  async createMockupTask(opts) {
+    const {
+      imageUrl,
+      productId = 1,
+      variantIds = [7],
+      placement = "default",
+    } = opts;
+
+    const body = {
+      variant_ids: variantIds,
+      format: "jpg",
+      files: [
+        {
+          placement,
+          image_url: imageUrl,
+          position: {
+            area_width: 1800,
+            area_height: 2400,
+            width: 1800,
+            height: 2400,
+            top: 0,
+            left: 0,
+          },
+        },
+      ],
+    };
+
+    const data = await this.request(
+      "POST",
+      `/mockup-generator/create-task/${productId}`,
+      body
+    );
+    return data.result; // { task_key, status }
+  }
+
+  /**
+   * Poll a mockup generation task until completed or failed.
+   *
+   * @param {string} taskKey - The task_key from createMockupTask
+   * @param {Object} [opts]
+   * @param {number} [opts.pollInterval=3000] - ms between polls
+   * @param {number} [opts.maxWait=120000]    - max ms to wait (2 min)
+   * @returns {{ status, mockups: [{ placement, variant_ids, mockup_url, extra }] }}
+   */
+  async pollMockupTask(taskKey, opts = {}) {
+    const { pollInterval = 3000, maxWait = 120000 } = opts;
+    const start = Date.now();
+
+    while (Date.now() - start < maxWait) {
+      const data = await this.request(
+        "GET",
+        `/mockup-generator/task?task_key=${encodeURIComponent(taskKey)}`
+      );
+
+      const { status, mockups, error } = data.result;
+
+      if (status === "completed") {
+        return { status, mockups: mockups || [] };
+      }
+      if (status === "failed") {
+        throw new Error(`Mockup task failed: ${error || "unknown error"}`);
+      }
+
+      // status === "pending" — wait and retry
+      await new Promise((r) => setTimeout(r, pollInterval));
+    }
+
+    throw new Error(`Mockup task timed out after ${maxWait / 1000}s`);
+  }
+
+  /**
+   * Generate a mockup end-to-end: create task, poll, return URLs.
+   *
+   * @param {string} imageUrl - Publicly-accessible image URL
+   * @param {Object} [opts]   - Options forwarded to createMockupTask
+   * @returns {{ mockup_url: string, extra: Array }} The first mockup result
+   */
+  async generateMockup(imageUrl, opts = {}) {
+    const task = await this.createMockupTask({ imageUrl, ...opts });
+    const result = await this.pollMockupTask(task.task_key);
+
+    if (!result.mockups.length) {
+      throw new Error("Mockup task completed but returned no mockups");
+    }
+
+    // Return the first mockup (primary wall/room scene)
+    return {
+      mockup_url: result.mockups[0].mockup_url,
+      extra: result.mockups.slice(1).map((m) => m.mockup_url),
+      all: result.mockups,
+    };
+  }
 }
 
 module.exports = PrintfulService;

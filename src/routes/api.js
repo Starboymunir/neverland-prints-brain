@@ -488,6 +488,7 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
         s1600: `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s1600`,
         s2000: `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s2000`,
       },
+      mockup_url: asset.mockup_url || null,
       priceTier: tier.tier,
       basePrice: tier.price,
       comparePrice: tier.comparePrice,
@@ -1641,6 +1642,157 @@ router.post("/printful/estimate", async (req, res) => {
   try {
     const est = await printful.estimateCost(req.body);
     res.json(est);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// PRINTFUL MOCKUP GENERATOR — on-demand wall mockups
+// ═══════════════════════════════════════════════════════════
+
+// In-memory mockup cache (taskKey -> result) to avoid re-polling
+const mockupCache = new Map();
+
+/**
+ * GET /api/printful/mockup/:assetId
+ * Generate a Printful wall mockup for a given asset.
+ * If the asset already has a cached mockup_url in DB, returns it instantly.
+ * Otherwise creates a Printful task, polls, stores result, and returns.
+ *
+ * Query params:
+ *   ?product_id=1    — Printful product (default: 1 = poster)
+ *   ?variant_ids=7   — comma-separated variant IDs (default: 7)
+ *   ?force=1         — regenerate even if cached
+ */
+router.get("/printful/mockup/:assetId", async (req, res) => {
+  try {
+    const { assetId } = req.params;
+    const force = req.query.force === "1";
+    const productId = parseInt(req.query.product_id || "1", 10);
+    const variantIds = (req.query.variant_ids || "7")
+      .split(",")
+      .map((v) => parseInt(v.trim(), 10));
+
+    // 1. Look up asset
+    let asset;
+    try {
+      const { data, error } = await supabase
+        .from("assets")
+        .select("id, drive_file_id, title, mockup_url, width_px, height_px")
+        .eq("id", assetId)
+        .single();
+      if (error || !data) return res.status(404).json({ error: "Asset not found" });
+      asset = data;
+    } catch (e) {
+      // mockup_url column might not exist yet — try without it
+      const { data, error } = await supabase
+        .from("assets")
+        .select("id, drive_file_id, title, width_px, height_px")
+        .eq("id", assetId)
+        .single();
+      if (error || !data) return res.status(404).json({ error: "Asset not found" });
+      asset = data;
+    }
+
+    // 2. Return cached mockup if available
+    if (asset.mockup_url && !force) {
+      return res.json({
+        assetId,
+        mockup_url: asset.mockup_url,
+        cached: true,
+      });
+    }
+
+    // 3. Build the image URL — use high-res for Printful
+    const imageUrl = `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s2000`;
+
+    // 4. Generate mockup
+    console.log(`[Mockup] Generating for asset ${assetId} (${asset.title || "untitled"})...`);
+    const result = await printful.generateMockup(imageUrl, {
+      productId,
+      variantIds,
+    });
+
+    // 5. Try to store in database (column may not exist yet)
+    try {
+      await supabase
+        .from("assets")
+        .update({ mockup_url: result.mockup_url })
+        .eq("id", assetId);
+    } catch (e) {
+      console.log(`[Mockup] Could not cache in DB (column may not exist): ${e.message}`);
+    }
+
+    res.json({
+      assetId,
+      mockup_url: result.mockup_url,
+      extra: result.extra,
+      cached: false,
+    });
+  } catch (e) {
+    console.error(`[Mockup] Error:`, e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * POST /api/printful/mockup/batch
+ * Generate mockups for multiple assets at once.
+ * Body: { assetIds: [uuid, ...], product_id?: number, variant_ids?: number[] }
+ * Returns immediately with task status; results stored in DB.
+ */
+router.post("/printful/mockup/batch", async (req, res) => {
+  try {
+    const { assetIds = [], product_id = 1, variant_ids = [7] } = req.body;
+    if (!assetIds.length) {
+      return res.status(400).json({ error: "assetIds required" });
+    }
+    if (assetIds.length > 50) {
+      return res.status(400).json({ error: "Max 50 assets per batch" });
+    }
+
+    // Fetch assets
+    const { data: assets, error } = await supabase
+      .from("assets")
+      .select("id, drive_file_id, title, mockup_url")
+      .in("id", assetIds);
+
+    if (error) throw error;
+
+    // Filter to those without mockups
+    const needMockup = assets.filter((a) => !a.mockup_url);
+    const alreadyDone = assets.filter((a) => a.mockup_url);
+
+    // Process in background (don't block response)
+    const results = { queued: needMockup.length, skipped: alreadyDone.length, results: [] };
+
+    // Fire off mockup generation asynchronously
+    (async () => {
+      for (const asset of needMockup) {
+        try {
+          const imageUrl = `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s2000`;
+          const result = await printful.generateMockup(imageUrl, {
+            productId: product_id,
+            variantIds: variant_ids,
+          });
+          await supabase
+            .from("assets")
+            .update({ mockup_url: result.mockup_url })
+            .eq("id", asset.id);
+          console.log(`[Mockup] Done: ${asset.id} (${asset.title || "untitled"})`);
+        } catch (e) {
+          console.error(`[Mockup] Failed: ${asset.id} — ${e.message}`);
+        }
+        // Rate limit: ~1 per 3s (Printful is rate-limited)
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    })();
+
+    res.json({
+      message: `Generating ${needMockup.length} mockups (${alreadyDone.length} already cached)`,
+      ...results,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

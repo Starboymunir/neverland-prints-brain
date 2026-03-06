@@ -1,0 +1,81 @@
+{% comment %} UGC — Cinematic customer art showcase {% endcomment %}
+
+<section class="section ugc-section" data-animate="fade-up">
+  <div class="container">
+    <div class="ugc-header" data-animate="fade-up">
+      <span class="ugc-header__eyebrow">Real Homes. Real Art.</span>
+      <h2 class="ugc-header__title">{{ section.settings.title | default: 'Our Art In Your Homes' }}</h2>
+      <p class="ugc-header__sub">See how our customers style their spaces with Neverland prints</p>
+    </div>
+
+    <div class="ugc-masonry" data-stagger>
+      {%- for block in section.blocks -%}
+        <div class="ugc-masonry__item {% cycle 'ugc-tall', 'ugc-wide', '', 'ugc-tall' %}" {{ block.shopify_attributes }}>
+          {%- if block.settings.video -%}
+            <div class="ugc-video-container">
+              <video class="ugc-video" playsinline muted loop
+                {%- if block.settings.poster %} poster="{{ block.settings.poster | image_url: width: 600 }}"{% endif -%}>
+                {{ block.settings.video | video_sources }}
+              </video>
+              <button class="ugc-play-btn" aria-label="Play video">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </button>
+            </div>
+          {%- elsif block.settings.image -%}
+            <div class="ugc-img-container">
+              <img src="{{ block.settings.image | image_url: width: 600 }}" alt="{{ block.settings.caption }}" loading="lazy">
+            </div>
+          {%- endif -%}
+          <div class="ugc-masonry__overlay">
+            {%- if block.settings.caption -%}
+              <span class="ugc-masonry__caption">{{ block.settings.caption }}</span>
+            {%- endif -%}
+          </div>
+        </div>
+      {%- endfor -%}
+
+      {%- if section.blocks.size == 0 -%}
+        {%- assign ugc_coll = collections['gallery-grade'] -%}
+        {%- unless ugc_coll -%}{%- assign ugc_coll = collections['all-art-prints'] -%}{%- endunless -%}
+        {%- for product in ugc_coll.products limit: 4 offset: 20 -%}
+          <div class="ugc-masonry__item {% cycle 'ugc-tall', 'ugc-wide', '', 'ugc-tall' %}">
+            <div class="ugc-img-container">
+              <a href="{{ product.url }}">
+                {%- if product.featured_image -%}
+                  <img src="{{ product.featured_image | image_url: width: 600 }}" alt="{{ product.title | escape }}" loading="lazy" width="600" height="500" decoding="async">
+                {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                  <img src="https://lh3.googleusercontent.com/d/{{ product.metafields.neverland.drive_file_id }}=s600" alt="{{ product.title | escape }}" loading="lazy" width="600" height="500" decoding="async">
+                {%- endif -%}
+              </a>
+            </div>
+            <div class="ugc-masonry__overlay">
+              <span class="ugc-masonry__caption">{{ product.title | truncate: 50 }}</span>
+            </div>
+          </div>
+        {%- endfor -%}
+      {%- endif -%}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "UGC Gallery",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Our Art In Your Homes" }
+  ],
+  "blocks": [
+    {
+      "type": "ugc_item",
+      "name": "UGC Item",
+      "settings": [
+        { "type": "video", "id": "video", "label": "Video" },
+        { "type": "image_picker", "id": "image", "label": "Image (if no video)" },
+        { "type": "image_picker", "id": "poster", "label": "Video poster image" },
+        { "type": "text", "id": "caption", "label": "Caption (e.g. Name, City)" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "UGC Gallery" }]
+}
+{% endschema %}

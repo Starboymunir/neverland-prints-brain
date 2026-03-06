@@ -1,0 +1,48 @@
+{% comment %} BESTSELLERS — Server-rendered product slider from Shopify collection {% endcomment %}
+
+{%- if section.settings.collection != blank -%}
+  {%- assign bs_products = section.settings.collection.products -%}
+{%- else -%}
+  {%- assign bs_products = collections['gallery-grade'].products -%}
+{%- endif -%}
+
+<section class="section product-slider" data-animate="fade-up">
+  <div class="container">
+    <div class="section-head" data-animate="fade-up">
+      <div class="section-head__row">
+        <h2 class="section-head__title">{{ section.settings.title | default: 'Bestsellers' }}</h2>
+        <div class="swiper-arrows">
+          <button class="swiper-arrow swiper-arrow--prev" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="swiper-arrow swiper-arrow--next" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="product-carousel swiper" id="bestsellers-swiper" data-animate="fade-up">
+    <div class="swiper-wrapper" id="bestsellers-slides">
+      {%- for product in bs_products limit: 16 -%}
+        <div class="swiper-slide">
+          {% render 'product-card', product: product %}
+        </div>
+      {%- endfor -%}
+    </div>
+    <div class="swiper-pagination"></div>
+  </div>
+
+  <div class="container" style="text-align:center;margin-top:2.5rem;" data-animate="fade-up">
+    <a href="/pages/catalog?sort=popular" class="btn btn--primary"><span>{{ section.settings.link_text | default: 'Shop All' }}</span></a>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Bestsellers Slider",
+  "settings": [
+    { "type": "collection", "id": "collection", "label": "Collection", "info": "Defaults to Gallery Grade if not set" },
+    { "type": "text", "id": "title", "label": "Heading", "default": "Bestsellers" },
+    { "type": "text", "id": "link_text", "label": "Link text", "default": "Shop All" }
+  ],
+  "presets": [{ "name": "Bestsellers Slider" }]
+}
+{% endschema %}

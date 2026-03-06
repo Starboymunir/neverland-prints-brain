@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="{{ request.locale.iso_code }}" dir="{{ request.locale.text_direction }}">
+<head>
+  <meta charset="utf-8">
+  <!-- cache-bust-v3 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+  {%- comment -%} ── Favicon ── {%- endcomment -%}
+  <link rel="icon" type="image/png" href="{{ 'logo-1.png' | asset_url }}" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ 'logo-1.png' | asset_url }}">
+
+  <title>{{ page_title }}{% unless page_title contains shop.name %} — {{ shop.name }}{% endunless %}</title>
+
+  {% if page_description %}
+    <meta name="description" content="{{ page_description | escape }}">
+  {% endif %}
+
+  {%- comment -%} ── Performance: preconnect to Shopify CDN ── {%- endcomment -%}
+  <link rel="preconnect" href="https://cdn.shopify.com" crossorigin>
+
+  {%- comment -%} ── Preload cached hero image for instant display on repeat visits ── {%- endcomment -%}
+  <script>try{var _h=JSON.parse(localStorage.getItem('nl_hero'));if(_h&&_h.url&&(Date.now()-_h.ts<864e5)){var _l=document.createElement('link');_l.rel='preload';_l.as='image';_l.href=_h.url;document.head.appendChild(_l);}}catch(e){}</script>
+
+  {{ content_for_header }}
+
+  {%- comment -%} ── Typography: load selected fonts via Shopify font system ── {%- endcomment -%}
+  {%- assign heading_font = settings.font_heading -%}
+  {%- assign body_font = settings.font_body -%}
+
+  <style>
+    {{ heading_font | font_face: font_display: 'swap' }}
+    {{ body_font | font_face: font_display: 'swap' }}
+    {%- assign heading_bold = heading_font | font_modify: 'weight', 'bold' -%}
+    {%- if heading_bold -%}
+      {{ heading_bold | font_face: font_display: 'swap' }}
+    {%- endif -%}
+    {%- assign heading_italic = heading_font | font_modify: 'style', 'italic' -%}
+    {%- if heading_italic -%}
+      {{ heading_italic | font_face: font_display: 'swap' }}
+    {%- endif -%}
+    {%- assign body_bold = body_font | font_modify: 'weight', 'bold' -%}
+    {%- if body_bold -%}
+      {{ body_bold | font_face: font_display: 'swap' }}
+    {%- endif -%}
+    {%- assign body_light = body_font | font_modify: 'weight', '300' -%}
+    {%- if body_light -%}
+      {{ body_light | font_face: font_display: 'swap' }}
+    {%- endif -%}
+
+    :root {
+      /* Dynamic fonts from Theme Customizer */
+      --font-display: {{ heading_font.family }}, {{ heading_font.fallback_families }};
+      --font-body: {{ body_font.family }}, {{ body_font.fallback_families }};
+      --font-heading-weight: {{ heading_font.weight }};
+      --font-body-weight: {{ body_font.weight }};
+      --font-heading-style: {{ heading_font.style }};
+      --font-body-style: {{ body_font.style }};
+      --font-heading-scale: {{ settings.font_heading_scale | default: 100 }}%;
+      --font-body-scale: {{ settings.font_body_scale | default: 100 }}%;
+
+      /* Dynamic colors from Theme Customizer */
+      --accent: {{ settings.color_accent | default: '#111111' }};
+      --accent-dark: {{ settings.color_accent | default: '#111111' | color_darken: 15 }};
+      --text: {{ settings.color_text | default: '#111111' }};
+      --text-sec: {{ settings.color_text | default: '#111111' | color_lighten: 30 }};
+      --text-muted: {{ settings.color_text | default: '#111111' | color_lighten: 50 }};
+      --bg: {{ settings.color_background | default: '#ffffff' }};
+      --bg-alt: {{ settings.color_background_alt | default: '#f5f5f5' }};
+      --bg-dark: {{ settings.color_footer_bg | default: '#111111' }};
+      --bg-dark-alt: {{ settings.color_footer_bg | default: '#111111' | color_lighten: 5 }};
+    }
+
+    /* Apply font scale to base sizing */
+    h1, h2, h3, h4 {
+      font-family: var(--font-display);
+      font-weight: var(--font-heading-weight, 400);
+      font-style: var(--font-heading-style, normal);
+    }
+    h1 { font-size: calc(clamp(2.4rem, 5vw, 4rem) * var(--font-heading-scale, 100%) / 100%); }
+    h2 { font-size: calc(clamp(1.8rem, 3.5vw, 2.8rem) * var(--font-heading-scale, 100%) / 100%); }
+    body, button, input, select, textarea {
+      font-family: var(--font-body);
+      font-weight: var(--font-body-weight, 400);
+      font-style: var(--font-body-style, normal);
+    }
+    body { font-size: calc(1rem * {{ settings.font_body_scale | default: 100 }} / 100); }
+  </style>
+
+  {%- if settings.favicon -%}
+    <link rel="icon" type="image/png" href="{{ settings.favicon | image_url: width: 64 }}">
+  {%- endif -%}
+
+  {{ 'neverland.css' | asset_url | stylesheet_tag }}
+
+  <script>
+    document.documentElement.className = document.documentElement.className.replace('no-js', 'js');
+  </script>
+</head>
+<body class="template-{{ template.name }}{% if template.suffix %} template-{{ template.name }}-{{ template.suffix }}{% endif %}">
+
+  {% section 'header' %}
+
+  <main id="main-content" role="main">
+    {{ content_for_layout }}
+  </main>
+
+  {% section 'footer' %}
+
+  <script src="{{ 'neverland.js' | asset_url }}" defer></script>
+  <script src="{{ 'neverland-catalog.js' | asset_url }}" defer></script>
+
+  {%- comment -%} ── Image lazy-load fade-in observer ── {%- endcomment -%}
+  <script>
+    document.addEventListener('DOMContentLoaded',function(){
+      function markLoaded(img){if(img.complete&&img.naturalHeight>0)img.classList.add('is-loaded');else img.addEventListener('load',function(){this.classList.add('is-loaded');})}
+      document.querySelectorAll('img[loading="lazy"]').forEach(markLoaded);
+      new MutationObserver(function(muts){muts.forEach(function(m){m.addedNodes.forEach(function(n){if(n.nodeType===1){if(n.tagName==='IMG'&&n.loading==='lazy')markLoaded(n);if(n.querySelectorAll)n.querySelectorAll('img[loading="lazy"]').forEach(markLoaded);}});});}).observe(document.body,{childList:true,subtree:true});
+    });
+  </script>
+
+  {% render 'neverland-analytics' %}
+</body>
+</html>

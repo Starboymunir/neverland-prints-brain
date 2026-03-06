@@ -1,0 +1,135 @@
+{% comment %} WHERE PROS SHOP — Cinematic full-bleed testimonial carousel {% endcomment %}
+
+<section class="section pros-section" data-animate="fade-up">
+  <div class="container">
+    <div class="pros-section__header" data-animate="fade-up">
+      <span class="pros-section__eyebrow">Trusted by Professionals</span>
+      <h2 class="pros-section__title">{{ section.settings.title | default: 'Where The Pros Shop' }}</h2>
+    </div>
+
+    <div class="pros-carousel swiper" id="pros-carousel">
+      <div class="swiper-wrapper">
+        {%- for block in section.blocks -%}
+          <div class="swiper-slide" {{ block.shopify_attributes }}>
+            <div class="pros-slide">
+              <div class="pros-slide__image">
+                {%- if block.settings.photo -%}
+                  <img src="{{ block.settings.photo | image_url: width: 600 }}" alt="{{ block.settings.name }}" loading="lazy">
+                {%- else -%}
+                  <div class="pros-slide__avatar">{{ block.settings.name | truncate: 1, '' }}</div>
+                {%- endif -%}
+              </div>
+              <div class="pros-slide__content">
+                <svg class="pros-slide__quote-mark" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+                <h3 class="pros-slide__quote">"{{ block.settings.quote }}"</h3>
+                <div class="pros-slide__author-info">
+                  <div class="pros-slide__author-avatar">{{ block.settings.name | truncate: 1, '' }}</div>
+                  <div>
+                    <p class="pros-slide__author">{{ block.settings.name }}</p>
+                    {%- if block.settings.role -%}
+                      <p class="pros-slide__role">{{ block.settings.role }}</p>
+                    {%- endif -%}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        {%- endfor -%}
+
+        {%- if section.blocks.size == 0 -%}
+          {%- assign pros_coll = collections['gallery-grade'] -%}
+          {%- unless pros_coll -%}{%- assign pros_coll = collections['all-art-prints'] -%}{%- endunless -%}
+          <div class="swiper-slide">
+            <div class="pros-slide">
+              <div class="pros-slide__image">
+                {%- assign pros_prod1 = pros_coll.products[25] -%}
+                {%- if pros_prod1 and pros_prod1.featured_image -%}
+                  <img src="{{ pros_prod1.featured_image | image_url: width: 800 }}" alt="{{ pros_prod1.title | escape }}" loading="lazy" width="800" height="600" decoding="async">
+                {%- elsif pros_prod1 and pros_prod1.metafields.neverland.drive_file_id != blank -%}
+                  <img src="https://lh3.googleusercontent.com/d/{{ pros_prod1.metafields.neverland.drive_file_id }}=s800" alt="{{ pros_prod1.title | escape }}" loading="lazy">
+                {%- else -%}
+                  <div class="pros-slide__avatar">S</div>
+                {%- endif -%}
+              </div>
+              <div class="pros-slide__content">
+                <svg class="pros-slide__quote-mark" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+                <h3 class="pros-slide__quote">"The quality of these prints is exceptional. My clients are always impressed with the colour accuracy and paper quality. Neverland is my go-to for every project."</h3>
+                <div class="pros-slide__author-info">
+                  <div class="pros-slide__author-avatar">S</div>
+                  <div><p class="pros-slide__author">Sarah Mitchell</p><p class="pros-slide__role">Interior Designer</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="swiper-slide">
+            <div class="pros-slide">
+              <div class="pros-slide__image">
+                {%- assign pros_prod2 = pros_coll.products[26] -%}
+                {%- if pros_prod2 and pros_prod2.featured_image -%}
+                  <img src="{{ pros_prod2.featured_image | image_url: width: 800 }}" alt="{{ pros_prod2.title | escape }}" loading="lazy" width="800" height="600" decoding="async">
+                {%- elsif pros_prod2 and pros_prod2.metafields.neverland.drive_file_id != blank -%}
+                  <img src="https://lh3.googleusercontent.com/d/{{ pros_prod2.metafields.neverland.drive_file_id }}=s800" alt="{{ pros_prod2.title | escape }}" loading="lazy">
+                {%- else -%}
+                  <div class="pros-slide__avatar">J</div>
+                {%- endif -%}
+              </div>
+              <div class="pros-slide__content">
+                <svg class="pros-slide__quote-mark" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+                <h3 class="pros-slide__quote">"I have been sourcing art prints from various suppliers for years. Neverland Prints stands head and shoulders above the rest in terms of print quality and catalogue depth."</h3>
+                <div class="pros-slide__author-info">
+                  <div class="pros-slide__author-avatar">J</div>
+                  <div><p class="pros-slide__author">James Chen</p><p class="pros-slide__role">Art Consultant</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="swiper-slide">
+            <div class="pros-slide">
+              <div class="pros-slide__image">
+                {%- assign pros_prod3 = pros_coll.products[27] -%}
+                {%- if pros_prod3 and pros_prod3.featured_image -%}
+                  <img src="{{ pros_prod3.featured_image | image_url: width: 800 }}" alt="{{ pros_prod3.title | escape }}" loading="lazy" width="800" height="600" decoding="async">
+                {%- elsif pros_prod3 and pros_prod3.metafields.neverland.drive_file_id != blank -%}
+                  <img src="https://lh3.googleusercontent.com/d/{{ pros_prod3.metafields.neverland.drive_file_id }}=s800" alt="{{ pros_prod3.title | escape }}" loading="lazy">
+                {%- else -%}
+                  <div class="pros-slide__avatar">E</div>
+                {%- endif -%}
+              </div>
+              <div class="pros-slide__content">
+                <svg class="pros-slide__quote-mark" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+                <h3 class="pros-slide__quote">"The range of artists and styles is unmatched. Whether I need a classic Monet or a bold contemporary piece, Neverland always delivers with stunning quality."</h3>
+                <div class="pros-slide__author-info">
+                  <div class="pros-slide__author-avatar">E</div>
+                  <div><p class="pros-slide__author">Elena Rodriguez</p><p class="pros-slide__role">Staging Specialist</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        {%- endif -%}
+      </div>
+      <div class="swiper-pagination"></div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Where Pros Shop",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Heading", "default": "Where The Pros Shop" }
+  ],
+  "blocks": [
+    {
+      "type": "testimonial",
+      "name": "Testimonial",
+      "settings": [
+        { "type": "image_picker", "id": "photo", "label": "Photo" },
+        { "type": "textarea", "id": "quote", "label": "Quote" },
+        { "type": "text", "id": "name", "label": "Name" },
+        { "type": "text", "id": "role", "label": "Role / Company" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Where Pros Shop" }]
+}
+{% endschema %}

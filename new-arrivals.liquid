@@ -1,0 +1,48 @@
+{% comment %} NEW ARRIVALS — Server-rendered product slider from Shopify collection {% endcomment %}
+
+{%- if section.settings.collection != blank -%}
+  {%- assign na_products = section.settings.collection.products -%}
+{%- else -%}
+  {%- assign na_products = collections['all-art-prints'].products -%}
+{%- endif -%}
+
+<section class="section product-slider product-slider--alt" data-animate="fade-up">
+  <div class="container">
+    <div class="section-head" data-animate="fade-up">
+      <div class="section-head__row">
+        <h2 class="section-head__title">{{ section.settings.title | default: 'New Arrivals' }}</h2>
+        <div class="swiper-arrows">
+          <button class="swiper-arrow swiper-arrow--prev" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="swiper-arrow swiper-arrow--next" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="product-carousel swiper" id="new-arrivals-swiper" data-animate="fade-up">
+    <div class="swiper-wrapper" id="new-arrivals-slides">
+      {%- for product in na_products limit: 16 -%}
+        <div class="swiper-slide">
+          {% render 'product-card', product: product %}
+        </div>
+      {%- endfor -%}
+    </div>
+    <div class="swiper-pagination"></div>
+  </div>
+
+  <div class="container" style="text-align:center;margin-top:2.5rem;" data-animate="fade-up">
+    <a href="/pages/catalog?sort=newest" class="btn btn--primary"><span>{{ section.settings.link_text | default: 'View All' }}</span></a>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "New Arrivals Slider",
+  "settings": [
+    { "type": "collection", "id": "collection", "label": "Collection", "info": "Defaults to All Art Prints if not set" },
+    { "type": "text", "id": "title", "label": "Heading", "default": "New Arrivals" },
+    { "type": "text", "id": "link_text", "label": "Link text", "default": "View All" }
+  ],
+  "presets": [{ "name": "New Arrivals Slider" }]
+}
+{% endschema %}

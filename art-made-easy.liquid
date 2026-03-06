@@ -1,0 +1,66 @@
+{% comment %} GALLERY QUALITY — Premium 50/50 split with editorial feel {% endcomment %}
+
+<section class="section--lg gallery-quality" data-animate="fade-up" style="position:relative;overflow:hidden;">
+  <img src="{{ 'watermark-4.png' | asset_url }}" alt="" style="position:absolute;left:-30px;bottom:40px;width:180px;opacity:0.04;pointer-events:none;user-select:none;transform:rotate(-15deg);" aria-hidden="true">
+  <div class="container">
+    <div class="gallery-quality__row">
+      <!-- Left: image or video -->
+      <div class="gallery-quality__media" data-animate="fade-right">
+        <div class="gallery-quality__media-inner">
+          {%- if section.settings.video -%}
+            <video width="100%" playsinline autoplay muted loop>
+              {{ section.settings.video | video_sources }}
+            </video>
+          {%- elsif section.settings.image -%}
+            <img src="{{ section.settings.image | image_url: width: 960 }}" alt="{{ section.settings.image.alt }}" loading="lazy">
+          {%- else -%}
+            {%- assign gq_coll = collections['gallery-grade'] -%}
+            {%- unless gq_coll -%}{%- assign gq_coll = collections['all-art-prints'] -%}{%- endunless -%}
+            {%- assign gq_product = gq_coll.products[5] -%}
+            {%- if gq_product and gq_product.featured_image -%}
+              <img src="{{ gq_product.featured_image | image_url: width: 960 }}" alt="{{ gq_product.title | escape }}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-lg);">
+            {%- elsif gq_product and gq_product.metafields.neverland.drive_file_id != blank -%}
+              <img src="https://lh3.googleusercontent.com/d/{{ gq_product.metafields.neverland.drive_file_id }}=s960" alt="{{ gq_product.title | escape }}" loading="lazy" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-lg);">
+            {%- else -%}
+              <div class="gallery-quality__media-placeholder" id="ame-media-placeholder"></div>
+            {%- endif -%}
+          {%- endif -%}
+        </div>
+        <div class="gallery-quality__media-accent"></div>
+      </div>
+
+      <!-- Right: text content -->
+      <div class="gallery-quality__text" data-animate="fade-up">
+        <span class="gallery-quality__eyebrow">Our Promise</span>
+        <h2 class="gallery-quality__title">{{ section.settings.title | default: 'Gallery Quality. In Every Home.' }}</h2>
+        <div class="gallery-quality__body rte">
+          {%- if section.settings.body != blank -%}
+            {{ section.settings.body }}
+          {%- else -%}
+            <p>Neverland Prints was born from the simple belief that furnishing your home with stylish, gallery quality art shouldn&rsquo;t be an unattainable luxury.</p>
+            <p>We&rsquo;re here for art lovers who value quality, but can&rsquo;t justify spending thousands on original gallery pieces, yet refuse to settle for flimsy posters and mass-produced frames.</p>
+            <p>We bridge that gap by offering a curated collection of gallery quality art without the gallery price tag.</p>
+          {%- endif -%}
+        </div>
+        <a href="{{ section.settings.cta_url | default: '/pages/catalog' }}" class="btn btn--primary btn--large gallery-quality__cta">
+          <span>{{ section.settings.cta_text | default: 'Shop Art' }}</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Gallery Quality",
+  "settings": [
+    { "type": "image_picker", "id": "image", "label": "Image (used if no video)" },
+    { "type": "video", "id": "video", "label": "Video (autoplay, muted, looped)" },
+    { "type": "text", "id": "title", "label": "Heading", "default": "Gallery Quality. In Every Home." },
+    { "type": "richtext", "id": "body", "label": "Body text" },
+    { "type": "text", "id": "cta_text", "label": "Button text", "default": "Shop Art" },
+    { "type": "url", "id": "cta_url", "label": "Button URL" }
+  ],
+  "presets": [{ "name": "Gallery Quality" }]
+}
+{% endschema %}
