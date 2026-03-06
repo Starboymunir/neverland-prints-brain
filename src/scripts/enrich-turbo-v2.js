@@ -38,14 +38,18 @@ if (process.env.__ENRICH_WORKER__) {
     const items = assets.map((a, i) =>
       `${i}:"${a.title}" by ${a.artist || "?"}`
     ).join("\n");
-    return `Classify each artwork. Return JSON array, one object per item, same order.
-Each: {"style":"...","mood":"...","subject":"...","era":"...","palette":"...","tags":["t1","t2",...]}
+    return `Classify well-known public domain artworks using art-historical knowledge. Do NOT guess from title alone.
+Return JSON array, one object per item, same order.
+Each: {"style":"...","mood":"...","subject":"...","era":"...","palette":"...","country":"...","continent":"...","tags":["t1","t2",...]}  
 styles:${STYLES}
 moods:${MOODS}
 subjects:${SUBJECTS}
 eras:${ERAS}
 palettes:${PALETTES}
-tags: 5-8 SEO keywords.
+country: artist nationality (France, Netherlands, Japan, Italy, etc)
+continent: Europe, Asia, North America, South America, Africa, Oceania
+tags: 8-12 SEO keywords including country name.
+Monet=Impressionism(France), Hokusai=Ukiyo-e(Japan), Rembrandt=Baroque(Netherlands). Get it RIGHT.
 
 ${items}`;
   }
@@ -58,7 +62,7 @@ ${items}`;
         const response = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           messages: [
-            { role: "system", content: "Art classification bot. Return valid JSON array only." },
+            { role: "system", content: "Expert art historian. Classify using established art history facts. Return valid JSON array only." },
             { role: "user", content: buildPrompt(assets) },
           ],
           temperature: 0.2,
@@ -113,6 +117,9 @@ ${items}`;
     async function writeOne(id, r) {
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
+          var tags = r.tags || [];
+          if (r.country && tags.indexOf(r.country) === -1) tags.push(r.country);
+          if (r.continent && tags.indexOf(r.continent) === -1) tags.push(r.continent);
           const res = await Promise.race([
             supabase.from("assets").update({
               style: r.style || null,
@@ -120,7 +127,7 @@ ${items}`;
               subject: r.subject || null,
               era: r.era || null,
               palette: r.palette || null,
-              ai_tags: r.tags || [],
+              ai_tags: tags,
             }).eq("id", id),
             sleep(10000).then(() => ({ error: { message: "timeout" } })),
           ]);

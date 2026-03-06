@@ -22,6 +22,42 @@ const EmbeddingService = require("../services/embedding");
 
 const router = express.Router();
 
+// ── In-memory cache for expensive aggregation queries ──
+const _cache = {};
+function getCached(key, ttlMs) {
+  const entry = _cache[key];
+  if (entry && Date.now() - entry.ts < ttlMs) return entry.data;
+  return null;
+}
+function setCache(key, data) {
+  _cache[key] = { data, ts: Date.now() };
+}
+
+/**
+ * Paginate through ALL rows for a Supabase query (bypasses 1000-row limit).
+ * @param {string} table - table name
+ * @param {string} selectCols - columns to select
+ * @param {function} filterFn - function(query) that applies .in(), .not() etc.
+ * @param {number} batchSize - rows per request (max 1000)
+ * @returns {Promise<Array>} all rows
+ */
+async function fetchAllRows(table, selectCols, filterFn, batchSize = 1000) {
+  const allRows = [];
+  let from = 0;
+  while (true) {
+    let q = supabase.from(table).select(selectCols);
+    if (filterFn) q = filterFn(q);
+    q = q.range(from, from + batchSize - 1);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allRows.push(...data);
+    if (data.length < batchSize) break;
+    from += batchSize;
+  }
+  return allRows;
+}
+
 // ── Generate a rich description from AI metadata when description is null ──
 function generateDescriptionFromMeta(asset) {
   const title = asset.title || "Untitled";
@@ -239,8 +275,7 @@ router.get("/storefront/catalog", async (req, res) => {
         { count: "exact" }
       )
       .in("ingestion_status", ["ready", "analyzed"])
-      .not("drive_file_id", "is", null)
-      .not("style", "is", null); // Only show enriched assets with AI metadata
+      .not("drive_file_id", "is", null);
 
     // Filters
     if (artist) query = query.eq("artist", artist);
@@ -467,31 +502,52 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
 
 /**
  * GET /api/storefront/artists
- * List all artists with counts.
+ * List all artists with counts. Paginates through ALL rows (bypasses 1000-row limit).
+ * Cached for 30 minutes.
  */
 router.get("/storefront/artists", async (req, res) => {
   try {
     const limitParam = req.query.limit;
     const limit = limitParam ? Math.max(1, parseInt(limitParam, 10)) : 0; // 0 = no limit
+    const searchQ = (req.query.q || req.query.search || "").trim().toLowerCase();
+    const sortBy = req.query.sort || "count"; // count | alpha
 
-    const { data, error } = await supabase
-      .from("assets")
-      .select("artist")
-      .in("ingestion_status", ["ready", "analyzed"])
-      .not("artist", "is", null);
+    // Check cache (30 min TTL)
+    let artists = getCached("artists_list", 30 * 60 * 1000);
+    if (!artists) {
+      // Paginate through ALL artist rows
+      const data = await fetchAllRows("assets", "artist", (q) =>
+        q.in("ingestion_status", ["ready", "analyzed"]).not("artist", "is", null)
+      );
 
-    if (error) throw error;
+      const counts = {};
+      data.forEach((a) => {
+        counts[a.artist] = (counts[a.artist] || 0) + 1;
+      });
 
-    const counts = {};
-    (data || []).forEach((a) => {
-      counts[a.artist] = (counts[a.artist] || 0) + 1;
-    });
+      artists = Object.entries(counts).map(([name, count]) => ({
+        artist: name,
+        name,
+        count,
+      }));
 
-    const artists = Object.entries(counts)
-      .map(([name, count]) => ({ artist: name, name, count }))
-      .sort((a, b) => b.count - a.count);
+      setCache("artists_list", artists);
+    }
 
-    const limited = limit > 0 ? artists.slice(0, limit) : artists;
+    // Sort
+    let sorted;
+    if (sortBy === "alpha") {
+      sorted = [...artists].sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      sorted = [...artists].sort((a, b) => b.count - a.count);
+    }
+
+    // Search filter
+    if (searchQ) {
+      sorted = sorted.filter((a) => a.name.toLowerCase().includes(searchQ));
+    }
+
+    const limited = limit > 0 ? sorted.slice(0, limit) : sorted;
 
     res.set("Cache-Control", "public, max-age=3600");
     res.json({ artists: limited, total: artists.length });
@@ -503,61 +559,68 @@ router.get("/storefront/artists", async (req, res) => {
 /**
  * GET /api/storefront/filters
  * Returns available filter values (styles, moods, orientations, eras, subjects, countries, continents).
+ * Paginates through ALL rows (bypasses 1000-row limit). Cached for 30 minutes.
  */
 router.get("/storefront/filters", async (req, res) => {
   try {
-    // Fetch distinct values in parallel
-    const [stylesRes, moodsRes, orientRes, erasRes, subjectsRes, tagsRes] = await Promise.all([
-      supabase.from("assets").select("style").in("ingestion_status", ["ready", "analyzed"]).not("style", "is", null),
-      supabase.from("assets").select("mood").in("ingestion_status", ["ready", "analyzed"]).not("mood", "is", null),
-      supabase.from("assets").select("ratio_class").in("ingestion_status", ["ready", "analyzed"]).not("ratio_class", "is", null),
-      supabase.from("assets").select("era").in("ingestion_status", ["ready", "analyzed"]).not("era", "is", null),
-      supabase.from("assets").select("subject").in("ingestion_status", ["ready", "analyzed"]).not("subject", "is", null),
-      supabase.from("assets").select("ai_tags").in("ingestion_status", ["ready", "analyzed"]).not("ai_tags", "is", null),
-    ]);
+    // Check cache (30 min TTL)
+    let cached = getCached("filter_values", 30 * 60 * 1000);
+    if (!cached) {
+      // Fetch ALL rows with the fields we need for aggregation
+      const data = await fetchAllRows(
+        "assets",
+        "style, mood, ratio_class, era, subject, ai_tags",
+        (q) => q.in("ingestion_status", ["ready", "analyzed"])
+      );
 
-    const unique = (data, key) => {
-      const counts = {};
-      (data || []).forEach((r) => {
-        counts[r[key]] = (counts[r[key]] || 0) + 1;
+      const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
+
+      const styleCounts = {};
+      const moodCounts = {};
+      const orientCounts = {};
+      const eraCounts = {};
+      const subjectCounts = {};
+      const countryCounts = {};
+      const continentCounts = {};
+
+      data.forEach((r) => {
+        if (r.style) styleCounts[r.style] = (styleCounts[r.style] || 0) + 1;
+        if (r.mood) moodCounts[r.mood] = (moodCounts[r.mood] || 0) + 1;
+        if (r.ratio_class) orientCounts[r.ratio_class] = (orientCounts[r.ratio_class] || 0) + 1;
+        if (r.era) eraCounts[r.era] = (eraCounts[r.era] || 0) + 1;
+        if (r.subject) subjectCounts[r.subject] = (subjectCounts[r.subject] || 0) + 1;
+
+        const tags = Array.isArray(r.ai_tags) ? r.ai_tags : [];
+        tags.forEach((tag) => {
+          if (KNOWN_CONTINENTS.includes(tag)) {
+            continentCounts[tag] = (continentCounts[tag] || 0) + 1;
+          } else if (typeof tag === "string" && tag.length > 1 && tag !== "Unknown") {
+            countryCounts[tag] = (countryCounts[tag] || 0) + 1;
+          }
+        });
       });
-      return Object.entries(counts)
-        .map(([val, count]) => ({ value: val, count }))
-        .sort((a, b) => b.count - a.count);
-    };
 
-    // Extract countries and continents from ai_tags
-    const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
-    const countryCounts = {};
-    const continentCounts = {};
-    (tagsRes.data || []).forEach((r) => {
-      const tags = Array.isArray(r.ai_tags) ? r.ai_tags : [];
-      tags.forEach((tag) => {
-        if (KNOWN_CONTINENTS.includes(tag)) {
-          continentCounts[tag] = (continentCounts[tag] || 0) + 1;
-        } else if (typeof tag === "string" && tag.length > 1 && tag !== "Unknown") {
-          countryCounts[tag] = (countryCounts[tag] || 0) + 1;
-        }
-      });
-    });
+      const toSortedArr = (counts) =>
+        Object.entries(counts)
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => b.count - a.count);
 
-    const countries = Object.entries(countryCounts)
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count);
+      cached = {
+        styles: toSortedArr(styleCounts),
+        moods: toSortedArr(moodCounts),
+        orientations: toSortedArr(orientCounts),
+        eras: toSortedArr(eraCounts),
+        subjects: toSortedArr(subjectCounts),
+        countries: toSortedArr(countryCounts),
+        continents: toSortedArr(continentCounts),
+      };
 
-    const continents = Object.entries(continentCounts)
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count);
+      setCache("filter_values", cached);
+    }
 
     res.set("Cache-Control", "public, max-age=3600");
     res.json({
-      styles: unique(stylesRes.data, "style"),
-      moods: unique(moodsRes.data, "mood"),
-      orientations: unique(orientRes.data, "ratio_class"),
-      eras: unique(erasRes.data, "era"),
-      subjects: unique(subjectsRes.data, "subject"),
-      countries,
-      continents,
+      ...cached,
       priceTiers: [
         { tier: "small", label: "Small (≤24×17cm)", price: "$29.99", framedPrice: "$39.99" },
         { tier: "medium", label: "Medium (≤42×30cm)", price: "$49.99", framedPrice: "$64.99" },

@@ -92,13 +92,19 @@ function buildPrompt(assets) {
     `${i}: "${a.title}" by ${a.artist || "Unknown"}${a.description ? ` — ${a.description.slice(0, 100)}` : ""}`
   ).join("\n");
 
-  return `Classify each artwork for an art print e-commerce store. For each numbered item, return a JSON object with:
-- "style": one of [${STYLES.slice(0, 20).map(s => `"${s}"`).join(", ")}, ...]
+  return `You are classifying well-known public domain artworks for an art print store. Most of these are famous works by historical artists — use your art-historical knowledge of the artist and artwork to classify accurately. Do NOT guess from the title alone — if you recognize the artist, use what you know about their style, nationality, era, and body of work.
+
+For each numbered item, return a JSON object with:
+- "style": one of [${STYLES.slice(0, 20).map(s => `"${s}"`).join(", ")}, ...] — use the artist's KNOWN art movement, not a guess
 - "mood": one of [${MOODS.slice(0, 10).map(s => `"${s}"`).join(", ")}, ...]  
-- "subject": one of [${SUBJECTS.slice(0, 20).map(s => `"${s}"`).join(", ")}, ...]
-- "era": one of [${ERAS.map(s => `"${s}"`).join(", ")}]
+- "subject": one of [${SUBJECTS.slice(0, 20).map(s => `"${s}"`).join(", ")}, ...] — be precise: a sea/ocean scene is "Seascape" not "Landscape", a person is "Portrait" not "Figure Study"
+- "era": one of [${ERAS.map(s => `"${s}"`).join(", ")}] — use the artwork's ACTUAL date if known, not a guess
 - "palette": one of [${PALETTES.slice(0, 8).map(s => `"${s}"`).join(", ")}, ...]
-- "tags": array of 8-15 specific SEO keywords (room types like "living room wall art", descriptive terms like "moody landscape painting", gift ideas like "gift for art lover", specific descriptors). Be specific and varied — NOT generic.
+- "country": the artist's nationality/country of origin (e.g. "France", "Netherlands", "Japan", "United States", "Italy", "Spain", "United Kingdom", "Germany", "Russia", "China"). Use the artist's KNOWN nationality.
+- "continent": the continent: "Europe", "Asia", "North America", "South America", "Africa", "Oceania"
+- "tags": array of 8-15 specific SEO keywords including: the country name, room suggestions (e.g. "living room wall art"), descriptive terms, gift suggestions, and style-specific terms. Always include the artist's nationality as a tag.
+
+IMPORTANT: These are real, publicly known artworks. Classify them using established art history — not imagination. A Monet is Impressionism. A Hokusai is Ukiyo-e. A Rembrandt is Baroque. A Dalí is Surrealism. Get it RIGHT.
 
 Return a JSON array of objects, one per artwork, same order.
 
@@ -115,7 +121,7 @@ async function processBatch(assets, retries = 3) {
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "You are an art historian and SEO expert. Classify artworks accurately. Return valid JSON only." },
+          { role: "system", content: "You are an expert art historian specializing in cataloguing public domain artworks. You have deep knowledge of art movements, artist nationalities, and correct classifications. These artworks are real, publicly known pieces — classify them using established art-historical facts, not guesses. Return valid JSON only." },
           { role: "user", content: buildPrompt(assets) },
         ],
         temperature: 0.3,
@@ -274,16 +280,20 @@ async function main() {
     for (let u = 0; u < updateQueue.length; u += DB_BATCH) {
       const slice = updateQueue.slice(u, u + DB_BATCH);
       const results = await Promise.allSettled(
-        slice.map(({ asset, result: r }) =>
-          supabase.from("assets").update({
+        slice.map(({ asset, result: r }) => {
+          // Merge country + continent into ai_tags for filtering
+          const tags = r.tags || [];
+          if (r.country && !tags.includes(r.country)) tags.push(r.country);
+          if (r.continent && !tags.includes(r.continent)) tags.push(r.continent);
+          return supabase.from("assets").update({
             style: r.style || null,
             mood: r.mood || null,
             subject: r.subject || null,
             era: r.era || null,
             palette: r.palette || null,
-            ai_tags: r.tags || [],
-          }).eq("id", asset.id)
-        )
+            ai_tags: tags,
+          }).eq("id", asset.id);
+        })
       );
       for (const res of results) {
         if (res.status === "fulfilled" && !res.value.error) {
