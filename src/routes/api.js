@@ -200,6 +200,38 @@ router.get("/storefront/catalog", async (req, res) => {
     const search = req.query.q || req.query.search;
     const tag = req.query.tag;
 
+    // ── POPULAR SORT: fetch trending asset IDs from analytics ──
+    let popularAssetIds = null;
+    if (sort === "popular") {
+      try {
+        // Try trending_products materialized view first
+        const { data: trending } = await supabase
+          .from("trending_products")
+          .select("product_id, trending_score")
+          .order("trending_score", { ascending: false })
+          .limit(500);
+
+        if (trending && trending.length > 0) {
+          // Map shopify product IDs to asset IDs
+          const productIds = trending.map(t => t.product_id);
+          const { data: assets } = await supabase
+            .from("assets")
+            .select("id, shopify_product_id")
+            .in("shopify_product_id", productIds);
+          if (assets && assets.length > 0) {
+            const pidToScore = {};
+            trending.forEach(t => pidToScore[t.product_id] = t.trending_score);
+            popularAssetIds = assets
+              .map(a => ({ id: a.id, score: pidToScore[a.shopify_product_id] || 0 }))
+              .sort((a, b) => b.score - a.score)
+              .map(a => a.id);
+          }
+        }
+      } catch (e) {
+        // trending_products view may not exist yet — fall through to quality-based popular
+      }
+    }
+
     let query = supabase
       .from("assets")
       .select(
@@ -221,12 +253,28 @@ router.get("/storefront/catalog", async (req, res) => {
     if (continent) query = query.filter("ai_tags", "cs", JSON.stringify([continent]));
     if (tag) query = query.filter("ai_tags", "cs", JSON.stringify([tag]));
     if (search) {
-      query = query.or(
-        `title.ilike.%${search}%,style.ilike.%${search}%,mood.ilike.%${search}%,artist.ilike.%${search}%,era.ilike.%${search}%,subject.ilike.%${search}%`
-      );
+      // Enhanced search: split into words and match each word against any field
+      const words = search.trim().split(/\s+/).filter(w => w.length > 1);
+      if (words.length > 1) {
+        // Multi-word: each word must match at least one field (AND logic)
+        for (const word of words) {
+          query = query.or(
+            `title.ilike.%${word}%,style.ilike.%${word}%,mood.ilike.%${word}%,artist.ilike.%${word}%,era.ilike.%${word}%,subject.ilike.%${word}%`
+          );
+        }
+      } else {
+        query = query.or(
+          `title.ilike.%${search}%,style.ilike.%${search}%,mood.ilike.%${search}%,artist.ilike.%${search}%,era.ilike.%${search}%,subject.ilike.%${search}%`
+        );
+      }
     }
 
     // Sort
+    if (sort === "popular" && popularAssetIds && popularAssetIds.length > 0) {
+      // For popular sort with analytics data, fetch by those IDs
+      query = query.in("id", popularAssetIds);
+    }
+
     switch (sort) {
       case "oldest":
         query = query.order("created_at", { ascending: true });
@@ -240,6 +288,11 @@ router.get("/storefront/catalog", async (req, res) => {
       case "random":
         // Supabase doesn't support random, so fetch extra and shuffle client-side
         query = query.order("created_at", { ascending: false });
+        break;
+      case "popular":
+        // If we have trending data, we'll re-sort after fetch
+        // Otherwise fall back to quality_tier (best quality first) + newest
+        query = query.order("quality_tier", { ascending: true }).order("created_at", { ascending: false });
         break;
       case "newest":
       default:
@@ -257,7 +310,7 @@ router.get("/storefront/catalog", async (req, res) => {
 
     // Compute price tier for each asset
     const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
-    const items = (data || []).map((a) => {
+    let items = (data || []).map((a) => {
       const tier = computePriceTier(a.max_print_width_cm, a.max_print_height_cm);
       const tags = Array.isArray(a.ai_tags) ? a.ai_tags : [];
       const itemContinent = tags.find(t => KNOWN_CONTINENTS.includes(t)) || null;
@@ -288,12 +341,29 @@ router.get("/storefront/catalog", async (req, res) => {
       };
     });
 
+    // Re-sort by trending score if popular sort with analytics data
+    if (sort === "popular" && popularAssetIds && popularAssetIds.length > 0) {
+      const idOrder = {};
+      popularAssetIds.forEach((id, i) => idOrder[id] = i);
+      items.sort((a, b) => (idOrder[a.id] ?? 9999) - (idOrder[b.id] ?? 9999));
+    }
+
     // Shuffle if random sort
     if (sort === "random") {
       for (let i = items.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [items[i], items[j]] = [items[j], items[i]];
       }
+    }
+
+    // Artist diversity: limit same artist appearing more than 3 times per page
+    if (sort !== "title_asc" && sort !== "title_desc") {
+      const artistCounts = {};
+      items = items.filter(item => {
+        const key = item.artist || "Unknown";
+        artistCounts[key] = (artistCounts[key] || 0) + 1;
+        return artistCounts[key] <= 3;
+      });
     }
 
     res.set("Cache-Control", "public, max-age=60");
@@ -1045,14 +1115,28 @@ router.get("/storefront/search", async (req, res) => {
       }
     }
 
-    // Fallback: ILIKE text search — no longer requires shopify_product_id
-    const { data: results } = await supabase
+    // Fallback: ILIKE text search — enhanced multi-word support
+    let searchQuery = supabase
       .from("assets")
-      .select("id, title, drive_file_id, artist, style, mood, max_print_width_cm, max_print_height_cm")
+      .select("id, title, drive_file_id, artist, style, mood, era, subject, max_print_width_cm, max_print_height_cm")
       .in("ingestion_status", ["ready", "analyzed"])
-      .not("drive_file_id", "is", null)
-      .or(`title.ilike.%${query}%,style.ilike.%${query}%,mood.ilike.%${query}%,artist.ilike.%${query}%`)
-      .limit(limit);
+      .not("drive_file_id", "is", null);
+
+    const words = query.trim().split(/\s+/).filter(w => w.length > 1);
+    if (words.length > 1) {
+      // Multi-word: each word must match at least one field
+      for (const word of words) {
+        searchQuery = searchQuery.or(
+          `title.ilike.%${word}%,style.ilike.%${word}%,mood.ilike.%${word}%,artist.ilike.%${word}%,era.ilike.%${word}%,subject.ilike.%${word}%`
+        );
+      }
+    } else {
+      searchQuery = searchQuery.or(
+        `title.ilike.%${query}%,style.ilike.%${query}%,mood.ilike.%${query}%,artist.ilike.%${query}%,era.ilike.%${query}%,subject.ilike.%${query}%`
+      );
+    }
+
+    const { data: results } = await searchQuery.limit(limit);
 
     res.set("Cache-Control", "public, max-age=300");
     res.json({
