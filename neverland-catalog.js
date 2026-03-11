@@ -1092,44 +1092,103 @@
     renderRoomView(asset);
   }
 
-  // ─── ROOM VIEW — See It On Your Wall ─────────────────
+  // ─── ROOM VIEW — Printful Mockup + Fallback ──────────
 
   function renderRoomView(asset) {
     const container = document.getElementById('art-room-view');
     if (!container) return;
 
-    container.innerHTML = `
-      <div class="room-preview">
-        <div class="room-preview__heading">See It On Your Wall</div>
-        <div class="room-preview__scene">
-          <div class="room-preview__wall">
-            <div class="room-preview__art-frame" id="room-art-frame" data-frame="none">
-              <img src="${asset.images.s800 || asset.images.s1200}" alt="${escHtml(asset.title)}" draggable="false">
-            </div>
-            <div class="room-preview__dims" id="room-dims"></div>
-          </div>
-          <div class="room-preview__person" title="170 cm reference">
-            <svg viewBox="0 0 40 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="20" cy="8" r="7" fill="#9b8e7e"/>
-              <path d="M20 16 C12 16 8 24 8 36 L12 36 14 56 10 90 16 90 20 64 24 90 30 90 26 56 28 36 32 36 C32 24 28 16 20 16Z" fill="#9b8e7e"/>
-            </svg>
-            <span class="room-preview__person-label">170 cm</span>
-          </div>
-          <div class="room-preview__sofa">
-            <svg viewBox="0 0 260 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="15" y="30" width="230" height="50" rx="6" fill="#8a7d6d"/>
-              <rect x="5" y="20" width="35" height="60" rx="8" fill="#7a6e5e"/>
-              <rect x="220" y="20" width="35" height="60" rx="8" fill="#7a6e5e"/>
-              <rect x="25" y="10" width="210" height="25" rx="5" fill="#7a6e5e"/>
-              <rect x="35" y="80" width="12" height="10" rx="2" fill="#6b5f50"/>
-              <rect x="213" y="80" width="12" height="10" rx="2" fill="#6b5f50"/>
-            </svg>
-          </div>
-        </div>
-        <span class="room-preview__caption">Scale reference — artwork shown proportionally on a standard wall</span>
-      </div>
-    `;
+    // If mockup_url already stored in Supabase, show it immediately
+    if (asset.mockup_url) {
+      showMockupImage(container, asset.mockup_url, asset.title);
+      return;
+    }
 
+    // Show a button — user clicks to generate mockup on demand
+    container.innerHTML = '<div class="room-preview">' +
+      '<div class="room-preview__heading">See It On Your Wall</div>' +
+      '<div id="mockup-trigger" style="text-align:center;padding:30px 20px;">' +
+        '<button id="mockup-btn" type="button" style="' +
+          'display:inline-flex;align-items:center;gap:8px;padding:12px 24px;' +
+          'border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;' +
+          'font-size:0.9rem;color:#333;transition:all .2s;">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>' +
+          'Preview on wall' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+
+    var btn = document.getElementById('mockup-btn');
+    if (btn) {
+      btn.onmouseover = function(){ btn.style.borderColor='#8b7355'; btn.style.color='#8b7355'; };
+      btn.onmouseout = function(){ btn.style.borderColor='#ccc'; btn.style.color='#333'; };
+      btn.addEventListener('click', function() {
+        var trigger = document.getElementById('mockup-trigger');
+        trigger.innerHTML =
+          '<div style="text-align:center;padding:40px 20px;">' +
+            '<div class="catalog-loading__spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto 12px;"></div>' +
+            '<span style="font-size:0.82rem;color:var(--text-muted);">Generating realistic preview…</span>' +
+          '</div>';
+
+        var base = getApiBase();
+        fetch(base + '/api/storefront/mockup/' + encodeURIComponent(asset.id))
+          .then(function(r) { return r.ok ? r.json() : Promise.reject(r); })
+          .then(function(data) {
+            if (data.mockup_url) {
+              showMockupImage(container, data.mockup_url, asset.title);
+              asset.mockup_url = data.mockup_url;
+            } else {
+              showRoomFallback(container, asset);
+            }
+          })
+          .catch(function() {
+            showRoomFallback(container, asset);
+          });
+      });
+    }
+  }
+
+  function showMockupImage(container, mockupUrl, title) {
+    container.innerHTML = '<div class="room-preview">' +
+      '<div class="room-preview__heading">See It On Your Wall</div>' +
+      '<div class="room-preview__mockup" style="text-align:center;">' +
+        '<img src="' + escHtml(mockupUrl) + '" alt="' + escHtml(title || 'Room Preview') + '" ' +
+          'style="max-width:100%;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.1);" loading="lazy">' +
+      '</div>' +
+      '<span class="room-preview__caption">Realistic mockup — actual product may vary slightly</span>' +
+    '</div>';
+  }
+
+  function showRoomFallback(container, asset) {
+    container.innerHTML = '<div class="room-preview">' +
+      '<div class="room-preview__heading">See It On Your Wall</div>' +
+      '<div class="room-preview__scene">' +
+        '<div class="room-preview__wall">' +
+          '<div class="room-preview__art-frame" id="room-art-frame" data-frame="none">' +
+            '<img src="' + (asset.images.s800 || asset.images.s1200) + '" alt="' + escHtml(asset.title) + '" draggable="false">' +
+          '</div>' +
+          '<div class="room-preview__dims" id="room-dims"></div>' +
+        '</div>' +
+        '<div class="room-preview__person" title="170 cm reference">' +
+          '<svg viewBox="0 0 40 120" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+            '<circle cx="20" cy="8" r="7" fill="#9b8e7e"/>' +
+            '<path d="M20 16 C12 16 8 24 8 36 L12 36 14 56 10 90 16 90 20 64 24 90 30 90 26 56 28 36 32 36 C32 24 28 16 20 16Z" fill="#9b8e7e"/>' +
+          '</svg>' +
+          '<span class="room-preview__person-label">170 cm</span>' +
+        '</div>' +
+        '<div class="room-preview__sofa">' +
+          '<svg viewBox="0 0 260 90" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+            '<rect x="15" y="30" width="230" height="50" rx="6" fill="#8a7d6d"/>' +
+            '<rect x="5" y="20" width="35" height="60" rx="8" fill="#7a6e5e"/>' +
+            '<rect x="220" y="20" width="35" height="60" rx="8" fill="#7a6e5e"/>' +
+            '<rect x="25" y="10" width="210" height="25" rx="5" fill="#7a6e5e"/>' +
+            '<rect x="35" y="80" width="12" height="10" rx="2" fill="#6b5f50"/>' +
+            '<rect x="213" y="80" width="12" height="10" rx="2" fill="#6b5f50"/>' +
+          '</svg>' +
+        '</div>' +
+      '</div>' +
+      '<span class="room-preview__caption">Scale reference — artwork shown proportionally on a standard wall</span>' +
+    '</div>';
     updateRoomView();
   }
 

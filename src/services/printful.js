@@ -337,8 +337,19 @@ class PrintfulService {
     const dims = PRINTFILE_DIMS[variantIds[0]];
     const file = { placement, image_url: imageUrl };
     if (dims) {
-      const areaW = dims.w;
-      const areaH = dims.h;
+      let areaW = dims.w;
+      let areaH = dims.h;
+
+      // Handle Orientation: Printful's print areas are typically landscape by default.
+      // If the image is portrait (AR < 1), and the area is landscape,
+      // swap area width and height to use the portrait orientation.
+      if (imageAspectRatio && imageAspectRatio < 1 && areaW > areaH) {
+        [areaW, areaH] = [areaH, areaW];
+      }
+      // Conversely, if image is landscape (AR > 1) and area is portrait (rare here but possible), flip it.
+      else if (imageAspectRatio && imageAspectRatio > 1 && areaH > areaW) {
+        [areaW, areaH] = [areaH, areaW];
+      }
 
       let imgW = areaW;
       let imgH = areaH;
@@ -348,15 +359,15 @@ class PrintfulService {
       // If we know the image aspect ratio, fit it within the printfile area
       // without stretching (maintain aspect ratio, center the image)
       if (imageAspectRatio && imageAspectRatio > 0) {
-        const pfAspect = areaW / areaH; // printfile is always landscape
-        if (imageAspectRatio >= pfAspect) {
-          // Image is wider (or same) — fit by width, center vertically
+        const areaAspect = areaW / areaH;
+        if (imageAspectRatio >= areaAspect) {
+          // Image is wider than (or same as) the area — fit by width, center vertically
           imgW = areaW;
           imgH = Math.round(areaW / imageAspectRatio);
           top = Math.round((areaH - imgH) / 2);
           left = 0;
         } else {
-          // Image is taller — fit by height, center horizontally
+          // Image is taller than the area — fit by height, center horizontally
           imgH = areaH;
           imgW = Math.round(areaH * imageAspectRatio);
           top = 0;
