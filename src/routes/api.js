@@ -19,6 +19,8 @@ const { analyzeArtwork, PRINT_SIZE_CATALOG } = require("../services/resolution-e
 const { generatePrintSpec, DEFAULT_PROFILES } = require("../services/print-spec");
 const ImageProxy = require("../services/image-proxy");
 const EmbeddingService = require("../services/embedding");
+const PrintfulService = require("../services/printful");
+const printful = new PrintfulService();
 
 const router = express.Router();
 
@@ -1042,21 +1044,33 @@ function downloadImage(url) {
 
 /**
  * Helper: generate mockup via Printful, upload to Supabase Storage, save permanent URL.
+ * @param {Object} asset - { id, drive_file_id, title, width_px, height_px }
+ * @param {Object} [variant] - { productId, variantId } from PrintfulService.resolveVariant()
  */
-async function generateAndStoreMockup(asset) {
+async function generateAndStoreMockup(asset, variant) {
+  const productId = variant?.productId || 268;
+  const variantId = variant?.variantId || 8948;
+
+  // Compute image aspect ratio from stored dimensions
+  const imageAspectRatio = (asset.width_px && asset.height_px)
+    ? asset.width_px / asset.height_px
+    : null;
+
   const imageUrl = `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s2000`;
   const result = await printful.generateMockup(imageUrl, {
-    productId: 268,
-    variantIds: [8948],
+    productId,
+    variantIds: [variantId],
+    imageAspectRatio,
   });
 
-  console.log(`[Mockup] Generated for ${asset.id}, downloading from Printful...`);
+  console.log(`[Mockup] Generated for ${asset.id} (product ${productId}, variant ${variantId}), downloading from Printful...`);
 
   // Download the Printful image and upload to Supabase Storage for permanence
   const buffer = await downloadImage(result.mockup_url);
   console.log(`[Mockup] Downloaded ${buffer.length} bytes, uploading to storage...`);
 
-  const storagePath = `${asset.id}.jpg`;
+  // Use composite key: assetId_variantId.jpg (supports multiple mockups per asset)
+  const storagePath = `${asset.id}_${variantId}.jpg`;
   const { error: uploadErr } = await supabase.storage
     .from("mockups")
     .upload(storagePath, buffer, {
@@ -1072,37 +1086,48 @@ async function generateAndStoreMockup(asset) {
   const permanentUrl = urlData.publicUrl;
   console.log(`[Mockup] Stored permanently: ${permanentUrl}`);
 
-  // Save permanent URL in DB
-  await supabase
-    .from("assets")
-    .update({ mockup_url: permanentUrl })
-    .eq("id", asset.id);
-
   return permanentUrl;
 }
 
 /**
  * GET /api/storefront/mockup/:assetId
- * On-demand mockup generation. Returns stored URL if available,
- * otherwise generates via Printful and stores permanently in Supabase Storage.
+ * On-demand mockup generation with size + frame support.
+ * Query params: tier (small|medium|large|extra_large), frame (none|black|white|natural|walnut)
+ * Returns stored URL if cached in Supabase Storage, otherwise generates via Printful.
  */
 router.get("/storefront/mockup/:assetId", async (req, res) => {
   try {
     const { assetId } = req.params;
+    const tier = req.query.tier || "medium";
+    const frame = req.query.frame || "none";
 
+    const variant = PrintfulService.resolveVariant(tier, frame);
+
+    // Check Supabase Storage cache first
+    const storagePath = `${assetId}_${variant.variantId}.jpg`;
+    const { data: urlData } = supabase.storage.from("mockups").getPublicUrl(storagePath);
+    const cachedUrl = urlData.publicUrl;
+
+    // Verify the file actually exists in storage
+    const { data: listData } = await supabase.storage.from("mockups").list("", {
+      search: storagePath,
+    });
+    const fileExists = listData && listData.some(f => f.name === storagePath);
+
+    if (fileExists) {
+      return res.json({ mockup_url: cachedUrl, cached: true });
+    }
+
+    // Not cached — fetch asset and generate
     const { data: asset, error } = await supabase
       .from("assets")
-      .select("id, drive_file_id, title, mockup_url")
+      .select("id, drive_file_id, title, width_px, height_px")
       .eq("id", assetId)
       .single();
 
     if (error || !asset) return res.status(404).json({ error: "Asset not found" });
 
-    if (asset.mockup_url) {
-      return res.json({ mockup_url: asset.mockup_url, cached: true });
-    }
-
-    const mockupUrl = await generateAndStoreMockup(asset);
+    const mockupUrl = await generateAndStoreMockup(asset, variant);
     res.json({ mockup_url: mockupUrl, cached: false });
   } catch (e) {
     console.error(`[Mockup] On-demand error:`, e.message);
@@ -1113,24 +1138,37 @@ router.get("/storefront/mockup/:assetId", async (req, res) => {
 /**
  * GET /api/storefront/mockup-by-drive/:driveFileId
  * Same as above but looks up asset by Google Drive file ID.
+ * Query params: tier, frame (same as above)
  */
 router.get("/storefront/mockup-by-drive/:driveFileId", async (req, res) => {
   try {
     const { driveFileId } = req.params;
+    const tier = req.query.tier || "medium";
+    const frame = req.query.frame || "none";
+
+    const variant = PrintfulService.resolveVariant(tier, frame);
 
     const { data: asset, error } = await supabase
       .from("assets")
-      .select("id, drive_file_id, title, mockup_url")
+      .select("id, drive_file_id, title, width_px, height_px")
       .eq("drive_file_id", driveFileId)
       .single();
 
     if (error || !asset) return res.status(404).json({ error: "Asset not found" });
 
-    if (asset.mockup_url) {
-      return res.json({ mockup_url: asset.mockup_url, cached: true });
+    // Check Supabase Storage cache
+    const storagePath = `${asset.id}_${variant.variantId}.jpg`;
+    const { data: listData } = await supabase.storage.from("mockups").list("", {
+      search: storagePath,
+    });
+    const fileExists = listData && listData.some(f => f.name === storagePath);
+
+    if (fileExists) {
+      const { data: urlData } = supabase.storage.from("mockups").getPublicUrl(storagePath);
+      return res.json({ mockup_url: urlData.publicUrl, cached: true });
     }
 
-    const mockupUrl = await generateAndStoreMockup(asset);
+    const mockupUrl = await generateAndStoreMockup(asset, variant);
     res.json({ mockup_url: mockupUrl, cached: false });
   } catch (e) {
     console.error(`[Mockup] On-demand (drive) error:`, e.message);
@@ -1655,7 +1693,7 @@ router.get("/size-catalog", (req, res) => {
  * Health check endpoint.
  */
 router.get("/health", async (req, res) => {
-  const checks = { server: "ok", version: "2026-03-11b", supabase: "unknown", drive: "unknown" };
+  const checks = { server: "ok", version: "2026-03-11c-dynamic-mockups", supabase: "unknown", drive: "unknown" };
 
   try {
     const { count } = await supabase.from("assets").select("*", { count: "exact", head: true });
@@ -1745,8 +1783,6 @@ router.post("/drive/stop-watcher", (req, res) => {
 // ═══════════════════════════════════════════════════════════
 // PRINTFUL — print provider status & orders
 // ═══════════════════════════════════════════════════════════
-const PrintfulService = require("../services/printful");
-const printful = new PrintfulService();
 
 // GET /api/printful/status — check Printful connection
 router.get("/printful/status", async (req, res) => {

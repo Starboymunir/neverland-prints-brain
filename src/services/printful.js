@@ -237,6 +237,53 @@ class PrintfulService {
   //  MOCKUP GENERATOR
   // ══════════════════════════════════════════════════════════
 
+  // ── Variant lookup for mockups ───────────────────────────
+  // Maps { tier, frameColor } → { productId, variantId }
+  // Product 268 = Enhanced Matte Paper Poster (unframed)
+  // Product 304 = Enhanced Matte Paper Framed Poster
+  static MOCKUP_VARIANTS = {
+    // Unframed (product 268)
+    "small_none":        { productId: 268, variantId: 8947  }, // 21×30cm
+    "medium_none":       { productId: 268, variantId: 8948  }, // 30×40cm
+    "large_none":        { productId: 268, variantId: 8952  }, // 50×70cm
+    "extra_large_none":  { productId: 268, variantId: 8953  }, // 61×91cm
+
+    // Framed — Black (product 304)
+    "small_black":       { productId: 304, variantId: 9356  }, // 21×30cm
+    "medium_black":      { productId: 304, variantId: 9357  }, // 30×40cm
+    "large_black":       { productId: 304, variantId: 9358  }, // 50×70cm
+    "extra_large_black": { productId: 304, variantId: 9359  }, // 61×91cm
+
+    // Framed — White (product 304)
+    "small_white":       { productId: 304, variantId: 10296 }, // 21×30cm
+    "medium_white":      { productId: 304, variantId: 10297 }, // 30×40cm
+    "large_white":       { productId: 304, variantId: 10298 }, // 50×70cm
+    "extra_large_white": { productId: 304, variantId: 10299 }, // 61×91cm
+
+    // Framed — Oak/Natural/Walnut (product 304, oak variants)
+    "small_natural":       { productId: 304, variantId: 11790 }, // 21×30cm
+    "medium_natural":      { productId: 304, variantId: 11791 }, // 30×40cm
+    "large_natural":       { productId: 304, variantId: 11792 }, // 50×70cm
+    "extra_large_natural": { productId: 304, variantId: 11793 }, // 61×91cm
+    "small_walnut":        { productId: 304, variantId: 11790 }, // oak fallback
+    "medium_walnut":       { productId: 304, variantId: 11791 },
+    "large_walnut":        { productId: 304, variantId: 11792 },
+    "extra_large_walnut":  { productId: 304, variantId: 11793 },
+  };
+
+  /**
+   * Resolve a tier + frame selection to a Printful product/variant.
+   * @param {string} tier - small|medium|large|extra_large
+   * @param {string} frameColor - none|black|white|natural|walnut
+   * @returns {{ productId: number, variantId: number }}
+   */
+  static resolveVariant(tier = "medium", frameColor = "none") {
+    const key = `${tier}_${frameColor}`;
+    return PrintfulService.MOCKUP_VARIANTS[key]
+      || PrintfulService.MOCKUP_VARIANTS[`${tier}_none`]
+      || { productId: 268, variantId: 8948 }; // default: medium unframed
+  }
+
   /**
    * Create a mockup generation task.
    * Uses Printful's Mockup Generator API (v2):
@@ -247,6 +294,7 @@ class PrintfulService {
    * @param {number} [opts.productId=268] - Printful catalog product ID
    * @param {number[]} [opts.variantIds=[8948]] - Which variants to mock up
    * @param {string} [opts.placement='default'] - File placement
+   * @param {number} [opts.imageAspectRatio] - Source image width/height ratio
    * @returns {{ task_key: string }} Task key for polling
    */
   async createMockupTask(opts) {
@@ -255,10 +303,12 @@ class PrintfulService {
       productId = 268,
       variantIds = [8948],
       placement = "default",
+      imageAspectRatio,
     } = opts;
 
-    // Printfile dimensions per variant (product 268 - Enhanced Matte Paper Poster cm)
+    // Printfile dimensions per variant (products 268 + 304)
     const PRINTFILE_DIMS = {
+      // Product 268 — Enhanced Matte Paper Poster (cm)
       8947:  { w: 3544,  h: 2480  }, // 21×30cm
       8948:  { w: 4724,  h: 3544  }, // 30×40cm
       8952:  { w: 8268,  h: 5906  }, // 50×70cm
@@ -266,19 +316,61 @@ class PrintfulService {
       8954:  { w: 11812, h: 8268  }, // 70×100cm
       19515: { w: 9933,  h: 7016  }, // A1
       19516: { w: 7016,  h: 4961  }, // A2
+      // Product 304 — Framed Poster (Black)
+      9356:  { w: 3544,  h: 2480  }, // 21×30cm
+      9357:  { w: 4800,  h: 3600  }, // 30×40cm
+      9358:  { w: 8268,  h: 5906  }, // 50×70cm
+      9359:  { w: 10800, h: 7200  }, // 61×91cm
+      // Product 304 — Framed Poster (White)
+      10296: { w: 3544,  h: 2480  },
+      10297: { w: 4800,  h: 3600  },
+      10298: { w: 8268,  h: 5906  },
+      10299: { w: 10800, h: 7200  },
+      // Product 304 — Framed Poster (Oak)
+      11790: { w: 3544,  h: 2480  },
+      11791: { w: 4800,  h: 3600  },
+      11792: { w: 8268,  h: 5906  },
+      11793: { w: 10800, h: 7200  },
     };
 
     // Use the first variant's dimensions for position
     const dims = PRINTFILE_DIMS[variantIds[0]];
     const file = { placement, image_url: imageUrl };
     if (dims) {
+      const areaW = dims.w;
+      const areaH = dims.h;
+
+      let imgW = areaW;
+      let imgH = areaH;
+      let top = 0;
+      let left = 0;
+
+      // If we know the image aspect ratio, fit it within the printfile area
+      // without stretching (maintain aspect ratio, center the image)
+      if (imageAspectRatio && imageAspectRatio > 0) {
+        const pfAspect = areaW / areaH; // printfile is always landscape
+        if (imageAspectRatio >= pfAspect) {
+          // Image is wider (or same) — fit by width, center vertically
+          imgW = areaW;
+          imgH = Math.round(areaW / imageAspectRatio);
+          top = Math.round((areaH - imgH) / 2);
+          left = 0;
+        } else {
+          // Image is taller — fit by height, center horizontally
+          imgH = areaH;
+          imgW = Math.round(areaH * imageAspectRatio);
+          top = 0;
+          left = Math.round((areaW - imgW) / 2);
+        }
+      }
+
       file.position = {
-        area_width: dims.w,
-        area_height: dims.h,
-        width: dims.w,
-        height: dims.h,
-        top: 0,
-        left: 0,
+        area_width: areaW,
+        area_height: areaH,
+        width: imgW,
+        height: imgH,
+        top,
+        left,
       };
     }
 
