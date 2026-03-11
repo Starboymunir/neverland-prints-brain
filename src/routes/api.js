@@ -1022,6 +1022,25 @@ router.post("/storefront/events", async (req, res) => {
 });
 
 /**
+ * Helper: download image from URL into a Buffer (works on all Node versions).
+ */
+function downloadImage(url) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith("https") ? require("https") : require("http");
+    mod.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return downloadImage(res.headers.location).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) return reject(new Error(`Download failed: ${res.statusCode}`));
+      const chunks = [];
+      res.on("data", (c) => chunks.push(c));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+/**
  * Helper: generate mockup via Printful, upload to Supabase Storage, save permanent URL.
  */
 async function generateAndStoreMockup(asset) {
@@ -1031,10 +1050,11 @@ async function generateAndStoreMockup(asset) {
     variantIds: [8948],
   });
 
-  // Download the Printful image (temporary S3 URL) and upload to Supabase Storage
-  const resp = await fetch(result.mockup_url);
-  if (!resp.ok) throw new Error("Failed to download mockup image");
-  const buffer = Buffer.from(await resp.arrayBuffer());
+  console.log(`[Mockup] Generated for ${asset.id}, downloading from Printful...`);
+
+  // Download the Printful image and upload to Supabase Storage for permanence
+  const buffer = await downloadImage(result.mockup_url);
+  console.log(`[Mockup] Downloaded ${buffer.length} bytes, uploading to storage...`);
 
   const storagePath = `${asset.id}.jpg`;
   const { error: uploadErr } = await supabase.storage
@@ -1050,6 +1070,7 @@ async function generateAndStoreMockup(asset) {
     .from("mockups")
     .getPublicUrl(storagePath);
   const permanentUrl = urlData.publicUrl;
+  console.log(`[Mockup] Stored permanently: ${permanentUrl}`);
 
   // Save permanent URL in DB
   await supabase
