@@ -340,14 +340,12 @@ class PrintfulService {
       let areaW = dims.w;
       let areaH = dims.h;
 
-      // Handle Orientation: Printful's print areas are typically landscape by default.
-      // If the image is portrait (AR < 1), and the area is landscape,
-      // swap area width and height to use the portrait orientation.
+      // Handle Orientation & Custom Aspect Ratio Fit
+      // 1. Identify "Ideal" Orientation: Print areas are typically landscape by default.
+      // If the actual art piece is portrait (AR < 1), we flip the area to portrait.
       if (imageAspectRatio && imageAspectRatio < 1 && areaW > areaH) {
         [areaW, areaH] = [areaH, areaW];
-      }
-      // Conversely, if image is landscape (AR > 1) and area is portrait (rare here but possible), flip it.
-      else if (imageAspectRatio && imageAspectRatio > 1 && areaH > areaW) {
+      } else if (imageAspectRatio && imageAspectRatio > 1 && areaH > areaW) {
         [areaW, areaH] = [areaH, areaW];
       }
 
@@ -356,18 +354,20 @@ class PrintfulService {
       let top = 0;
       let left = 0;
 
-      // If we know the image aspect ratio, fit it within the printfile area
-      // without stretching (maintain aspect ratio, center the image)
+      // 2. Custom Aspect Ratio Fitting (No "Squeezing"):
+      // Instead of forcing the image to fill the entire square/rectangle, 
+      // we shrink the image layer to match the ART'S EXACT ratio, 
+      // resulting in natural white space/borders in the mockup (just like a real print).
       if (imageAspectRatio && imageAspectRatio > 0) {
         const areaAspect = areaW / areaH;
         if (imageAspectRatio >= areaAspect) {
-          // Image is wider than (or same as) the area — fit by width, center vertically
+          // Artwork is wider than the frame's printable area
           imgW = areaW;
           imgH = Math.round(areaW / imageAspectRatio);
           top = Math.round((areaH - imgH) / 2);
           left = 0;
         } else {
-          // Image is taller than the area — fit by height, center horizontally
+          // Artwork is taller than the frame's printable area
           imgH = areaH;
           imgW = Math.round(areaH * imageAspectRatio);
           top = 0;
