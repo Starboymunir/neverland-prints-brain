@@ -1655,7 +1655,7 @@ router.get("/size-catalog", (req, res) => {
  * Health check endpoint.
  */
 router.get("/health", async (req, res) => {
-  const checks = { server: "ok", supabase: "unknown", drive: "unknown" };
+  const checks = { server: "ok", version: "2026-03-11b", supabase: "unknown", drive: "unknown" };
 
   try {
     const { count } = await supabase.from("assets").select("*", { count: "exact", head: true });
