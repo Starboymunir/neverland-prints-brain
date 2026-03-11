@@ -372,7 +372,7 @@ router.get("/storefront/catalog", async (req, res) => {
         priceTier: tier.tier,
         price: tier.price,
         comparePrice: tier.comparePrice,
-        maxPrint: `${a.max_print_width_cm || 0} × ${a.max_print_height_cm || 0} cm`,
+        maxPrint: `${Math.round(a.max_print_width_cm || 0)} × ${Math.round(a.max_print_height_cm || 0)} cm`,
       };
     });
 
@@ -477,7 +477,7 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
       subject: asset.subject,
       orientation: asset.ratio_class,
       quality: asset.quality_tier,
-      maxPrint: `${asset.max_print_width_cm || 0} × ${asset.max_print_height_cm || 0} cm`,
+      maxPrint: `${Math.round(asset.max_print_width_cm || 0)} × ${Math.round(asset.max_print_height_cm || 0)} cm`,
       widthPx: asset.width_px,
       heightPx: asset.height_px,
       driveFileId: asset.drive_file_id,

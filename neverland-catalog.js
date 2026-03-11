@@ -44,6 +44,21 @@
     return '$' + num.toFixed(2);
   }
 
+  function formatOrientation(orientation) {
+    if (!orientation) return '';
+    // e.g. portrait_4_5 → Portrait 4:5, landscape_3_2 → Landscape 3:2
+    const parts = orientation.split('_');
+    const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    if (parts.length >= 3) return name + ' ' + parts[1] + ':' + parts[2];
+    return name;
+  }
+
+  function formatMaxPrint(maxPrint) {
+    if (!maxPrint) return '';
+    // e.g. "94.47 × 112.6 cm" → "94 × 113 cm"
+    return maxPrint.replace(/(\d+\.\d+)/g, (m) => Math.round(parseFloat(m)).toString());
+  }
+
   function getUrlParam(key) {
     return new URLSearchParams(window.location.search).get(key);
   }
@@ -854,10 +869,11 @@
 
     // Breadcrumb
     const bcTitle = document.getElementById('art-breadcrumb-title');
-    if (bcTitle) bcTitle.textContent = asset.title;
+    if (bcTitle) bcTitle.textContent = asset.title ? asset.title.replace(/\s+\d{4}$/, '') : '';
 
-    // Title & Artist
-    document.getElementById('art-title').textContent = asset.title;
+    // Title & Artist — strip trailing year if present (e.g. "Richard Mentor Johnson 1843" → "Richard Mentor Johnson")
+    const cleanTitle = asset.title ? asset.title.replace(/\s+\d{4}$/, '') : '';
+    document.getElementById('art-title').textContent = cleanTitle;
     document.getElementById('art-artist').textContent = asset.artist || 'Unknown Artist';
 
     // Update page title
@@ -895,6 +911,17 @@
         // Sort by price ascending
         const tierOrder = ['small', 'medium', 'large', 'extra_large'];
         sizeList.sort((a, b) => tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier));
+      }
+
+      // Fallback: if still empty, build from PRICE_TIERS based on asset's tier
+      if (sizeList.length === 0) {
+        const tierOrder = ['small', 'medium', 'large', 'extra_large'];
+        const assetTier = asset.priceTier || 'small';
+        const maxIdx = tierOrder.indexOf(assetTier);
+        for (let i = 0; i <= Math.max(0, maxIdx); i++) {
+          const t = tierOrder[i];
+          sizeList.push({ tier: t, label: PRICE_TIERS[t].label, size: PRICE_TIERS[t].label });
+        }
       }
 
       if (sizeList.length > 0) {
@@ -1019,8 +1046,8 @@
     // Meta info (specs)
     const metaEl = document.getElementById('art-meta');
     metaEl.innerHTML = `
-      ${asset.orientation ? `<div class="pp-specs__row"><span class="pp-specs__label">Orientation</span><span class="pp-specs__value">${asset.orientation.replace('_', ' ')}</span></div>` : ''}
-      ${asset.maxPrint ? `<div class="pp-specs__row"><span class="pp-specs__label">Max Print Size</span><span class="pp-specs__value">${asset.maxPrint}</span></div>` : ''}
+      ${asset.orientation ? `<div class="pp-specs__row"><span class="pp-specs__label">Orientation</span><span class="pp-specs__value">${formatOrientation(asset.orientation)}</span></div>` : ''}
+      ${asset.maxPrint ? `<div class="pp-specs__row"><span class="pp-specs__label">Max Print Size</span><span class="pp-specs__value">${formatMaxPrint(asset.maxPrint)}</span></div>` : ''}
       ${asset.quality ? `<div class="pp-specs__row"><span class="pp-specs__label">Quality</span><span class="pp-specs__value">${asset.quality} Grade</span></div>` : ''}
       ${asset.artist ? `<div class="pp-specs__row"><span class="pp-specs__label">Artist</span><span class="pp-specs__value">${escHtml(asset.artist)}</span></div>` : ''}
       ${asset.style ? `<div class="pp-specs__row"><span class="pp-specs__label">Style</span><span class="pp-specs__value">${escHtml(asset.style)}</span></div>` : ''}
