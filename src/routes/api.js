@@ -263,6 +263,30 @@ router.get("/storefront/catalog", async (req, res) => {
               .map(a => a.id);
           }
         }
+
+        // Fallback: query analytics_events directly by asset_id
+        if (!popularAssetIds || popularAssetIds.length === 0) {
+          const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          const { data: events } = await supabase
+            .from("analytics_events")
+            .select("asset_id, event_type")
+            .not("asset_id", "is", null)
+            .gte("created_at", thirtyDaysAgo)
+            .in("event_type", ["view", "add_to_cart", "purchase"])
+            .limit(5000);
+
+          if (events && events.length > 0) {
+            const scores = {};
+            const weights = { purchase: 10, add_to_cart: 5, view: 1 };
+            events.forEach(e => {
+              if (!scores[e.asset_id]) scores[e.asset_id] = 0;
+              scores[e.asset_id] += weights[e.event_type] || 0;
+            });
+            popularAssetIds = Object.entries(scores)
+              .sort((a, b) => b[1] - a[1])
+              .map(([id]) => id);
+          }
+        }
       } catch (e) {
         // trending_products view may not exist yet — fall through to quality-based popular
       }
@@ -494,6 +518,7 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
       comparePrice: tier.comparePrice,
       variants,
       priceMap,
+      shopifyProductId: asset.shopify_product_id || null,
       tags: asset.tags || [],
     });
   } catch (err) {
@@ -974,6 +999,7 @@ router.post("/storefront/events", async (req, res) => {
       .map((e) => ({
         event_type: e.event_type,
         product_id: e.product_id ? parseInt(e.product_id) : null,
+        asset_id: e.asset_id || null,
         collection_id: e.collection_id ? parseInt(e.collection_id) : null,
         search_query: e.search_query || null,
         session_id: e.session_id || req.ip,

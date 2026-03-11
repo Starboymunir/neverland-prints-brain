@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   NEVERLAND PRINTS — Catalog Engine
+   NEVERLAND PRINTS — Catalog Engine  v3.1
    API-driven catalog browsing, product detail, and cart integration.
    Part of the Skeleton Product Architecture.
    ═══════════════════════════════════════════════════════════════════════ */
@@ -31,12 +31,26 @@
     return el ? el.dataset.apiBase : 'https://neverland-prints-brain.onrender.com';
   }
 
-  async function apiFetch(endpoint) {
+  async function apiFetch(endpoint, retries = 2) {
     const base = getApiBase();
     const url = `${base}${endpoint}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`API ${res.status}: ${url}`);
-    return res.json();
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) return res.json();
+        if (attempt < retries && res.status >= 500) {
+          await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+          continue;
+        }
+        throw new Error(`API ${res.status}: ${url}`);
+      } catch (err) {
+        if (attempt < retries && (err.name === 'TypeError' || err.message.includes('fetch'))) {
+          await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
+          continue;
+        }
+        throw err;
+      }
+    }
   }
 
   function formatPrice(price) {
@@ -597,7 +611,7 @@
       }
     } catch (err) {
       loading.style.display = 'none';
-      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><h2>Error loading catalog</h2><p>${escHtml(err.message)}</p></div>`;
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><h2>Error loading catalog</h2><p>The server may be waking up. Please try again.</p><button class="btn btn--primary" onclick="this.closest('.empty-state').remove();(${fetchCatalog.name})(${page})"><span>Retry</span></button></div>`;
     }
   }
 
@@ -821,24 +835,31 @@
   // ─── ART DETAIL PAGE ─────────────────────────────────
 
   async function initArtDetail() {
+    console.log('[NP-DEBUG] initArtDetail called');
     const page = document.getElementById('art-detail');
-    if (!page) return;
+    if (!page) { console.log('[NP-DEBUG] #art-detail not found, skipping'); return; }
+    console.log('[NP-DEBUG] #art-detail found');
 
     const assetId = getUrlParam('id');
     if (!assetId) {
+      console.log('[NP-DEBUG] No ?id= param, showing not-found');
       showArtNotFound();
       return;
     }
+    console.log('[NP-DEBUG] assetId:', assetId);
 
     await loadPriceMap();
+    console.log('[NP-DEBUG] priceMap loaded:', priceMap ? Object.keys(priceMap).length + ' keys' : 'null');
 
     try {
       const asset = await apiFetch(`/api/storefront/asset/${assetId}`);
+      console.log('[NP-DEBUG] API returned asset:', { title: asset.title, priceTier: asset.priceTier, orientation: asset.orientation, maxPrint: asset.maxPrint, priceMapKeys: Object.keys(asset.priceMap || {}), variants: asset.variants?.length });
       currentAsset = asset;
       renderArtDetail(asset);
       loadSimilarArtworks(assetId);
-      trackEvent('view', { asset_id: assetId, title: asset.title });
+      trackEvent('view', { asset_id: assetId, product_id: asset.shopifyProductId, title: asset.title });
     } catch (err) {
+      console.error('[NP-DEBUG] initArtDetail ERROR:', err);
       showArtNotFound();
     }
   }
@@ -873,6 +894,7 @@
 
     // Title & Artist — strip trailing year if present (e.g. "Richard Mentor Johnson 1843" → "Richard Mentor Johnson")
     const cleanTitle = asset.title ? asset.title.replace(/\s+\d{4}$/, '') : '';
+    console.log('[NP-DEBUG] cleanTitle:', JSON.stringify(cleanTitle), 'from:', JSON.stringify(asset.title));
     document.getElementById('art-title').textContent = cleanTitle;
     document.getElementById('art-artist').textContent = asset.artist || 'Unknown Artist';
 
@@ -924,9 +946,11 @@
         }
       }
 
+      console.log('[NP-DEBUG] sizeList:', sizeList.length, 'items:', sizeList.map(s => s.tier));
       if (sizeList.length > 0) {
         const section = document.getElementById('art-variants-section');
         const options = document.getElementById('art-variant-options');
+        console.log('[NP-DEBUG] Size section element:', !!section, 'Options element:', !!options);
         const sizeDisplay = document.getElementById('art-size-display');
         if (section && options) {
           section.style.display = '';
@@ -966,53 +990,56 @@
 
     // Frame option handlers
     const frameDisplay = document.getElementById('art-frame-display');
-    const framesPreview = document.getElementById('pp-frames');
-    document.querySelectorAll('#art-frame-options .variant-option').forEach(btn => {
+    const frameSelectorPanel = document.getElementById('frame-selector');
+    const framePreview = document.getElementById('frame-preview');
+    const roomFrame = document.getElementById('room-art-frame');
+    const frameBtns = document.querySelectorAll('#art-frame-options .variant-option');
+    console.log('[NP-DEBUG] Frame buttons found:', frameBtns.length);
+    frameBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelector('#art-frame-options .is-selected')?.classList.remove('is-selected');
         btn.classList.add('is-selected');
         currentFrame = btn.dataset.frame;
         if (frameDisplay) frameDisplay.textContent = currentFrame === 'framed' ? 'Framed' : 'Unframed';
-        // Show/hide frame preview swatches
-        if (framesPreview) {
-          framesPreview.style.display = currentFrame === 'framed' ? '' : 'none';
-          // When switching to unframed, reset frame preview
-          if (currentFrame !== 'framed') {
-            const ppFrame = document.getElementById('pp-frame');
-            if (ppFrame) ppFrame.dataset.frame = 'none';
-            document.querySelector('.pp-frames__btn.is-active')?.classList.remove('is-active');
-            const noneBtn = document.querySelector('.pp-frames__btn[data-frame="none"]');
-            if (noneBtn) noneBtn.classList.add('is-active');
-            currentFrameColor = 'none';
-          }
+        // Show/hide frame color picker
+        if (currentFrame === 'unframed') {
+          if (frameSelectorPanel) frameSelectorPanel.style.display = 'none';
+          // Reset frame preview to no frame
+          document.querySelectorAll('.frame-option').forEach(b => b.classList.remove('is-active'));
+          const noneBtn = document.querySelector('.frame-option[data-frame="none"]');
+          if (noneBtn) noneBtn.classList.add('is-active');
+          if (framePreview) framePreview.setAttribute('data-frame', 'none');
+          if (roomFrame) roomFrame.setAttribute('data-frame', 'none');
+          currentFrameColor = 'none';
+        } else {
+          if (frameSelectorPanel) frameSelectorPanel.style.display = '';
         }
         updateArtPrice();
         updateRoomView();
       });
     });
 
-    // Hide frame preview initially (starts unframed)
-    if (framesPreview) framesPreview.style.display = 'none';
-
     // Initial price (after size + frame handlers are set up)
     updateArtPrice();
 
-    // Frame preview swatches — also set frame color for cart
-    document.querySelectorAll('.pp-frames__btn').forEach(btn => {
+    // Frame color swatch handlers
+    document.querySelectorAll('.frame-option').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelector('.pp-frames__btn.is-active')?.classList.remove('is-active');
+        document.querySelectorAll('.frame-option').forEach(b => b.classList.remove('is-active'));
         btn.classList.add('is-active');
-        const ppFrame = document.getElementById('pp-frame');
-        if (ppFrame) ppFrame.dataset.frame = btn.dataset.frame;
-        currentFrameColor = btn.dataset.frame;
+        const frame = btn.dataset.frame;
+        if (framePreview) framePreview.setAttribute('data-frame', frame);
+        if (roomFrame) roomFrame.setAttribute('data-frame', frame);
+        currentFrameColor = frame;
         // If a frame color is selected (not 'none'), ensure framed is selected
-        if (btn.dataset.frame !== 'none' && currentFrame !== 'framed') {
+        if (frame !== 'none' && currentFrame !== 'framed') {
           document.querySelector('#art-frame-options .is-selected')?.classList.remove('is-selected');
           const framedBtn = document.querySelector('#art-frame-options .variant-option[data-frame="framed"]');
           if (framedBtn) {
             framedBtn.classList.add('is-selected');
             currentFrame = 'framed';
             if (frameDisplay) frameDisplay.textContent = 'Framed';
+            if (frameSelectorPanel) frameSelectorPanel.style.display = '';
             updateArtPrice();
           }
         }
@@ -1163,11 +1190,12 @@
   }
 
   function updateArtPrice() {
-    if (!currentAsset) return;
+    if (!currentAsset) { console.log('[NP-DEBUG] updateArtPrice: no currentAsset'); return; }
 
     const tier = currentVariantSize?.priceTier || currentAsset.priceTier;
     const framed = currentFrame === 'framed';
     const price = getPrice(tier, framed);
+    console.log('[NP-DEBUG] updateArtPrice:', { tier, framed, price, variantSize: currentVariantSize?.priceTier, assetTier: currentAsset.priceTier });
     const comparePrice = framed ? null : getPrice(tier, true);
 
     document.getElementById('art-price').textContent = formatPrice(price);
@@ -1294,6 +1322,7 @@
       // Track event
       trackEvent('add_to_cart', {
         asset_id: currentAsset.id,
+        product_id: currentAsset.shopifyProductId,
         title: currentAsset.title,
         price_tier: tier,
         framed,
@@ -1337,14 +1366,17 @@
 
   function trackEvent(eventType, metadata = {}) {
     const base = getApiBase();
+    const payload = {
+      event_type: eventType,
+      session_id: getSessionId(),
+      metadata,
+    };
+    if (metadata.asset_id) payload.asset_id = metadata.asset_id;
+    if (metadata.product_id) payload.product_id = metadata.product_id;
     fetch(`${base}/api/storefront/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event_type: eventType,
-        session_id: getSessionId(),
-        metadata,
-      }),
+      body: JSON.stringify(payload),
     }).catch(() => {});
   }
 
@@ -1694,7 +1726,9 @@
 
   // ─── INIT ─────────────────────────────────────────────
 
+  console.log('[NP-DEBUG] neverland-catalog.js loaded, version: 2026-03-11-debug');
   document.addEventListener('DOMContentLoaded', () => {
+    console.log('[NP-DEBUG] DOMContentLoaded fired');
     initCatalogBrowse();
     initArtDetail();
     initSearchPage();
