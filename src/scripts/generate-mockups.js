@@ -10,8 +10,8 @@
  *
  * Options:
  *   --limit=N         Max assets to process (default: 100)
- *   --product=N       Printful product ID (default: 1 = poster)
- *   --variants=N,...  Comma-separated variant IDs (default: 7)
+ *   --product=N       Printful product ID (default: 268 = Enhanced Matte Paper Poster)
+ *   --variants=N,...  Comma-separated variant IDs (default: 8948 = 30×40cm poster)
  *   --concurrency=N   Parallel tasks (default: 2 — Printful is rate-limited)
  *   --force           Regenerate even if mockup_url exists
  *   --dry-run         Just print what would be done
@@ -57,8 +57,8 @@ function parseArgs() {
 
 const opts = parseArgs();
 const LIMIT = parseInt(opts.limit || "100", 10);
-const PRODUCT_ID = parseInt(opts.product || "1", 10);
-const VARIANT_IDS = (opts.variants || "7").split(",").map(Number);
+const PRODUCT_ID = parseInt(opts.product || "268", 10);
+const VARIANT_IDS = (opts.variants || "8948").split(",").map(Number);
 const CONCURRENCY = parseInt(opts.concurrency || "2", 10);
 const FORCE = !!opts.force;
 const DRY_RUN = !!opts["dry-run"];
@@ -94,14 +94,6 @@ async function createMockupTask(imageUrl) {
       {
         placement: "default",
         image_url: imageUrl,
-        position: {
-          area_width: 1800,
-          area_height: 2400,
-          width: 1800,
-          height: 2400,
-          top: 0,
-          left: 0,
-        },
       },
     ],
   };

@@ -244,16 +244,16 @@ class PrintfulService {
    *
    * @param {Object} opts
    * @param {string} opts.imageUrl  - Publicly-accessible image URL
-   * @param {number} [opts.productId=1] - Printful catalog product ID (1=poster)
-   * @param {number[]} [opts.variantIds=[7]] - Which variants to mock up
+   * @param {number} [opts.productId=268] - Printful catalog product ID
+   * @param {number[]} [opts.variantIds=[8948]] - Which variants to mock up
    * @param {string} [opts.placement='default'] - File placement
    * @returns {{ task_key: string }} Task key for polling
    */
   async createMockupTask(opts) {
     const {
       imageUrl,
-      productId = 1,
-      variantIds = [7],
+      productId = 268,
+      variantIds = [8948],
       placement = "default",
     } = opts;
 
@@ -264,14 +264,6 @@ class PrintfulService {
         {
           placement,
           image_url: imageUrl,
-          position: {
-            area_width: 1800,
-            area_height: 2400,
-            width: 1800,
-            height: 2400,
-            top: 0,
-            left: 0,
-          },
         },
       ],
     };

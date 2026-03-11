@@ -1022,6 +1022,97 @@ router.post("/storefront/events", async (req, res) => {
 });
 
 /**
+ * GET /api/storefront/mockup/:assetId
+ * On-demand mockup generation for storefront.
+ * Returns cached mockup_url if available, otherwise generates via Printful.
+ * Used by product pages to lazy-load realistic mockups.
+ */
+router.get("/storefront/mockup/:assetId", async (req, res) => {
+  try {
+    const { assetId } = req.params;
+
+    // Look up asset
+    const { data: asset, error } = await supabase
+      .from("assets")
+      .select("id, drive_file_id, title, mockup_url")
+      .eq("id", assetId)
+      .single();
+
+    if (error || !asset) return res.status(404).json({ error: "Asset not found" });
+
+    // Return cached if available
+    if (asset.mockup_url) {
+      res.set("Cache-Control", "public, max-age=86400");
+      return res.json({ mockup_url: asset.mockup_url, cached: true });
+    }
+
+    // Generate on-demand via Printful (product 268, 30×40cm poster)
+    const imageUrl = `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s2000`;
+    const result = await printful.generateMockup(imageUrl, {
+      productId: 268,
+      variantIds: [8948],
+    });
+
+    // Cache in DB
+    try {
+      await supabase
+        .from("assets")
+        .update({ mockup_url: result.mockup_url })
+        .eq("id", assetId);
+    } catch (e) { /* column may not exist yet */ }
+
+    res.set("Cache-Control", "public, max-age=86400");
+    res.json({ mockup_url: result.mockup_url, cached: false });
+  } catch (e) {
+    console.error(`[Mockup] On-demand error:`, e.message);
+    res.status(500).json({ error: "Mockup generation failed" });
+  }
+});
+
+/**
+ * GET /api/storefront/mockup-by-drive/:driveFileId
+ * Same as above but looks up asset by Google Drive file ID.
+ * Used by /products/ pages that only know drive_file_id from metafields.
+ */
+router.get("/storefront/mockup-by-drive/:driveFileId", async (req, res) => {
+  try {
+    const { driveFileId } = req.params;
+
+    const { data: asset, error } = await supabase
+      .from("assets")
+      .select("id, drive_file_id, title, mockup_url")
+      .eq("drive_file_id", driveFileId)
+      .single();
+
+    if (error || !asset) return res.status(404).json({ error: "Asset not found" });
+
+    if (asset.mockup_url) {
+      res.set("Cache-Control", "public, max-age=86400");
+      return res.json({ mockup_url: asset.mockup_url, cached: true });
+    }
+
+    const imageUrl = `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s2000`;
+    const result = await printful.generateMockup(imageUrl, {
+      productId: 268,
+      variantIds: [8948],
+    });
+
+    try {
+      await supabase
+        .from("assets")
+        .update({ mockup_url: result.mockup_url })
+        .eq("id", asset.id);
+    } catch (e) { /* column may not exist yet */ }
+
+    res.set("Cache-Control", "public, max-age=86400");
+    res.json({ mockup_url: result.mockup_url, cached: false });
+  } catch (e) {
+    console.error(`[Mockup] On-demand (drive) error:`, e.message);
+    res.status(500).json({ error: "Mockup generation failed" });
+  }
+});
+
+/**
  * GET /api/storefront/trending
  * Returns trending/popular products.
  * Uses analytics_events weighted score if available,
@@ -1687,16 +1778,16 @@ const mockupCache = new Map();
  * Otherwise creates a Printful task, polls, stores result, and returns.
  *
  * Query params:
- *   ?product_id=1    — Printful product (default: 1 = poster)
- *   ?variant_ids=7   — comma-separated variant IDs (default: 7)
+ *   ?product_id=268  — Printful product (default: 268 = poster)
+ *   ?variant_ids=8948 — comma-separated variant IDs (default: 8948 = 30×40cm)
  *   ?force=1         — regenerate even if cached
  */
 router.get("/printful/mockup/:assetId", async (req, res) => {
   try {
     const { assetId } = req.params;
     const force = req.query.force === "1";
-    const productId = parseInt(req.query.product_id || "1", 10);
-    const variantIds = (req.query.variant_ids || "7")
+    const productId = parseInt(req.query.product_id || "268", 10);
+    const variantIds = (req.query.variant_ids || "8948")
       .split(",")
       .map((v) => parseInt(v.trim(), 10));
 
@@ -1770,7 +1861,7 @@ router.get("/printful/mockup/:assetId", async (req, res) => {
  */
 router.post("/printful/mockup/batch", async (req, res) => {
   try {
-    const { assetIds = [], product_id = 1, variant_ids = [7] } = req.body;
+    const { assetIds = [], product_id = 268, variant_ids = [8948] } = req.body;
     if (!assetIds.length) {
       return res.status(400).json({ error: "assetIds required" });
     }
