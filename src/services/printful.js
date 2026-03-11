@@ -257,15 +257,35 @@ class PrintfulService {
       placement = "default",
     } = opts;
 
+    // Printfile dimensions per variant (product 268 - Enhanced Matte Paper Poster cm)
+    const PRINTFILE_DIMS = {
+      8947:  { w: 3544,  h: 2480  }, // 21×30cm
+      8948:  { w: 4724,  h: 3544  }, // 30×40cm
+      8952:  { w: 8268,  h: 5906  }, // 50×70cm
+      8953:  { w: 10748, h: 7200  }, // 61×91cm
+      8954:  { w: 11812, h: 8268  }, // 70×100cm
+      19515: { w: 9933,  h: 7016  }, // A1
+      19516: { w: 7016,  h: 4961  }, // A2
+    };
+
+    // Use the first variant's dimensions for position
+    const dims = PRINTFILE_DIMS[variantIds[0]];
+    const file = { placement, image_url: imageUrl };
+    if (dims) {
+      file.position = {
+        area_width: dims.w,
+        area_height: dims.h,
+        width: dims.w,
+        height: dims.h,
+        top: 0,
+        left: 0,
+      };
+    }
+
     const body = {
       variant_ids: variantIds,
       format: "jpg",
-      files: [
-        {
-          placement,
-          image_url: imageUrl,
-        },
-      ],
+      files: [file],
     };
 
     const data = await this.request(

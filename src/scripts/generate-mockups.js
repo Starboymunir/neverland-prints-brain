@@ -87,15 +87,34 @@ async function printfulRequest(method, endpoint, body = null) {
 }
 
 async function createMockupTask(imageUrl) {
+  // Printfile dimensions per variant (product 268)
+  const PRINTFILE_DIMS = {
+    8947:  { w: 3544,  h: 2480  },
+    8948:  { w: 4724,  h: 3544  },
+    8952:  { w: 8268,  h: 5906  },
+    8953:  { w: 10748, h: 7200  },
+    8954:  { w: 11812, h: 8268  },
+    19515: { w: 9933,  h: 7016  },
+    19516: { w: 7016,  h: 4961  },
+  };
+
+  const dims = PRINTFILE_DIMS[VARIANT_IDS[0]];
+  const file = { placement: "default", image_url: imageUrl };
+  if (dims) {
+    file.position = {
+      area_width: dims.w,
+      area_height: dims.h,
+      width: dims.w,
+      height: dims.h,
+      top: 0,
+      left: 0,
+    };
+  }
+
   const body = {
     variant_ids: VARIANT_IDS,
     format: "jpg",
-    files: [
-      {
-        placement: "default",
-        image_url: imageUrl,
-      },
-    ],
+    files: [file],
   };
 
   const data = await printfulRequest(
