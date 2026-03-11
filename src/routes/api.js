@@ -1022,16 +1022,53 @@ router.post("/storefront/events", async (req, res) => {
 });
 
 /**
+ * Helper: generate mockup via Printful, upload to Supabase Storage, save permanent URL.
+ */
+async function generateAndStoreMockup(asset) {
+  const imageUrl = `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s2000`;
+  const result = await printful.generateMockup(imageUrl, {
+    productId: 268,
+    variantIds: [8948],
+  });
+
+  // Download the Printful image (temporary S3 URL) and upload to Supabase Storage
+  const resp = await fetch(result.mockup_url);
+  if (!resp.ok) throw new Error("Failed to download mockup image");
+  const buffer = Buffer.from(await resp.arrayBuffer());
+
+  const storagePath = `${asset.id}.jpg`;
+  const { error: uploadErr } = await supabase.storage
+    .from("mockups")
+    .upload(storagePath, buffer, {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+  if (uploadErr) throw new Error(`Storage upload failed: ${uploadErr.message}`);
+
+  // Build permanent public URL
+  const { data: urlData } = supabase.storage
+    .from("mockups")
+    .getPublicUrl(storagePath);
+  const permanentUrl = urlData.publicUrl;
+
+  // Save permanent URL in DB
+  await supabase
+    .from("assets")
+    .update({ mockup_url: permanentUrl })
+    .eq("id", asset.id);
+
+  return permanentUrl;
+}
+
+/**
  * GET /api/storefront/mockup/:assetId
- * On-demand mockup generation for storefront.
- * Returns cached mockup_url if available, otherwise generates via Printful.
- * Used by product pages to lazy-load realistic mockups.
+ * On-demand mockup generation. Returns stored URL if available,
+ * otherwise generates via Printful and stores permanently in Supabase Storage.
  */
 router.get("/storefront/mockup/:assetId", async (req, res) => {
   try {
     const { assetId } = req.params;
 
-    // Look up asset
     const { data: asset, error } = await supabase
       .from("assets")
       .select("id, drive_file_id, title, mockup_url")
@@ -1040,29 +1077,12 @@ router.get("/storefront/mockup/:assetId", async (req, res) => {
 
     if (error || !asset) return res.status(404).json({ error: "Asset not found" });
 
-    // Return cached if available
     if (asset.mockup_url) {
-      res.set("Cache-Control", "public, max-age=86400");
       return res.json({ mockup_url: asset.mockup_url, cached: true });
     }
 
-    // Generate on-demand via Printful (product 268, 30×40cm poster)
-    const imageUrl = `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s2000`;
-    const result = await printful.generateMockup(imageUrl, {
-      productId: 268,
-      variantIds: [8948],
-    });
-
-    // Cache in DB
-    try {
-      await supabase
-        .from("assets")
-        .update({ mockup_url: result.mockup_url })
-        .eq("id", assetId);
-    } catch (e) { /* column may not exist yet */ }
-
-    res.set("Cache-Control", "public, max-age=86400");
-    res.json({ mockup_url: result.mockup_url, cached: false });
+    const mockupUrl = await generateAndStoreMockup(asset);
+    res.json({ mockup_url: mockupUrl, cached: false });
   } catch (e) {
     console.error(`[Mockup] On-demand error:`, e.message);
     res.status(500).json({ error: "Mockup generation failed" });
@@ -1072,7 +1092,6 @@ router.get("/storefront/mockup/:assetId", async (req, res) => {
 /**
  * GET /api/storefront/mockup-by-drive/:driveFileId
  * Same as above but looks up asset by Google Drive file ID.
- * Used by /products/ pages that only know drive_file_id from metafields.
  */
 router.get("/storefront/mockup-by-drive/:driveFileId", async (req, res) => {
   try {
@@ -1087,25 +1106,11 @@ router.get("/storefront/mockup-by-drive/:driveFileId", async (req, res) => {
     if (error || !asset) return res.status(404).json({ error: "Asset not found" });
 
     if (asset.mockup_url) {
-      res.set("Cache-Control", "public, max-age=86400");
       return res.json({ mockup_url: asset.mockup_url, cached: true });
     }
 
-    const imageUrl = `https://lh3.googleusercontent.com/d/${asset.drive_file_id}=s2000`;
-    const result = await printful.generateMockup(imageUrl, {
-      productId: 268,
-      variantIds: [8948],
-    });
-
-    try {
-      await supabase
-        .from("assets")
-        .update({ mockup_url: result.mockup_url })
-        .eq("id", asset.id);
-    } catch (e) { /* column may not exist yet */ }
-
-    res.set("Cache-Control", "public, max-age=86400");
-    res.json({ mockup_url: result.mockup_url, cached: false });
+    const mockupUrl = await generateAndStoreMockup(asset);
+    res.json({ mockup_url: mockupUrl, cached: false });
   } catch (e) {
     console.error(`[Mockup] On-demand (drive) error:`, e.message);
     res.status(500).json({ error: "Mockup generation failed" });
