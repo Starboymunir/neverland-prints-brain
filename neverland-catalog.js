@@ -925,8 +925,8 @@
       }
 
       if (sizeList.length > 0) {
-        const section = document.getElementById('art-size-section');
-        const options = document.getElementById('art-size-options');
+        const section = document.getElementById('art-variants-section');
+        const options = document.getElementById('art-variant-options');
         const sizeDisplay = document.getElementById('art-size-display');
         if (section && options) {
           section.style.display = '';
@@ -938,7 +938,7 @@
           options.innerHTML = sizeList.map((s, i) => {
             const isSelected = i === defaultIdx ? ' is-selected' : '';
             const price = getPrice(s.tier, false);
-            return `<button type="button" class="pp-pill${isSelected}"
+            return `<button type="button" class="variant-option${isSelected}"
                       data-variant-idx="${i}" data-tier="${s.tier}"
                       data-size="${s.size}">
                       ${escHtml(s.label)} — ${formatPrice(price)}
@@ -949,7 +949,7 @@
           if (sizeDisplay) sizeDisplay.textContent = sizeList[defaultIdx].label;
 
           // Size selection handlers
-          options.querySelectorAll('.pp-pill').forEach(btn => {
+          options.querySelectorAll('.variant-option').forEach(btn => {
             btn.addEventListener('click', () => {
               options.querySelector('.is-selected')?.classList.remove('is-selected');
               btn.classList.add('is-selected');
@@ -967,7 +967,7 @@
     // Frame option handlers
     const frameDisplay = document.getElementById('art-frame-display');
     const framesPreview = document.getElementById('pp-frames');
-    document.querySelectorAll('#art-frame-options .pp-pill').forEach(btn => {
+    document.querySelectorAll('#art-frame-options .variant-option').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelector('#art-frame-options .is-selected')?.classList.remove('is-selected');
         btn.classList.add('is-selected');
@@ -1008,7 +1008,7 @@
         // If a frame color is selected (not 'none'), ensure framed is selected
         if (btn.dataset.frame !== 'none' && currentFrame !== 'framed') {
           document.querySelector('#art-frame-options .is-selected')?.classList.remove('is-selected');
-          const framedBtn = document.querySelector('#art-frame-options .pp-pill[data-frame="framed"]');
+          const framedBtn = document.querySelector('#art-frame-options .variant-option[data-frame="framed"]');
           if (framedBtn) {
             framedBtn.classList.add('is-selected');
             currentFrame = 'framed';
@@ -1305,7 +1305,7 @@
       }, 600);
     } catch (err) {
       btn.disabled = false;
-      btn.innerHTML = `<span class="pp-atc__text">Add to Cart</span><span class="pp-atc__sep">—</span><span class="pp-atc__price" id="art-cart-price">${formatPrice(getPrice(tier, framed))}</span>`;
+      btn.innerHTML = `Add to Cart — <span id="art-cart-price">${formatPrice(getPrice(tier, framed))}</span>`;
       alert('Error: ' + err.message);
     }
   }
