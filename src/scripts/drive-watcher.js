@@ -94,10 +94,22 @@ async function initDrive() {
   return google.drive({ version: "v3", auth });
 }
 
-// ── Sync state persistence (file-based, works everywhere) ──
+// ── Sync state persistence (Supabase first, file fallback) ──
+// Render has ephemeral filesystem — local files vanish on every deploy.
+// Store the page token in Supabase so restarts use delta sync, not full scan.
 const TOKEN_FILE = path.join(__dirname, "..", "..", ".drive-sync-token.json");
 
-function getSavedPageToken() {
+async function getSavedPageToken() {
+  // Try Supabase first
+  try {
+    const { data } = await supabase
+      .from("sync_state")
+      .select("value")
+      .eq("key", "drive_page_token")
+      .single();
+    if (data && data.value) return data.value;
+  } catch {}
+  // Fallback to local file
   try {
     if (fs.existsSync(TOKEN_FILE)) {
       const data = JSON.parse(fs.readFileSync(TOKEN_FILE, "utf8"));
@@ -107,14 +119,25 @@ function getSavedPageToken() {
   return null;
 }
 
-function savePageToken(token) {
+async function savePageToken(token) {
+  // Save to Supabase (persistent across deploys)
+  try {
+    await supabase.from("sync_state").upsert({
+      key: "drive_page_token",
+      value: token,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "key" });
+  } catch (e) {
+    console.warn(`   ⚠️  Could not save page token to Supabase: ${e.message}`);
+  }
+  // Also save to file as backup
   try {
     fs.writeFileSync(TOKEN_FILE, JSON.stringify({
       pageToken: token,
       savedAt: new Date().toISOString(),
     }), "utf8");
   } catch (e) {
-    console.warn(`   ⚠️  Could not save page token: ${e.message}`);
+    console.warn(`   ⚠️  Could not save page token to file: ${e.message}`);
   }
 }
 
@@ -196,8 +219,7 @@ async function resolveAncestry(drive, fileId, cache = {}) {
 async function fullScan(drive) {
   console.log("\n📂 Full Drive scan starting...");
   const ROOT = config.google.driveFolderId;
-  const limit = pLimit(30);
-  const collected = [];
+  const limit = pLimit(5); // Low concurrency to keep memory within 512MB
 
   // Fetch all artist folders
   console.log("   🔍 Fetching artist folders...");
@@ -218,72 +240,92 @@ async function fullScan(drive) {
   } while (folderPageToken);
   console.log(`   ✅ ${allArtistFolders.length} artist folders found`);
 
-  // Scan all artists concurrently
+  // Process artists in STREAMING BATCHES of 200 to limit peak memory.
+  // Instead of collecting 135k files into one array, we scan a batch of
+  // artists → deduplicate+insert → discard → scan next batch.
   let artistsDone = 0;
+  let totalInserted = 0;
+  let totalSkipped = 0;
+  let totalErrors = 0;
   const startScan = Date.now();
+  const ARTIST_BATCH = 200;
 
-  const tasks = allArtistFolders.map(artist => limit(async () => {
-    try {
-      const subRes = await withRetry(() => drive.files.list({
-        q: `'${artist.id}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
-        fields: "files(id, name)",
-        pageSize: 10,
-      }), 5, `subfolders ${artist.name}`);
+  for (let batchStart = 0; batchStart < allArtistFolders.length; batchStart += ARTIST_BATCH) {
+    const artistBatch = allArtistFolders.slice(batchStart, batchStart + ARTIST_BATCH);
+    const batchCollected = [];
 
-      for (const tier of (subRes.data.files || [])) {
-        const qualityTier = tier.name.toLowerCase().includes("above") ? "high" : "standard";
-        let imgPageToken = null;
+    const tasks = artistBatch.map(artist => limit(async () => {
+      try {
+        const subRes = await withRetry(() => drive.files.list({
+          q: `'${artist.id}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
+          fields: "files(id, name)",
+          pageSize: 10,
+        }), 5, `subfolders ${artist.name}`);
 
-        do {
-          const imgRes = await withRetry(() => drive.files.list({
-            q: `'${tier.id}' in parents and trashed = false`,
-            fields: "nextPageToken, files(id, name, mimeType, size, md5Checksum)",
-            pageSize: 1000,
-            pageToken: imgPageToken,
-          }), 5, `images ${artist.name}/${tier.name}`);
+        for (const tier of (subRes.data.files || [])) {
+          const qualityTier = tier.name.toLowerCase().includes("above") ? "high" : "standard";
+          let imgPageToken = null;
 
-          for (const file of (imgRes.data.files || [])) {
-            if (file.name.startsWith("._")) continue;
-            if (file.name.toLowerCase().endsWith(".csv")) continue;
-            if (!isImageFile(file)) continue;
+          do {
+            const imgRes = await withRetry(() => drive.files.list({
+              q: `'${tier.id}' in parents and trashed = false`,
+              fields: "nextPageToken, files(id, name, mimeType, size, md5Checksum)",
+              pageSize: 1000,
+              pageToken: imgPageToken,
+            }), 5, `images ${artist.name}/${tier.name}`);
 
-            const parsed = parseFilename(file.name);
-            collected.push({
-              id: file.id,
-              name: file.name,
-              mimeType: file.mimeType,
-              size: parseInt(file.size || "0", 10),
-              md5: file.md5Checksum || null,
-              path: `${artist.name}/${tier.name}/${file.name}`,
-              artist: artist.name,
-              qualityTier,
-              parsedTitle: parsed.title,
-              parsedWidth: parsed.width,
-              parsedHeight: parsed.height,
-            });
-          }
-          imgPageToken = imgRes.data.nextPageToken;
-        } while (imgPageToken);
+            for (const file of (imgRes.data.files || [])) {
+              if (file.name.startsWith("._")) continue;
+              if (file.name.toLowerCase().endsWith(".csv")) continue;
+              if (!isImageFile(file)) continue;
+
+              const parsed = parseFilename(file.name);
+              batchCollected.push({
+                id: file.id,
+                name: file.name,
+                mimeType: file.mimeType,
+                size: parseInt(file.size || "0", 10),
+                md5: file.md5Checksum || null,
+                path: `${artist.name}/${tier.name}/${file.name}`,
+                artist: artist.name,
+                qualityTier,
+                parsedTitle: parsed.title,
+                parsedWidth: parsed.width,
+                parsedHeight: parsed.height,
+              });
+            }
+            imgPageToken = imgRes.data.nextPageToken;
+          } while (imgPageToken);
+        }
+      } catch (err) {
+        console.error(`   ⚠️  ${artist.name}: ${err.message}`);
       }
-    } catch (err) {
-      console.error(`   ⚠️  ${artist.name}: ${err.message}`);
+
+      artistsDone++;
+    }));
+
+    await Promise.all(tasks);
+
+    // Insert this batch immediately and free the memory
+    if (batchCollected.length > 0) {
+      const result = await deduplicateAndInsert(batchCollected);
+      totalInserted += result.inserted;
+      totalSkipped += result.skipped;
+      totalErrors += result.errors;
     }
 
-    artistsDone++;
-    if (artistsDone % 1000 === 0) {
-      const elapsed = ((Date.now() - startScan) / 1000).toFixed(0);
-      console.log(`   📊 ${artistsDone}/${allArtistFolders.length} artists | ${collected.length} images | ${elapsed}s`);
-    }
-  }));
+    const elapsed = ((Date.now() - startScan) / 1000).toFixed(0);
+    console.log(`   📊 ${artistsDone}/${allArtistFolders.length} artists | batch: ${batchCollected.length} files | ${elapsed}s`);
+    // batchCollected is now garbage-collectible
+  }
 
-  await Promise.all(tasks);
-  console.log(`   ✅ Full scan: ${collected.length} images from ${artistsDone} artists in ${((Date.now() - startScan)/1000).toFixed(0)}s`);
+  console.log(`   ✅ Full scan: ${totalInserted} inserted, ${totalSkipped} skipped from ${artistsDone} artists in ${((Date.now() - startScan)/1000).toFixed(0)}s`);
 
   // Get a fresh start page token for future delta syncs
   const tokenRes = await drive.changes.getStartPageToken();
   const startPageToken = tokenRes.data.startPageToken;
 
-  return { files: collected, pageToken: startPageToken };
+  return { files: [], pageToken: startPageToken, inserted: totalInserted, skipped: totalSkipped, errors: totalErrors };
 }
 
 // ══════════════════════════════════════════════════════
@@ -342,7 +384,7 @@ async function deltaScan(drive, savedPageToken) {
       pageToken = null;
       const newToken = res.data.newStartPageToken;
       if (newToken) {
-        savePageToken(newToken);
+        await savePageToken(newToken);
       }
     }
   }
@@ -492,26 +534,33 @@ async function runOnce(forceFullScan = false) {
 
     const drive = await initDrive();
     let files;
+    let fullScanResult = null;
 
-    // Check for saved page token (file-based)
-    const savedToken = !forceFullScan ? getSavedPageToken() : null;
+    // Check for saved page token (Supabase first, file fallback)
+    const savedToken = !forceFullScan ? await getSavedPageToken() : null;
 
     if (savedToken && !forceFullScan) {
       // Delta sync — only check changes since last sync
       const delta = await deltaScan(drive, savedToken);
       files = delta.files;
     } else {
-      // Full scan — scan everything, then save token for future deltas
+      // Full scan — streams files in batches (no giant in-memory array)
       const full = await fullScan(drive);
-      files = full.files;
+      files = full.files; // [] — fullScan inserts as it goes
+      fullScanResult = full;
       if (full.pageToken) {
-        savePageToken(full.pageToken);
+        await savePageToken(full.pageToken);
         console.log(`   💾 Saved page token for future delta syncs`);
       }
     }
 
-    // Deduplicate and insert
-    const result = await deduplicateAndInsert(files);
+    // Deduplicate and insert (only has data for delta syncs)
+    let result;
+    if (fullScanResult) {
+      result = { inserted: fullScanResult.inserted, skipped: fullScanResult.skipped, errors: fullScanResult.errors };
+    } else {
+      result = await deduplicateAndInsert(files);
+    }
 
     // Get total count
     const { count } = await supabase

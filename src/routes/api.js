@@ -543,22 +543,30 @@ router.get("/storefront/artists", async (req, res) => {
     // Check cache (30 min TTL)
     let artists = getCached("artists_list", 30 * 60 * 1000);
     if (!artists) {
-      // Paginate through ALL artist rows
-      const data = await fetchAllRows("assets", "artist", (q) =>
-        q.in("ingestion_status", ["ready", "analyzed"]).not("artist", "is", null)
-      );
-
-      const counts = {};
-      data.forEach((a) => {
-        counts[a.artist] = (counts[a.artist] || 0) + 1;
-      });
-
-      artists = Object.entries(counts).map(([name, count]) => ({
-        artist: name,
-        name,
-        count,
-      }));
-
+      // Use database-side GROUP BY via RPC (avoids loading 135k rows into Node.js)
+      const { data, error } = await supabase.rpc("get_artist_counts");
+      if (error) {
+        // Fallback: paginated counting if RPC not available
+        console.warn("RPC get_artist_counts not available, using fallback:", error.message);
+        const counts = {};
+        let from = 0;
+        while (true) {
+          const { data: batch, error: bErr } = await supabase
+            .from("assets")
+            .select("artist")
+            .in("ingestion_status", ["ready", "analyzed"])
+            .not("artist", "is", null)
+            .range(from, from + 999);
+          if (bErr) throw bErr;
+          if (!batch || batch.length === 0) break;
+          batch.forEach((a) => { counts[a.artist] = (counts[a.artist] || 0) + 1; });
+          if (batch.length < 1000) break;
+          from += 1000;
+        }
+        artists = Object.entries(counts).map(([name, count]) => ({ artist: name, name, count }));
+      } else {
+        artists = (data || []).map((r) => ({ artist: r.artist, name: r.artist, count: r.count }));
+      }
       setCache("artists_list", artists);
     }
 
@@ -594,39 +602,66 @@ router.get("/storefront/filters", async (req, res) => {
     // Check cache (30 min TTL)
     let cached = getCached("filter_values", 30 * 60 * 1000);
     if (!cached) {
-      // Fetch ALL rows with the fields we need for aggregation
-      const data = await fetchAllRows(
-        "assets",
-        "style, mood, ratio_class, era, subject, ai_tags",
-        (q) => q.in("ingestion_status", ["ready", "analyzed"])
-      );
-
+      // Database-side aggregation — one simple query per dimension
+      // instead of loading 135k rows into Node.js memory
       const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
 
-      const styleCounts = {};
-      const moodCounts = {};
-      const orientCounts = {};
-      const eraCounts = {};
-      const subjectCounts = {};
+      async function countColumn(col) {
+        const counts = {};
+        let from = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from("assets")
+            .select(col)
+            .in("ingestion_status", ["ready", "analyzed"])
+            .not(col, "is", null)
+            .range(from, from + 999);
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+          data.forEach((r) => { counts[r[col]] = (counts[r[col]] || 0) + 1; });
+          if (data.length < 1000) break;
+          from += 1000;
+        }
+        return Object.entries(counts)
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => b.count - a.count);
+      }
+
+      // Run dimension queries in parallel (each only fetches one column)
+      const [styles, moods, orientations, eras, subjects] = await Promise.all([
+        countColumn("style"),
+        countColumn("mood"),
+        countColumn("ratio_class"),
+        countColumn("era"),
+        countColumn("subject"),
+      ]);
+
+      // ai_tags needs special handling (it's an array column with countries+continents)
       const countryCounts = {};
       const continentCounts = {};
-
-      data.forEach((r) => {
-        if (r.style) styleCounts[r.style] = (styleCounts[r.style] || 0) + 1;
-        if (r.mood) moodCounts[r.mood] = (moodCounts[r.mood] || 0) + 1;
-        if (r.ratio_class) orientCounts[r.ratio_class] = (orientCounts[r.ratio_class] || 0) + 1;
-        if (r.era) eraCounts[r.era] = (eraCounts[r.era] || 0) + 1;
-        if (r.subject) subjectCounts[r.subject] = (subjectCounts[r.subject] || 0) + 1;
-
-        const tags = Array.isArray(r.ai_tags) ? r.ai_tags : [];
-        tags.forEach((tag) => {
-          if (KNOWN_CONTINENTS.includes(tag)) {
-            continentCounts[tag] = (continentCounts[tag] || 0) + 1;
-          } else if (typeof tag === "string" && tag.length > 1 && tag !== "Unknown") {
-            countryCounts[tag] = (countryCounts[tag] || 0) + 1;
-          }
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("assets")
+          .select("ai_tags")
+          .in("ingestion_status", ["ready", "analyzed"])
+          .not("ai_tags", "is", null)
+          .range(from, from + 999);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        data.forEach((r) => {
+          const tags = Array.isArray(r.ai_tags) ? r.ai_tags : [];
+          tags.forEach((tag) => {
+            if (KNOWN_CONTINENTS.includes(tag)) {
+              continentCounts[tag] = (continentCounts[tag] || 0) + 1;
+            } else if (typeof tag === "string" && tag.length > 1 && tag !== "Unknown") {
+              countryCounts[tag] = (countryCounts[tag] || 0) + 1;
+            }
+          });
         });
-      });
+        if (data.length < 1000) break;
+        from += 1000;
+      }
 
       const toSortedArr = (counts) =>
         Object.entries(counts)
@@ -634,11 +669,11 @@ router.get("/storefront/filters", async (req, res) => {
           .sort((a, b) => b.count - a.count);
 
       cached = {
-        styles: toSortedArr(styleCounts),
-        moods: toSortedArr(moodCounts),
-        orientations: toSortedArr(orientCounts),
-        eras: toSortedArr(eraCounts),
-        subjects: toSortedArr(subjectCounts),
+        styles,
+        moods,
+        orientations,
+        eras,
+        subjects,
         countries: toSortedArr(countryCounts),
         continents: toSortedArr(continentCounts),
       };
@@ -1693,7 +1728,7 @@ router.get("/size-catalog", (req, res) => {
  * Health check endpoint.
  */
 router.get("/health", async (req, res) => {
-  const checks = { server: "ok", version: "2026-03-11e-custom-ar-fit", supabase: "unknown", drive: "unknown" };
+  const checks = { server: "ok", version: "2026-03-12a-oom-fix", supabase: "unknown", drive: "unknown" };
 
   try {
     const { count } = await supabase.from("assets").select("*", { count: "exact", head: true });
