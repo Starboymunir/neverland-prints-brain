@@ -79,21 +79,22 @@ function startCronJobs() {
   });
 
   // ── Keep-alive self-ping (prevents Render free tier spin-down) ──
-  // Render free tier spins down after 15min of no HTTP requests.
-  // This pings our own health endpoint every 10 minutes to stay alive.
-  const PORT = process.env.PORT || 3000;
+  // Render free tier spins down after 15min of no inbound HTTP requests.
+  // Internal localhost pings don't count — must hit the external URL
+  // so the request goes through the load balancer as "inbound traffic".
+  const EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3000}`;
   setInterval(async () => {
     try {
-      await fetch(`http://localhost:${PORT}/api/health`);
+      await fetch(`${EXTERNAL_URL}/api/health`);
     } catch {
       // ignore — server might not be ready yet
     }
-  }, 10 * 60 * 1000); // every 10 minutes
+  }, 5 * 60 * 1000); // every 5 minutes
 
   console.log("   📂 Drive ingest:  1:00 AM daily");
   console.log("   📅 Shopify sync:  3:00 AM daily");
   console.log("   🏥 Health check:  every 6h");
-  console.log("   💓 Keep-alive:    self-ping every 10min");
+  console.log("   💓 Keep-alive:    external ping every 5min");
 
   // ── Auto-start drip sync (runs continuously, self-heals on throttle) ──
   console.log("   🚰 Drip sync:     starting now (auto-sleep on throttle)");
