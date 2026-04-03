@@ -2276,4 +2276,99 @@ router.post("/prices/bulk-update-tags", async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════
+// CARRIER SERVICE — Real-time Printful shipping rates for Shopify checkout
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * POST /api/carrier-service/rates
+ * Shopify calls this at checkout to get shipping rates.
+ * We proxy the request to Printful's /shipping/rates endpoint.
+ *
+ * Shopify sends: { rate: { origin, destination, items, currency, locale } }
+ * We return:     { rates: [{ service_name, service_code, total_price, currency, ... }] }
+ */
+
+// Map skeleton SKU prefixes → Printful variant IDs (Enhanced Matte Paper Poster)
+const SKU_TO_VARIANT = {
+  "NP-SMALL":  8947,   // 21×30 cm
+  "NP-MEDIUM": 8948,   // 30×40 cm
+  "NP-LARGE":  8952,   // 50×70 cm
+  "NP-XL":     8953,   // 61×91 cm
+};
+
+function skuToVariantId(sku) {
+  if (!sku) return 8948; // default medium
+  const upper = sku.toUpperCase();
+  for (const [prefix, variantId] of Object.entries(SKU_TO_VARIANT)) {
+    if (upper.startsWith(prefix)) return variantId;
+  }
+  return 8948;
+}
+
+router.post("/carrier-service/rates", async (req, res) => {
+  try {
+    const rateRequest = req.body.rate;
+    if (!rateRequest) {
+      return res.status(400).json({ rates: [] });
+    }
+
+    const dest = rateRequest.destination;
+    const items = rateRequest.items || [];
+
+    if (!dest || !dest.country) {
+      return res.status(200).json({ rates: [] });
+    }
+
+    // Build recipient from Shopify destination
+    const recipient = {
+      address1: dest.address1 || dest.postal_code || "N/A",
+      city: dest.city || "N/A",
+      country_code: dest.country,
+      state_code: dest.province || "",
+      zip: dest.postal_code || "",
+    };
+
+    // Collect unique Printful variant IDs from cart items
+    const variantCounts = {};
+    for (const item of items) {
+      const vid = skuToVariantId(item.sku);
+      variantCounts[vid] = (variantCounts[vid] || 0) + (item.quantity || 1);
+    }
+
+    // Build Printful shipping rate request items
+    const pfItems = Object.entries(variantCounts).map(([vid, qty]) => ({
+      variant_id: parseInt(vid, 10),
+      quantity: qty,
+    }));
+
+    // Call Printful shipping rates API
+    const pfRates = await printful.request("POST", "/shipping/rates", {
+      recipient,
+      items: pfItems,
+    });
+
+    // Convert Printful rates → Shopify format
+    // Printful returns: { result: [{ id, name, rate, currency, minDeliveryDays, maxDeliveryDays }] }
+    const shopifyRates = (pfRates.result || []).map((r) => ({
+      service_name: r.name || "Standard Shipping",
+      service_code: r.id || "printful_standard",
+      total_price: Math.round(parseFloat(r.rate) * 100).toString(), // Shopify wants cents as string
+      currency: r.currency || rateRequest.currency || "USD",
+      min_delivery_date: r.minDeliveryDays
+        ? new Date(Date.now() + r.minDeliveryDays * 86400000).toISOString()
+        : null,
+      max_delivery_date: r.maxDeliveryDays
+        ? new Date(Date.now() + r.maxDeliveryDays * 86400000).toISOString()
+        : null,
+    }));
+
+    res.json({ rates: shopifyRates });
+  } catch (err) {
+    console.error("[CarrierService] Error fetching rates:", err.message);
+    // Return empty rates on error so checkout isn't blocked
+    res.status(200).json({ rates: [] });
+  }
+});
+
 module.exports = router;
