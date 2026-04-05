@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neverland Prints — Printful Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f0f0f; --surface: #1a1a1a; --surface2: #242424;
+      --border: #333; --text: #e8e8e8; --text-dim: #888;
+      --accent: #7c5cfc; --accent-light: #a78bfa;
+      --green: #22c55e; --yellow: #eab308; --red: #ef4444; --blue: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+    header nav { display: flex; gap: 1rem; align-items: center; }
+    header nav a { color: var(--text-dim); text-decoration: none; font-size: 0.85rem; }
+    header nav a:hover { color: var(--text); }
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; }
+    .card .label { font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .card .val { font-size: 2rem; font-weight: 700; color: var(--accent-light); }
+    .card .sub { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem; }
+    .card .val.green { color: var(--green); }
+    .card .val.red { color: var(--red); }
+    .card .val.yellow { color: var(--yellow); }
+
+    .section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .section h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+    .badge.connected { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge.disconnected { background: rgba(239,68,68,0.15); color: var(--red); }
+    .badge.pending { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    .badge.sent { background: rgba(59,130,246,0.15); color: var(--blue); }
+    .badge.fulfilled { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge.failed { background: rgba(239,68,68,0.15); color: var(--red); }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+    td { padding: 0.6rem 0.75rem; font-size: 0.85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:hover td { background: var(--surface2); }
+
+    .rate-row { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
+    .rate-row:last-child { border-bottom: none; }
+    .rate-zone { font-weight: 600; min-width: 140px; }
+    .rate-name { color: var(--text-dim); min-width: 160px; }
+    .rate-price { font-size: 1.1rem; font-weight: 700; color: var(--green); min-width: 80px; }
+    .rate-input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.9rem; width: 100px; }
+    .rate-input:focus { outline: none; border-color: var(--accent); }
+
+    .btn { background: var(--accent); color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+    .btn:hover { background: var(--accent-light); }
+    .btn.sm { padding: 0.3rem 0.6rem; font-size: 0.75rem; }
+    .btn.green { background: var(--green); }
+    .btn.green:hover { background: #16a34a; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .msg { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; display: none; }
+    .msg.success { display: block; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: var(--green); }
+    .msg.error { display: block; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--red); }
+
+    .empty { text-align: center; padding: 2rem; color: var(--text-dim); }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🖨️ Printful Dashboard</h1>
+    <nav>
+      <a href="/">← Main Dashboard</a>
+      <button class="btn" onclick="loadAll()">⟳ Refresh</button>
+    </nav>
+  </header>
+
+  <div class="container">
+    <!-- Status Cards -->
+    <div class="cards" id="statusCards">
+      <div class="card"><div class="label">Loading...</div><div class="val">—</div></div>
+    </div>
+
+    <div id="statusMsg" class="msg"></div>
+
+    <!-- Shipping Rates -->
+    <div class="section">
+      <h2>📦 Shipping Rates</h2>
+      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:1rem;">
+        These flat rates appear at Shopify checkout. Update them to match Printful's current pricing.
+      </p>
+      <div id="shippingRates"><div class="empty">Loading shipping rates...</div></div>
+      <div style="margin-top:1rem;display:flex;gap:0.75rem;align-items:center;">
+        <button class="btn green" onclick="saveRates()">💾 Save Rates</button>
+        <button class="btn" onclick="fetchPrintfulRates()">🔄 Fetch Printful Rates</button>
+        <span id="rateStatus" style="font-size:0.8rem;color:var(--text-dim);"></span>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <!-- Printful Products -->
+      <div class="section">
+        <h2>🛍️ Printful Products</h2>
+        <div id="printfulProducts"><div class="empty">Loading...</div></div>
+      </div>
+
+      <!-- Printful Orders -->
+      <div class="section">
+        <h2>📋 Printful Orders</h2>
+        <div id="printfulOrders"><div class="empty">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- Fulfillment Orders from DB -->
+    <div class="section">
+      <h2>📋 Fulfillment Orders (Local DB)</h2>
+      <div id="fulfillmentOrders"><div class="empty">Loading...</div></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '/api';
+
+    function showMsg(text, type) {
+      const el = document.getElementById('statusMsg');
+      el.className = 'msg ' + type;
+      el.textContent = text;
+      setTimeout(() => { el.className = 'msg'; }, 5000);
+    }
+
+    // ── Connection Status ──
+    async function loadStatus() {
+      const [pfStatus, shippingData] = await Promise.all([
+        fetch(`${API}/printful/status`).then(r => r.json()).catch(() => ({ connected: false })),
+        fetch(`${API}/shipping/rates`).then(r => r.json()).catch(() => ({ profiles: [] })),
+      ]);
+
+      let totalZones = 0;
+      if (shippingData.profiles) {
+        shippingData.profiles.forEach(p => { totalZones += p.zones?.length || 0; });
+      }
+
+      const cards = document.getElementById('statusCards');
+      cards.innerHTML = `
+        <div class="card">
+          <div class="label">Printful API</div>
+          <div class="val ${pfStatus.connected ? 'green' : 'red'}">${pfStatus.connected ? '✓ Connected' : '✗ Error'}</div>
+          <div class="sub">${pfStatus.connected ? pfStatus.product || '' : pfStatus.error || 'Not connected'}</div>
+        </div>
+        <div class="card">
+          <div class="label">Product</div>
+          <div class="val" style="font-size:1.2rem;">${pfStatus.product || '—'}</div>
+          <div class="sub">${pfStatus.variants || 0} variants available</div>
+        </div>
+        <div class="card">
+          <div class="label">Shipping Zones</div>
+          <div class="val">${totalZones}</div>
+          <div class="sub">${shippingData.profiles?.length || 0} profile(s)</div>
+        </div>
+        <div class="card">
+          <div class="label">Auto-Confirm Orders</div>
+          <div class="val" style="font-size:1.2rem;color:var(--yellow)">Off</div>
+          <div class="sub">Orders stay as drafts on Printful</div>
+        </div>
+      `;
+    }
+
+    // ── Shipping Rates ──
+    let rateData = null;
+
+    async function loadShipping() {
+      const data = await fetch(`${API}/shipping/rates`).then(r => r.json());
+      rateData = data;
+
+      const container = document.getElementById('shippingRates');
+      if (!data.profiles || !data.profiles.length) {
+        container.innerHTML = '<div class="empty">No shipping profiles found</div>';
+        return;
+      }
+
+      let html = '';
+      for (const profile of data.profiles) {
+        for (const zone of profile.zones || []) {
+          for (const method of zone.methods || []) {
+            html += `
+              <div class="rate-row" data-profile="${profile.id}" data-lg="${profile.locationGroupId}" data-zone="${zone.id}" data-method="${method.id}">
+                <span class="rate-zone">${zone.name}</span>
+                <span class="rate-name">${method.name}</span>
+                <span class="rate-price">$</span>
+                <input type="number" step="0.01" min="0" class="rate-input" value="${parseFloat(method.price).toFixed(2)}" />
+                <span style="font-size:0.8rem;color:var(--text-dim)">${method.currency}</span>
+              </div>
+            `;
+          }
+        }
+      }
+
+      container.innerHTML = html || '<div class="empty">No shipping zones configured</div>';
+    }
+
+    async function saveRates() {
+      const rows = document.querySelectorAll('.rate-row');
+      let saved = 0;
+      let errors = 0;
+
+      for (const row of rows) {
+        const input = row.querySelector('.rate-input');
+        const price = parseFloat(input.value);
+        if (isNaN(price) || price < 0) continue;
+
+        try {
+          const res = await fetch(`${API}/shipping/rates`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              profileId: row.dataset.profile,
+              locationGroupId: row.dataset.lg,
+              zoneId: row.dataset.zone,
+              methodId: row.dataset.method,
+              price: price,
+            }),
+          });
+          const data = await res.json();
+          if (data.success) { saved++; } else { errors++; }
+        } catch (e) { errors++; }
+      }
+
+      if (errors === 0) {
+        showMsg(`✅ Saved ${saved} shipping rate(s) successfully!`, 'success');
+      } else {
+        showMsg(`Saved ${saved}, ${errors} failed`, 'error');
+      }
+      loadShipping();
+    }
+
+    async function fetchPrintfulRates() {
+      const status = document.getElementById('rateStatus');
+      status.textContent = 'Fetching from Printful...';
+
+      const destinations = [
+        { label: 'Domestic', country: 'US', province: 'NY', postal_code: '10001', city: 'New York', address1: '123 Main St' },
+        { label: 'International', country: 'GB', province: '', postal_code: 'W1D 1BS', city: 'London', address1: '1 Oxford St' },
+      ];
+
+      let info = 'Printful rates: ';
+      for (const dest of destinations) {
+        try {
+          const res = await fetch(`${API}/carrier-service/rates`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              rate: {
+                destination: dest,
+                items: [{ sku: 'NP-MEDIUM-UNFRAMED', quantity: 1 }],
+                currency: 'USD',
+              },
+            }),
+          });
+          const data = await res.json();
+          if (data.rates && data.rates.length > 0) {
+            const price = (parseInt(data.rates[0].total_price) / 100).toFixed(2);
+            info += `${dest.label}: $${price}  `;
+          }
+        } catch (e) { /* skip */ }
+      }
+      status.textContent = info;
+    }
+
+    // ── Printful Products ──
+    async function loadProducts() {
+      const container = document.getElementById('printfulProducts');
+      try {
+        const data = await fetch(`${API}/printful/products`).then(r => r.json());
+        if (!data.products || !data.products.length) {
+          container.innerHTML = '<div class="empty">No products found</div>';
+          return;
+        }
+        container.innerHTML = data.products.slice(0, 10).map(p => `
+          <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+            ${p.image ? `<img src="${p.image}" style="width:40px;height:40px;border-radius:4px;object-fit:cover;" />` : ''}
+            <div>
+              <div style="font-size:0.85rem;font-weight:500;">${p.title}</div>
+              <div style="font-size:0.75rem;color:var(--text-dim);">ID: ${p.id}</div>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        container.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+      }
+    }
+
+    // ── Printful Orders ──
+    async function loadPrintfulOrders() {
+      const container = document.getElementById('printfulOrders');
+      try {
+        const data = await fetch(`${API}/printful/orders`).then(r => r.json());
+        const orders = Array.isArray(data) ? data : (data.value || data.orders || []);
+        if (!orders.length) {
+          container.innerHTML = '<div class="empty">No orders sent to Printful yet</div>';
+          return;
+        }
+        container.innerHTML = orders.slice(0, 10).map(o => `
+          <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+            <span class="badge ${o.status === 'fulfilled' ? 'fulfilled' : o.status === 'failed' ? 'failed' : 'sent'}">${o.status}</span>
+            <div>
+              <div style="font-size:0.85rem;font-weight:500;">#${o.id || o.external_id}</div>
+              <div style="font-size:0.75rem;color:var(--text-dim);">${o.created ? new Date(o.created * 1000).toLocaleDateString() : ''}</div>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        container.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+      }
+    }
+
+    // ── Fulfillment Orders (DB) ──
+    async function loadFulfillmentOrders() {
+      const container = document.getElementById('fulfillmentOrders');
+      try {
+        const data = await fetch(`${API}/fulfillment-orders`).then(r => r.json());
+        const orders = data.orders || [];
+        if (!orders.length) {
+          container.innerHTML = '<div class="empty">No fulfillment orders yet — orders will appear here after customers purchase</div>';
+          return;
+        }
+        container.innerHTML = `
+          <table>
+            <thead><tr>
+              <th>Order</th><th>Artwork</th><th>Artist</th><th>Size</th><th>Frame</th><th>Price</th><th>Status</th><th>Date</th>
+            </tr></thead>
+            <tbody>
+              ${orders.map(o => `
+                <tr>
+                  <td>${o.order_name || o.shopify_order_id}</td>
+                  <td>${o.artwork_title || '—'}</td>
+                  <td>${o.artist || '—'}</td>
+                  <td>${o.size || '—'}</td>
+                  <td>${o.frame || '—'}</td>
+                  <td>$${o.price || '—'}</td>
+                  <td><span class="badge ${o.status === 'sent_to_printful' ? 'sent' : o.status === 'fulfilled' ? 'fulfilled' : o.status === 'failed' ? 'failed' : 'pending'}">${o.status}</span></td>
+                  <td style="color:var(--text-dim)">${o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } catch (e) {
+        container.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+      }
+    }
+
+    async function loadAll() {
+      await Promise.all([loadStatus(), loadShipping(), loadProducts(), loadPrintfulOrders(), loadFulfillmentOrders()]);
+    }
+
+    loadAll();
+  </script>
+</body>
+</html>

@@ -42,6 +42,11 @@ app.use("/api", apiRoutes);
 // Webhook routes
 app.use("/webhooks", webhookRoutes);
 
+// Printful dashboard
+app.get("/printful", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "printful.html"));
+});
+
 // ── Shopify OAuth callback ──────────────────────────────
 app.get("/auth/callback", async (req, res) => {
   const { code, shop, hmac } = req.query;

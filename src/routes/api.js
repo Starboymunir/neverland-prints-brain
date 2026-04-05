@@ -2277,6 +2277,148 @@ router.post("/prices/bulk-update-tags", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// SHIPPING MANAGEMENT — View & update Shopify shipping rates
+// ═══════════════════════════════════════════════════════════
+
+const SHOPIFY_GQL = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/${process.env.SHOPIFY_API_VERSION || "2024-10"}/graphql.json`;
+function shopifyGql(query) {
+  return fetch(SHOPIFY_GQL, {
+    method: "POST",
+    headers: {
+      "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API_TOKEN,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query }),
+  }).then(r => r.json());
+}
+
+/**
+ * GET /api/shipping/rates — Get current Shopify shipping rates
+ */
+router.get("/shipping/rates", async (req, res) => {
+  try {
+    const data = await shopifyGql(`{
+      deliveryProfiles(first: 5) {
+        edges { node {
+          id name default
+          profileLocationGroups {
+            locationGroup { id }
+            locationGroupZones(first: 20) {
+              edges { node {
+                zone { id name }
+                methodDefinitions(first: 10) {
+                  edges { node {
+                    id name
+                    rateProvider {
+                      ... on DeliveryRateDefinition {
+                        id price { amount currencyCode }
+                      }
+                    }
+                  }}
+                }
+              }}
+            }
+          }
+        }}
+      }
+    }`);
+
+    if (data.errors) return res.status(400).json({ errors: data.errors });
+
+    const profiles = (data.data.deliveryProfiles.edges || []).map(e => {
+      const p = e.node;
+      const zones = [];
+      for (const lg of p.profileLocationGroups || []) {
+        for (const ze of (lg.locationGroupZones?.edges || [])) {
+          const z = ze.node;
+          const methods = (z.methodDefinitions?.edges || []).map(me => ({
+            id: me.node.id,
+            name: me.node.name,
+            price: me.node.rateProvider?.price?.amount || "0",
+            currency: me.node.rateProvider?.price?.currencyCode || "USD",
+          }));
+          zones.push({
+            id: z.zone.id,
+            name: z.zone.name,
+            methods,
+          });
+        }
+      }
+      return {
+        id: p.id,
+        name: p.name,
+        default: p.default,
+        locationGroupId: p.profileLocationGroups?.[0]?.locationGroup?.id,
+        zones,
+      };
+    });
+
+    res.json({ profiles });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/shipping/rates — Update a shipping rate
+ * Body: { profileId, locationGroupId, zoneId, methodId, name, price }
+ */
+router.put("/shipping/rates", async (req, res) => {
+  try {
+    const { profileId, locationGroupId, zoneId, methodId, name, price } = req.body;
+    if (!profileId || !locationGroupId || !zoneId || !methodId) {
+      return res.status(400).json({ error: "Missing required IDs" });
+    }
+
+    const mutation = `mutation {
+      deliveryProfileUpdate(id: "${profileId}", profile: {
+        locationGroupsToUpdate: [{
+          id: "${locationGroupId}",
+          zonesToUpdate: [{
+            id: "${zoneId}",
+            methodDefinitionsToUpdate: [{
+              id: "${methodId}",
+              ${name ? `name: "${name}",` : ""}
+              rateDefinition: { price: { amount: ${parseFloat(price)}, currencyCode: USD } }
+            }]
+          }]
+        }]
+      }) {
+        profile { id }
+        userErrors { field message }
+      }
+    }`;
+
+    const data = await shopifyGql(mutation);
+    if (data.errors) return res.status(400).json({ errors: data.errors });
+
+    const errs = data.data?.deliveryProfileUpdate?.userErrors || [];
+    if (errs.length) return res.status(400).json({ errors: errs });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/fulfillment-orders — Get fulfillment orders from DB
+ */
+router.get("/fulfillment-orders", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("fulfillment_orders")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    res.json({ orders: data || [], error: error?.message });
+  } catch (err) {
+    res.json({ orders: [], error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
 // CARRIER SERVICE — Real-time Printful shipping rates for Shopify checkout
 // ═══════════════════════════════════════════════════════════
 
