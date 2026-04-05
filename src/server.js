@@ -42,6 +42,51 @@ app.use("/api", apiRoutes);
 // Webhook routes
 app.use("/webhooks", webhookRoutes);
 
+// ── Shopify OAuth callback ──────────────────────────────
+app.get("/auth/callback", async (req, res) => {
+  const { code, shop, hmac } = req.query;
+  if (!code || !shop) {
+    return res.status(400).send("Missing code or shop parameter");
+  }
+
+  try {
+    const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: process.env.SHOPIFY_CLIENT_ID,
+        client_secret: process.env.SHOPIFY_CLIENT_SECRET,
+        code,
+      }),
+    });
+
+    const data = await tokenRes.json();
+
+    if (data.access_token) {
+      // Store in env for this process
+      process.env.SHOPIFY_ADMIN_API_TOKEN = data.access_token;
+      console.log("\n✅ New Shopify access token obtained!");
+      console.log("   Scopes:", data.scope);
+      console.log("   Token:", data.access_token.slice(0, 12) + "...");
+      console.log("\n⚠️  Update SHOPIFY_ADMIN_API_TOKEN in Render env vars:");
+      console.log("   ", data.access_token);
+
+      res.send(`
+        <h2>✅ Shopify Connected!</h2>
+        <p><strong>Scopes:</strong> ${data.scope}</p>
+        <p><strong>Access Token:</strong> <code>${data.access_token}</code></p>
+        <p>⚠️ Copy this token and update it in Render environment variables as SHOPIFY_ADMIN_API_TOKEN.</p>
+      `);
+    } else {
+      console.error("Token exchange failed:", data);
+      res.status(400).send(`<h2>❌ Token exchange failed</h2><pre>${JSON.stringify(data, null, 2)}</pre>`);
+    }
+  } catch (err) {
+    console.error("OAuth callback error:", err);
+    res.status(500).send(`<h2>❌ Error</h2><pre>${err.message}</pre>`);
+  }
+});
+
 // Dashboard (serve index.html for all non-API routes)
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
