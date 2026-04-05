@@ -98,14 +98,10 @@ class PrintfulService {
 
   // ── Get available products ─────────────────────────────
   async getProducts() {
-    const { result } = await this.request("GET", "/products");
-    // Filter to poster/print products
-    return result.filter(
-      (p) =>
-        p.title.toLowerCase().includes("poster") ||
-        p.title.toLowerCase().includes("print") ||
-        p.title.toLowerCase().includes("canvas")
-    );
+    // Use /store/products (only synced-to-store products) instead of
+    // /products (entire Printful catalog — 600+ items, way too slow)
+    const { result } = await this.request("GET", "/store/products");
+    return result;
   }
 
   // ── Get product variants ───────────────────────────────

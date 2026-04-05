@@ -136,6 +136,14 @@
   <script>
     const API = '/api';
 
+    // Fetch with timeout — Render free tier cold-starts can take 30-60s
+    function fetchWithTimeout(url, opts = {}, timeoutMs = 30000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(url, { ...opts, signal: controller.signal })
+        .finally(() => clearTimeout(timer));
+    }
+
     function showMsg(text, type) {
       const el = document.getElementById('statusMsg');
       el.className = 'msg ' + type;
@@ -145,17 +153,18 @@
 
     // ── Connection Status ──
     async function loadStatus() {
-      const [pfStatus, shippingData] = await Promise.all([
-        fetch(`${API}/printful/status`).then(r => r.json()).catch(() => ({ connected: false })),
-        fetch(`${API}/shipping/rates`).then(r => r.json()).catch(() => ({ profiles: [] })),
-      ]);
+      const cards = document.getElementById('statusCards');
+      try {
+        const [pfStatus, shippingData] = await Promise.all([
+          fetchWithTimeout(`${API}/printful/status`).then(r => r.json()).catch(() => ({ connected: false, error: 'Request failed' })),
+          fetchWithTimeout(`${API}/shipping/rates`).then(r => r.json()).catch(() => ({ profiles: [] })),
+        ]);
 
       let totalZones = 0;
       if (shippingData.profiles) {
         shippingData.profiles.forEach(p => { totalZones += p.zones?.length || 0; });
       }
 
-      const cards = document.getElementById('statusCards');
       cards.innerHTML = `
         <div class="card">
           <div class="label">Printful API</div>
@@ -178,16 +187,20 @@
           <div class="sub">Orders stay as drafts on Printful</div>
         </div>
       `;
+      } catch (e) {
+        cards.innerHTML = `<div class="card"><div class="label">Status</div><div class="val red">Error</div><div class="sub">${e.name === 'AbortError' ? 'Server is starting up — try refreshing in 30s' : e.message}</div></div>`;
+      }
     }
 
     // ── Shipping Rates ──
     let rateData = null;
 
     async function loadShipping() {
-      const data = await fetch(`${API}/shipping/rates`).then(r => r.json());
-      rateData = data;
-
       const container = document.getElementById('shippingRates');
+      try {
+        const data = await fetchWithTimeout(`${API}/shipping/rates`).then(r => r.json());
+        rateData = data;
+
       if (!data.profiles || !data.profiles.length) {
         container.innerHTML = '<div class="empty">No shipping profiles found</div>';
         return;
@@ -211,6 +224,9 @@
       }
 
       container.innerHTML = html || '<div class="empty">No shipping zones configured</div>';
+      } catch (e) {
+        container.innerHTML = `<div class="empty">Error loading shipping: ${e.name === 'AbortError' ? 'timeout' : e.message}</div>`;
+      }
     }
 
     async function saveRates() {
@@ -224,7 +240,7 @@
         if (isNaN(price) || price < 0) continue;
 
         try {
-          const res = await fetch(`${API}/shipping/rates`, {
+          const res = await fetchWithTimeout(`${API}/shipping/rates`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -260,7 +276,7 @@
       let info = 'Printful rates: ';
       for (const dest of destinations) {
         try {
-          const res = await fetch(`${API}/carrier-service/rates`, {
+          const res = await fetchWithTimeout(`${API}/carrier-service/rates`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -285,17 +301,17 @@
     async function loadProducts() {
       const container = document.getElementById('printfulProducts');
       try {
-        const data = await fetch(`${API}/printful/products`).then(r => r.json());
+        const data = await fetchWithTimeout(`${API}/printful/products`).then(r => r.json());
         if (!data.products || !data.products.length) {
-          container.innerHTML = '<div class="empty">No products found</div>';
+          container.innerHTML = '<div class="empty">No products synced to store</div>';
           return;
         }
         container.innerHTML = data.products.slice(0, 10).map(p => `
           <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
-            ${p.image ? `<img src="${p.image}" style="width:40px;height:40px;border-radius:4px;object-fit:cover;" />` : ''}
+            ${p.thumbnail_url ? `<img src="${p.thumbnail_url}" style="width:40px;height:40px;border-radius:4px;object-fit:cover;" />` : ''}
             <div>
-              <div style="font-size:0.85rem;font-weight:500;">${p.title}</div>
-              <div style="font-size:0.75rem;color:var(--text-dim);">ID: ${p.id}</div>
+              <div style="font-size:0.85rem;font-weight:500;">${p.name || p.title}</div>
+              <div style="font-size:0.75rem;color:var(--text-dim);">ID: ${p.id} · ${p.variants || p.sync_variants?.length || 0} variant(s)</div>
             </div>
           </div>
         `).join('');
@@ -308,7 +324,7 @@
     async function loadPrintfulOrders() {
       const container = document.getElementById('printfulOrders');
       try {
-        const data = await fetch(`${API}/printful/orders`).then(r => r.json());
+        const data = await fetchWithTimeout(`${API}/printful/orders`).then(r => r.json());
         const orders = Array.isArray(data) ? data : (data.value || data.orders || []);
         if (!orders.length) {
           container.innerHTML = '<div class="empty">No orders sent to Printful yet</div>';
@@ -332,7 +348,7 @@
     async function loadFulfillmentOrders() {
       const container = document.getElementById('fulfillmentOrders');
       try {
-        const data = await fetch(`${API}/fulfillment-orders`).then(r => r.json());
+        const data = await fetchWithTimeout(`${API}/fulfillment-orders`).then(r => r.json());
         const orders = data.orders || [];
         if (!orders.length) {
           container.innerHTML = '<div class="empty">No fulfillment orders yet — orders will appear here after customers purchase</div>';
