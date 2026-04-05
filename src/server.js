@@ -18,6 +18,7 @@ const config = require("./config");
 const apiRoutes = require("./routes/api");
 const webhookRoutes = require("./routes/webhooks");
 const { startCronJobs } = require("./scripts/cron");
+const printfulCache = require("./services/printful-cache");
 
 const app = express();
 
@@ -120,5 +121,7 @@ app.listen(config.port, () => {
   // Start cron jobs (daily sync, health checks)
   if (config.env !== "test") {
     startCronJobs();
+    // Start Printful background cache (syncs every 10 min)
+    printfulCache.start();
   }
 });

@@ -21,6 +21,7 @@ const ImageProxy = require("../services/image-proxy");
 const EmbeddingService = require("../services/embedding");
 const PrintfulService = require("../services/printful");
 const printful = new PrintfulService();
+const printfulCache = require("../services/printful-cache");
 
 const router = express.Router();
 
@@ -1819,36 +1820,32 @@ router.post("/drive/stop-watcher", (req, res) => {
 // PRINTFUL — print provider status & orders
 // ═══════════════════════════════════════════════════════════
 
-// GET /api/printful/status — check Printful connection
-router.get("/printful/status", async (req, res) => {
-  try {
-    const status = await printful.verifyConnection();
-    res.json(status);
-  } catch (e) {
-    res.json({ connected: false, error: e.message });
-  }
+// GET /api/printful/status — from background cache (instant)
+router.get("/printful/status", (req, res) => {
+  res.json(printfulCache.getStatus());
 });
 
-// GET /api/printful/products — list available print products
-router.get("/printful/products", async (req, res) => {
-  try {
-    const products = await printful.getProducts();
-    res.json({ count: products.length, products });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+// GET /api/printful/products — from background cache (instant)
+router.get("/printful/products", (req, res) => {
+  const products = printfulCache.getProducts();
+  res.json({ count: products.length, products });
 });
 
-// GET /api/printful/orders — list recent Printful orders
-router.get("/printful/orders", async (req, res) => {
-  try {
-    const offset = parseInt(req.query.offset || "0", 10);
-    const limit = parseInt(req.query.limit || "20", 10);
-    const orders = await printful.listOrders(offset, limit);
-    res.json(orders);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+// GET /api/printful/orders — from background cache (instant)
+router.get("/printful/orders", (req, res) => {
+  const orders = printfulCache.getOrders();
+  res.json(orders);
+});
+
+// POST /api/printful/sync — trigger a manual background re-sync
+router.post("/printful/sync", async (req, res) => {
+  printfulCache.sync(); // fire-and-forget
+  res.json({ message: "Sync started", meta: printfulCache.getMeta() });
+});
+
+// GET /api/printful/cache-meta — check cache health
+router.get("/printful/cache-meta", (req, res) => {
+  res.json(printfulCache.getMeta());
 });
 
 // POST /api/printful/estimate — estimate cost for a print

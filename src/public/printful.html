@@ -86,6 +86,8 @@
     <h1>🖨️ Printful Dashboard</h1>
     <nav>
       <a href="/">← Main Dashboard</a>
+      <span id="syncStatus" style="font-size:0.75rem;color:var(--text-dim);">loading cache...</span>
+      <button class="btn" onclick="triggerSync()" id="syncBtn">🔄 Sync Now</button>
       <button class="btn" onclick="loadAll()">⟳ Refresh</button>
     </nav>
   </header>
@@ -381,7 +383,42 @@
     }
 
     async function loadAll() {
+      // Load cache meta to show sync status
+      try {
+        const meta = await fetchWithTimeout(`${API}/printful/cache-meta`).then(r => r.json());
+        const syncEl = document.getElementById('syncStatus');
+        if (meta.lastSync) {
+          const ago = Math.round((Date.now() - new Date(meta.lastSync).getTime()) / 60000);
+          syncEl.textContent = `Last sync: ${ago < 1 ? 'just now' : ago + 'm ago'} · ${meta.cached.products} products cached`;
+          syncEl.style.color = 'var(--green)';
+        } else if (meta.syncing) {
+          syncEl.textContent = 'Syncing in background...';
+          syncEl.style.color = 'var(--yellow)';
+        } else {
+          syncEl.textContent = 'Not synced yet';
+          syncEl.style.color = 'var(--yellow)';
+        }
+      } catch (e) {
+        document.getElementById('syncStatus').textContent = 'Server starting up...';
+      }
       await Promise.all([loadStatus(), loadShipping(), loadProducts(), loadPrintfulOrders(), loadFulfillmentOrders()]);
+    }
+
+    async function triggerSync() {
+      const btn = document.getElementById('syncBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Syncing...';
+      document.getElementById('syncStatus').textContent = 'Syncing in background...';
+      try {
+        await fetchWithTimeout(`${API}/printful/sync`, { method: 'POST' });
+        showMsg('Background sync started — data will refresh in a few seconds', 'success');
+        // Wait a bit for sync to complete, then reload
+        setTimeout(() => { btn.disabled = false; btn.textContent = '🔄 Sync Now'; loadAll(); }, 8000);
+      } catch (e) {
+        showMsg('Sync request failed: ' + e.message, 'error');
+        btn.disabled = false;
+        btn.textContent = '🔄 Sync Now';
+      }
     }
 
     loadAll();
