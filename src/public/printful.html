@@ -4,6 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Neverland Prints — Printful Dashboard</title>
+  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+  <script>
+    // Initialize Shopify App Bridge when loaded in Shopify admin
+    if (window.shopify) {
+      // App Bridge 4.x auto-initializes
+    } else if (window.__SHOPIFY_DEV_HOST) {
+      // dev mode
+    }
+  </script>
   <style>
     :root {
       --bg: #0f0f0f; --surface: #1a1a1a; --surface2: #242424;

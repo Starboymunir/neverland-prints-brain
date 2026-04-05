@@ -34,6 +34,18 @@ app.use("/webhooks", express.raw({ type: "application/json" }), (req, res, next)
 app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
+
+// Allow Shopify admin to embed this app in an iframe
+app.use((req, res, next) => {
+  const shop = "neverland-prints.myshopify.com";
+  res.setHeader(
+    "Content-Security-Policy",
+    `frame-ancestors https://admin.shopify.com https://${shop}`
+  );
+  res.removeHeader("X-Frame-Options");
+  next();
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 // API routes
