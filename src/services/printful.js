@@ -98,10 +98,24 @@ class PrintfulService {
 
   // ── Get available products ─────────────────────────────
   async getProducts() {
-    // Use /store/products (only synced-to-store products) instead of
-    // /products (entire Printful catalog — 600+ items, way too slow)
-    const { result } = await this.request("GET", "/store/products");
-    return result;
+    // Fetch only the specific product we use (product 268 = Enhanced Matte Paper Poster)
+    // /store/products doesn't work for Shopify-connected stores
+    // /products returns 100k+ items from the full Printful catalog — way too slow
+    const { result } = await this.request("GET", "/products/268");
+    return [
+      {
+        id: result.product.id,
+        title: result.product.title,
+        image: result.product.image,
+        variant_count: result.variants.length,
+        variants: result.variants.map(v => ({
+          id: v.id,
+          name: v.name,
+          size: v.size,
+          price: v.price,
+        })),
+      },
+    ];
   }
 
   // ── Get product variants ───────────────────────────────

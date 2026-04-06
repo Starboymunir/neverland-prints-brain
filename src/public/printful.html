@@ -305,20 +305,25 @@
       try {
         const data = await fetchWithTimeout(`${API}/printful/products`).then(r => r.json());
         if (!data.products || !data.products.length) {
-          container.innerHTML = '<div class="empty">No products synced to store</div>';
+          container.innerHTML = '<div class="empty">No products configured</div>';
           return;
         }
-        container.innerHTML = data.products.slice(0, 10).map(p => `
-          <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
-            ${p.thumbnail_url ? `<img src="${p.thumbnail_url}" style="width:40px;height:40px;border-radius:4px;object-fit:cover;" />` : ''}
-            <div>
-              <div style="font-size:0.85rem;font-weight:500;">${p.name || p.title}</div>
-              <div style="font-size:0.75rem;color:var(--text-dim);">ID: ${p.id} · ${p.variants || p.sync_variants?.length || 0} variant(s)</div>
+        container.innerHTML = data.products.map(p => `
+          <div style="padding:0.75rem 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">
+              ${p.image ? `<img src="${p.image}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;" />` : ''}
+              <div>
+                <div style="font-size:0.9rem;font-weight:600;">${p.title}</div>
+                <div style="font-size:0.75rem;color:var(--text-dim);">Product ID: ${p.id} · ${p.variant_count || p.variants?.length || 0} variants</div>
+              </div>
             </div>
+            ${p.variants ? `<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-left:60px;">
+              ${p.variants.map(v => `<span class="badge connected" style="font-size:0.65rem;">${v.size || v.name}</span>`).join('')}
+            </div>` : ''}
           </div>
         `).join('');
       } catch (e) {
-        container.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+        container.innerHTML = `<div class="empty">Error: ${e.name === 'AbortError' ? 'timeout' : e.message}</div>`;
       }
     }
 
