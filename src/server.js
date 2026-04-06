@@ -20,6 +20,8 @@ const webhookRoutes = require("./routes/webhooks");
 const { startCronJobs } = require("./scripts/cron");
 const printfulCache = require("./services/printful-cache");
 
+const fs = require("fs");
+
 const app = express();
 
 // Raw body middleware for webhook signature verification
@@ -55,9 +57,26 @@ app.use("/api", apiRoutes);
 // Webhook routes
 app.use("/webhooks", webhookRoutes);
 
-// Printful dashboard
+// Printful dashboard — serve with cached data baked in so it loads instantly
 app.get("/printful", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "printful.html"));
+  const htmlPath = path.join(__dirname, "public", "printful.html");
+  let html = fs.readFileSync(htmlPath, "utf8");
+
+  // Inject cached data as a global variable right before the main script
+  const inlineData = JSON.stringify({
+    status: printfulCache.getStatus(),
+    products: printfulCache.getProducts(),
+    orders: printfulCache.getOrders(),
+    meta: printfulCache.getMeta(),
+  });
+  // Escape </ sequences to prevent breaking out of script tag
+  const safeData = inlineData.replace(/<\//g, "<\\/");
+  html = html.replace(
+    "<script>\n    const API",
+    `<script>\n    window.__CACHE__ = ${safeData};\n    const API`
+  );
+
+  res.type("html").send(html);
 });
 
 // ── Shopify OAuth callback ──────────────────────────────

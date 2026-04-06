@@ -137,13 +137,13 @@
 
   <script>
     const API = '/api';
+    const C = window.__CACHE__ || {};  // Server injects cached data here
 
-    // Fetch with timeout — Render free tier cold-starts can take 30-60s
-    function fetchWithTimeout(url, opts = {}, timeoutMs = 30000) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      return fetch(url, { ...opts, signal: controller.signal })
-        .finally(() => clearTimeout(timer));
+    // Fetch with timeout for interactive actions only
+    function fetchT(url, opts = {}, ms = 30000) {
+      const ac = new AbortController();
+      const t = setTimeout(() => ac.abort(), ms);
+      return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(t));
     }
 
     function showMsg(text, type) {
@@ -153,35 +153,23 @@
       setTimeout(() => { el.className = 'msg'; }, 5000);
     }
 
-    // ── Connection Status ──
-    async function loadStatus() {
+    // ═══════════════════════════════════════════════════════
+    // RENDER FROM CACHE — no fetch calls, instant paint
+    // ═══════════════════════════════════════════════════════
+
+    function renderStatus() {
+      const pf = C.status || { connected: false, error: 'No data yet' };
       const cards = document.getElementById('statusCards');
-      try {
-        const [pfStatus, shippingData] = await Promise.all([
-          fetchWithTimeout(`${API}/printful/status`).then(r => r.json()).catch(() => ({ connected: false, error: 'Request failed' })),
-          fetchWithTimeout(`${API}/shipping/rates`).then(r => r.json()).catch(() => ({ profiles: [] })),
-        ]);
-
-      let totalZones = 0;
-      if (shippingData.profiles) {
-        shippingData.profiles.forEach(p => { totalZones += p.zones?.length || 0; });
-      }
-
       cards.innerHTML = `
         <div class="card">
           <div class="label">Printful API</div>
-          <div class="val ${pfStatus.connected ? 'green' : 'red'}">${pfStatus.connected ? '✓ Connected' : '✗ Error'}</div>
-          <div class="sub">${pfStatus.connected ? pfStatus.product || '' : pfStatus.error || 'Not connected'}</div>
+          <div class="val ${pf.connected ? 'green' : 'red'}">${pf.connected ? '✓ Connected' : '✗ Error'}</div>
+          <div class="sub">${pf.connected ? pf.product || '' : pf.error || 'Not connected'}</div>
         </div>
         <div class="card">
           <div class="label">Product</div>
-          <div class="val" style="font-size:1.2rem;">${pfStatus.product || '—'}</div>
-          <div class="sub">${pfStatus.variants || 0} variants available</div>
-        </div>
-        <div class="card">
-          <div class="label">Shipping Zones</div>
-          <div class="val">${totalZones}</div>
-          <div class="sub">${shippingData.profiles?.length || 0} profile(s)</div>
+          <div class="val" style="font-size:1.2rem;">${pf.product || '—'}</div>
+          <div class="sub">${pf.variants || 0} variants available</div>
         </div>
         <div class="card">
           <div class="label">Auto-Confirm Orders</div>
@@ -189,178 +177,57 @@
           <div class="sub">Orders stay as drafts on Printful</div>
         </div>
       `;
-      } catch (e) {
-        cards.innerHTML = `<div class="card"><div class="label">Status</div><div class="val red">Error</div><div class="sub">${e.name === 'AbortError' ? 'Server is starting up — try refreshing in 30s' : e.message}</div></div>`;
-      }
     }
 
-    // ── Shipping Rates ──
-    let rateData = null;
-
-    async function loadShipping() {
-      const container = document.getElementById('shippingRates');
-      try {
-        const data = await fetchWithTimeout(`${API}/shipping/rates`).then(r => r.json());
-        rateData = data;
-
-      if (!data.profiles || !data.profiles.length) {
-        container.innerHTML = '<div class="empty">No shipping profiles found</div>';
+    function renderProducts() {
+      const products = C.products || [];
+      const container = document.getElementById('printfulProducts');
+      if (!products.length) {
+        container.innerHTML = '<div class="empty">No products configured</div>';
         return;
       }
-
-      let html = '';
-      for (const profile of data.profiles) {
-        for (const zone of profile.zones || []) {
-          for (const method of zone.methods || []) {
-            html += `
-              <div class="rate-row" data-profile="${profile.id}" data-lg="${profile.locationGroupId}" data-zone="${zone.id}" data-method="${method.id}">
-                <span class="rate-zone">${zone.name}</span>
-                <span class="rate-name">${method.name}</span>
-                <span class="rate-price">$</span>
-                <input type="number" step="0.01" min="0" class="rate-input" value="${parseFloat(method.price).toFixed(2)}" />
-                <span style="font-size:0.8rem;color:var(--text-dim)">${method.currency}</span>
-              </div>
-            `;
-          }
-        }
-      }
-
-      container.innerHTML = html || '<div class="empty">No shipping zones configured</div>';
-      } catch (e) {
-        container.innerHTML = `<div class="empty">Error loading shipping: ${e.name === 'AbortError' ? 'timeout' : e.message}</div>`;
-      }
-    }
-
-    async function saveRates() {
-      const rows = document.querySelectorAll('.rate-row');
-      let saved = 0;
-      let errors = 0;
-
-      for (const row of rows) {
-        const input = row.querySelector('.rate-input');
-        const price = parseFloat(input.value);
-        if (isNaN(price) || price < 0) continue;
-
-        try {
-          const res = await fetchWithTimeout(`${API}/shipping/rates`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              profileId: row.dataset.profile,
-              locationGroupId: row.dataset.lg,
-              zoneId: row.dataset.zone,
-              methodId: row.dataset.method,
-              price: price,
-            }),
-          });
-          const data = await res.json();
-          if (data.success) { saved++; } else { errors++; }
-        } catch (e) { errors++; }
-      }
-
-      if (errors === 0) {
-        showMsg(`✅ Saved ${saved} shipping rate(s) successfully!`, 'success');
-      } else {
-        showMsg(`Saved ${saved}, ${errors} failed`, 'error');
-      }
-      loadShipping();
-    }
-
-    async function fetchPrintfulRates() {
-      const status = document.getElementById('rateStatus');
-      status.textContent = 'Fetching from Printful...';
-
-      const destinations = [
-        { label: 'Domestic', country: 'US', province: 'NY', postal_code: '10001', city: 'New York', address1: '123 Main St' },
-        { label: 'International', country: 'GB', province: '', postal_code: 'W1D 1BS', city: 'London', address1: '1 Oxford St' },
-      ];
-
-      let info = 'Printful rates: ';
-      for (const dest of destinations) {
-        try {
-          const res = await fetchWithTimeout(`${API}/carrier-service/rates`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              rate: {
-                destination: dest,
-                items: [{ sku: 'NP-MEDIUM-UNFRAMED', quantity: 1 }],
-                currency: 'USD',
-              },
-            }),
-          });
-          const data = await res.json();
-          if (data.rates && data.rates.length > 0) {
-            const price = (parseInt(data.rates[0].total_price) / 100).toFixed(2);
-            info += `${dest.label}: $${price}  `;
-          }
-        } catch (e) { /* skip */ }
-      }
-      status.textContent = info;
-    }
-
-    // ── Printful Products ──
-    async function loadProducts() {
-      const container = document.getElementById('printfulProducts');
-      try {
-        const data = await fetchWithTimeout(`${API}/printful/products`).then(r => r.json());
-        if (!data.products || !data.products.length) {
-          container.innerHTML = '<div class="empty">No products configured</div>';
-          return;
-        }
-        container.innerHTML = data.products.map(p => `
-          <div style="padding:0.75rem 0;border-bottom:1px solid var(--border);">
-            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">
-              ${p.image ? `<img src="${p.image}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;" />` : ''}
-              <div>
-                <div style="font-size:0.9rem;font-weight:600;">${p.title}</div>
-                <div style="font-size:0.75rem;color:var(--text-dim);">Product ID: ${p.id} · ${p.variant_count || p.variants?.length || 0} variants</div>
-              </div>
-            </div>
-            ${p.variants ? `<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-left:60px;">
-              ${p.variants.map(v => `<span class="badge connected" style="font-size:0.65rem;">${v.size || v.name}</span>`).join('')}
-            </div>` : ''}
-          </div>
-        `).join('');
-      } catch (e) {
-        container.innerHTML = `<div class="empty">Error: ${e.name === 'AbortError' ? 'timeout' : e.message}</div>`;
-      }
-    }
-
-    // ── Printful Orders ──
-    async function loadPrintfulOrders() {
-      const container = document.getElementById('printfulOrders');
-      try {
-        const data = await fetchWithTimeout(`${API}/printful/orders`).then(r => r.json());
-        const orders = Array.isArray(data) ? data : (data.value || data.orders || []);
-        if (!orders.length) {
-          container.innerHTML = '<div class="empty">No orders sent to Printful yet</div>';
-          return;
-        }
-        container.innerHTML = orders.slice(0, 10).map(o => `
-          <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
-            <span class="badge ${o.status === 'fulfilled' ? 'fulfilled' : o.status === 'failed' ? 'failed' : 'sent'}">${o.status}</span>
+      container.innerHTML = products.map(p => `
+        <div style="padding:0.75rem 0;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">
+            ${p.image ? `<img src="${p.image}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;" />` : ''}
             <div>
-              <div style="font-size:0.85rem;font-weight:500;">#${o.id || o.external_id}</div>
-              <div style="font-size:0.75rem;color:var(--text-dim);">${o.created ? new Date(o.created * 1000).toLocaleDateString() : ''}</div>
+              <div style="font-size:0.9rem;font-weight:600;">${p.title}</div>
+              <div style="font-size:0.75rem;color:var(--text-dim);">Product ID: ${p.id} · ${p.variant_count || p.variants?.length || 0} variants</div>
             </div>
           </div>
-        `).join('');
-      } catch (e) {
-        container.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
-      }
+          ${p.variants ? `<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-left:60px;">
+            ${p.variants.map(v => `<span class="badge connected" style="font-size:0.65rem;">${v.size || v.name}</span>`).join('')}
+          </div>` : ''}
+        </div>
+      `).join('');
     }
 
-    // ── Fulfillment Orders (DB) ──
-    async function loadFulfillmentOrders() {
+    function renderOrders() {
+      const orders = Array.isArray(C.orders) ? C.orders : [];
+      const container = document.getElementById('printfulOrders');
+      if (!orders.length) {
+        container.innerHTML = '<div class="empty">No orders sent to Printful yet</div>';
+        return;
+      }
+      container.innerHTML = orders.slice(0, 10).map(o => `
+        <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
+          <span class="badge ${o.status === 'fulfilled' ? 'fulfilled' : o.status === 'failed' ? 'failed' : 'sent'}">${o.status}</span>
+          <div>
+            <div style="font-size:0.85rem;font-weight:500;">#${o.id || o.external_id}</div>
+            <div style="font-size:0.75rem;color:var(--text-dim);">${o.created ? new Date(o.created * 1000).toLocaleDateString() : ''}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderFulfillmentOrders() {
       const container = document.getElementById('fulfillmentOrders');
-      try {
-        const data = await fetchWithTimeout(`${API}/fulfillment-orders`).then(r => r.json());
+      // Fulfillment orders come from DB — not cached, fetch on demand
+      container.innerHTML = '<div class="empty">No fulfillment orders yet — orders will appear here after customers purchase</div>';
+      // Try to fetch from DB in background
+      fetchT(`${API}/fulfillment-orders`).then(r => r.json()).then(data => {
         const orders = data.orders || [];
-        if (!orders.length) {
-          container.innerHTML = '<div class="empty">No fulfillment orders yet — orders will appear here after customers purchase</div>';
-          return;
-        }
+        if (!orders.length) return;
         container.innerHTML = `
           <table>
             <thead><tr>
@@ -382,51 +249,135 @@
             </tbody>
           </table>
         `;
-      } catch (e) {
-        container.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+      }).catch(() => {});
+    }
+
+    function renderSyncMeta() {
+      const meta = C.meta || {};
+      const el = document.getElementById('syncStatus');
+      if (meta.lastSync) {
+        const ago = Math.round((Date.now() - new Date(meta.lastSync).getTime()) / 60000);
+        el.textContent = `Last sync: ${ago < 1 ? 'just now' : ago + 'm ago'} · ${meta.cached?.products || 0} product(s) cached`;
+        el.style.color = 'var(--green)';
+      } else if (meta.syncing) {
+        el.textContent = 'Syncing in background...';
+        el.style.color = 'var(--yellow)';
+      } else {
+        el.textContent = C.status ? 'Cached' : 'Waiting for first sync...';
+        el.style.color = 'var(--yellow)';
       }
     }
 
-    async function loadAll() {
-      // Load cache meta to show sync status
-      try {
-        const meta = await fetchWithTimeout(`${API}/printful/cache-meta`).then(r => r.json());
-        const syncEl = document.getElementById('syncStatus');
-        if (meta.lastSync) {
-          const ago = Math.round((Date.now() - new Date(meta.lastSync).getTime()) / 60000);
-          syncEl.textContent = `Last sync: ${ago < 1 ? 'just now' : ago + 'm ago'} · ${meta.cached.products} products cached`;
-          syncEl.style.color = 'var(--green)';
-        } else if (meta.syncing) {
-          syncEl.textContent = 'Syncing in background...';
-          syncEl.style.color = 'var(--yellow)';
-        } else {
-          syncEl.textContent = 'Not synced yet';
-          syncEl.style.color = 'var(--yellow)';
+    // ═══════════════════════════════════════════════════════
+    // SHIPPING — needs live Shopify data (not from Printful cache)
+    // ═══════════════════════════════════════════════════════
+    let rateData = null;
+
+    function loadShipping() {
+      const container = document.getElementById('shippingRates');
+      fetchT(`${API}/shipping/rates`).then(r => {
+        if (!r.ok) throw new Error(`Shopify API error (${r.status})`);
+        return r.json();
+      }).then(data => {
+        rateData = data;
+        if (!data.profiles || !data.profiles.length) {
+          container.innerHTML = '<div class="empty">No shipping profiles found</div>';
+          return;
         }
-      } catch (e) {
-        document.getElementById('syncStatus').textContent = 'Server starting up...';
-      }
-      await Promise.all([loadStatus(), loadShipping(), loadProducts(), loadPrintfulOrders(), loadFulfillmentOrders()]);
+        let html = '';
+        for (const profile of data.profiles) {
+          for (const zone of profile.zones || []) {
+            for (const method of zone.methods || []) {
+              html += `
+                <div class="rate-row" data-profile="${profile.id}" data-lg="${profile.locationGroupId}" data-zone="${zone.id}" data-method="${method.id}">
+                  <span class="rate-zone">${zone.name}</span>
+                  <span class="rate-name">${method.name}</span>
+                  <span class="rate-price">$</span>
+                  <input type="number" step="0.01" min="0" class="rate-input" value="${parseFloat(method.price).toFixed(2)}" />
+                  <span style="font-size:0.8rem;color:var(--text-dim)">${method.currency}</span>
+                </div>
+              `;
+            }
+          }
+        }
+        container.innerHTML = html || '<div class="empty">No shipping zones configured</div>';
+      }).catch(e => {
+        container.innerHTML = `<div class="empty" style="color:var(--red);">⚠ Shipping rates unavailable — Shopify API token may need refreshing</div>`;
+      });
     }
 
+    async function saveRates() {
+      const rows = document.querySelectorAll('.rate-row');
+      let saved = 0, errors = 0;
+      for (const row of rows) {
+        const input = row.querySelector('.rate-input');
+        const price = parseFloat(input.value);
+        if (isNaN(price) || price < 0) continue;
+        try {
+          const res = await fetchT(`${API}/shipping/rates`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              profileId: row.dataset.profile, locationGroupId: row.dataset.lg,
+              zoneId: row.dataset.zone, methodId: row.dataset.method, price,
+            }),
+          });
+          const data = await res.json();
+          if (data.success) saved++; else errors++;
+        } catch (e) { errors++; }
+      }
+      showMsg(errors === 0 ? `✅ Saved ${saved} rate(s)!` : `Saved ${saved}, ${errors} failed`, errors ? 'error' : 'success');
+      loadShipping();
+    }
+
+    async function fetchPrintfulRates() {
+      const status = document.getElementById('rateStatus');
+      status.textContent = 'Fetching from Printful...';
+      const dests = [
+        { label: 'Domestic', country: 'US', province: 'NY', postal_code: '10001', city: 'New York', address1: '123 Main St' },
+        { label: 'International', country: 'GB', province: '', postal_code: 'W1D 1BS', city: 'London', address1: '1 Oxford St' },
+      ];
+      let info = 'Printful rates: ';
+      for (const dest of dests) {
+        try {
+          const res = await fetchT(`${API}/carrier-service/rates`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rate: { destination: dest, items: [{ sku: 'NP-MEDIUM-UNFRAMED', quantity: 1 }], currency: 'USD' } }),
+          });
+          const data = await res.json();
+          if (data.rates?.length) info += `${dest.label}: $${(parseInt(data.rates[0].total_price) / 100).toFixed(2)}  `;
+        } catch (e) { /* skip */ }
+      }
+      status.textContent = info;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // SYNC — manual refresh from Printful
+    // ═══════════════════════════════════════════════════════
     async function triggerSync() {
       const btn = document.getElementById('syncBtn');
       btn.disabled = true;
       btn.textContent = '⏳ Syncing...';
-      document.getElementById('syncStatus').textContent = 'Syncing in background...';
       try {
-        await fetchWithTimeout(`${API}/printful/sync`, { method: 'POST' });
-        showMsg('Background sync started — data will refresh in a few seconds', 'success');
-        // Wait a bit for sync to complete, then reload
-        setTimeout(() => { btn.disabled = false; btn.textContent = '🔄 Sync Now'; loadAll(); }, 8000);
+        await fetchT(`${API}/printful/sync`, { method: 'POST' });
+        showMsg('Sync started — refreshing page in 8s...', 'success');
+        setTimeout(() => location.reload(), 8000);
       } catch (e) {
-        showMsg('Sync request failed: ' + e.message, 'error');
+        showMsg('Sync failed: ' + e.message, 'error');
         btn.disabled = false;
         btn.textContent = '🔄 Sync Now';
       }
     }
 
-    loadAll();
+    // ═══════════════════════════════════════════════════════
+    // BOOT — render cached data instantly, then fetch live shipping
+    // ═══════════════════════════════════════════════════════
+    renderSyncMeta();
+    renderStatus();
+    renderProducts();
+    renderOrders();
+    renderFulfillmentOrders();
+    loadShipping();  // only live fetch — shipping rates from Shopify
   </script>
 </body>
 </html>
