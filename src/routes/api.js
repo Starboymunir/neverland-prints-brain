@@ -2279,6 +2279,9 @@ router.post("/prices/bulk-update-tags", async (req, res) => {
 
 const SHOPIFY_GQL = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/${process.env.SHOPIFY_API_VERSION || "2024-10"}/graphql.json`;
 function shopifyGql(query) {
+  if (!process.env.SHOPIFY_ADMIN_API_TOKEN) {
+    return Promise.resolve({ errors: "SHOPIFY_ADMIN_API_TOKEN not configured" });
+  }
   return fetch(SHOPIFY_GQL, {
     method: "POST",
     headers: {
@@ -2286,7 +2289,10 @@ function shopifyGql(query) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query }),
-  }).then(r => r.json());
+  }).then(r => {
+    if (!r.ok) return r.text().then(t => ({ errors: t || `HTTP ${r.status}` }));
+    return r.json();
+  }).catch(e => ({ errors: e.message }));
 }
 
 /**
@@ -2294,10 +2300,13 @@ function shopifyGql(query) {
  */
 router.get("/shipping/rates", async (req, res) => {
   try {
+    if (!process.env.SHOPIFY_ADMIN_API_TOKEN) {
+      return res.status(400).json({ error: "SHOPIFY_ADMIN_API_TOKEN not configured" });
+    }
     const data = await shopifyGql(`{
       deliveryProfiles(first: 5) {
         edges { node {
-          id name default
+          id name
           profileLocationGroups {
             locationGroup { id }
             locationGroupZones(first: 20) {
@@ -2320,7 +2329,16 @@ router.get("/shipping/rates", async (req, res) => {
       }
     }`);
 
-    if (data.errors) return res.status(400).json({ errors: data.errors });
+    if (data.errors) {
+      const errMsg = typeof data.errors === 'string' ? data.errors : JSON.stringify(data.errors);
+      const isAuthError = errMsg.toLowerCase().includes('invalid api key') || errMsg.toLowerCase().includes('access token');
+      return res.status(isAuthError ? 401 : 400).json({
+        error: isAuthError
+          ? 'Shopify API token is expired or invalid. Re-install the app or update SHOPIFY_ADMIN_API_TOKEN in Render env vars.'
+          : errMsg,
+        errors: data.errors,
+      });
+    }
 
     const profiles = (data.data.deliveryProfiles.edges || []).map(e => {
       const p = e.node;
@@ -2387,7 +2405,10 @@ router.put("/shipping/rates", async (req, res) => {
     }`;
 
     const data = await shopifyGql(mutation);
-    if (data.errors) return res.status(400).json({ errors: data.errors });
+    if (data.errors) {
+      const errMsg = typeof data.errors === 'string' ? data.errors : JSON.stringify(data.errors);
+      return res.status(400).json({ error: errMsg, errors: data.errors });
+    }
 
     const errs = data.data?.deliveryProfileUpdate?.userErrors || [];
     if (errs.length) return res.status(400).json({ errors: errs });

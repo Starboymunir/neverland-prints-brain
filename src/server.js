@@ -71,9 +71,10 @@ app.get("/printful", (req, res) => {
   });
   // Escape </ sequences to prevent breaking out of script tag
   const safeData = inlineData.replace(/<\//g, "<\\/");
+  // Use a placeholder comment in the HTML for reliable injection
   html = html.replace(
-    "<script>\n    const API",
-    `<script>\n    window.__CACHE__ = ${safeData};\n    const API`
+    /let C = window\.__CACHE__ \|\| \{\};/,
+    `window.__CACHE__ = ${safeData};\n    let C = window.__CACHE__ || {};`
   );
 
   res.type("html").send(html);
