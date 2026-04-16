@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -18,7 +18,6 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
-
     header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.75rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; backdrop-filter: blur(12px); }
     header h1 { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
     header h1 span { font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; }
@@ -26,14 +25,11 @@
     .header-actions a { color: var(--text-dim); text-decoration: none; font-size: 0.8rem; padding: 0.4rem 0.75rem; border-radius: var(--radius-sm); transition: all 0.15s; }
     .header-actions a:hover { color: var(--text); background: var(--surface2); }
     #syncStatus { font-size: 0.7rem; color: var(--text-muted); max-width: 200px; text-align: right; }
-
     .container { max-width: 1240px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
-
     .toast { position: fixed; top: 1rem; right: 1rem; z-index: 100; padding: 0.75rem 1.25rem; border-radius: var(--radius); font-size: 0.85rem; font-weight: 500; transform: translateX(120%); transition: transform 0.3s ease; max-width: 400px; }
     .toast.show { transform: translateX(0); }
     .toast.success { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); }
     .toast.error { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
-
     .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; position: relative; overflow: hidden; }
     .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
@@ -43,14 +39,12 @@
     .card .label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
     .card .val { font-size: 1.5rem; font-weight: 700; }
     .card .sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem; }
-
     .section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1.5rem; overflow: hidden; }
     .section-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
     .section-header h2 { font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
     .section-header .actions { display: flex; gap: 0.5rem; align-items: center; }
     .section-body { padding: 1.25rem; }
     .section-footer { padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; }
-
     .btn { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.9rem; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.78rem; font-weight: 600; border: 1px solid var(--border); background: var(--surface2); color: var(--text); transition: all 0.15s; }
     .btn:hover { background: var(--surface3); border-color: var(--border-light); }
     .btn:active { transform: scale(0.97); }
@@ -62,20 +56,6 @@
     .btn.sm { padding: 0.3rem 0.6rem; font-size: 0.72rem; }
     .btn.ghost { background: transparent; border-color: transparent; color: var(--text-dim); }
     .btn.ghost:hover { color: var(--text); background: var(--surface2); }
-
-    .badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 2px 8px; border-radius: 20px; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
-    .badge.green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
-    .badge.yellow { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-border); }
-    .badge.red { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
-    .badge.blue { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(59,130,246,0.25); }
-    .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.6rem 0.75rem; background: var(--surface2); }
-    td { padding: 0.65rem 0.75rem; font-size: 0.82rem; border-bottom: 1px solid var(--border); }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(255,255,255,0.02); }
-
     .rate-grid { display: grid; gap: 0; }
     .rate-item { display: grid; grid-template-columns: 140px 1fr 120px 80px; align-items: center; gap: 1rem; padding: 0.85rem 0; border-bottom: 1px solid var(--border); }
     .rate-item:last-child { border-bottom: none; }
@@ -84,42 +64,27 @@
     .rate-input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.65rem; border-radius: var(--radius-sm); font-size: 0.9rem; font-weight: 600; width: 100%; text-align: right; font-family: 'SF Mono','Fira Code',monospace; transition: border-color 0.15s; }
     .rate-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
     .rate-currency { font-size: 0.75rem; color: var(--text-muted); }
-
-    .product-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
-    .product-item:last-child { border-bottom: none; }
-    .product-img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: var(--surface2); flex-shrink: 0; }
-    .product-info h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem; }
-    .product-meta { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem; }
-    .variant-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-    .variant-tag { background: var(--surface3); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 500; border: 1px solid var(--border); }
-
     .empty { text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); }
     .empty .icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.5; }
     .empty .text { font-size: 0.85rem; }
-    .empty .hint { font-size: 0.75rem; margin-top: 0.35rem; color: var(--text-muted); }
-
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-
+    .empty .hint { font-size: 0.75rem; margin-top: 0.35rem; }
     .skeleton { background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; height: 1rem; }
     @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-    @media (max-width: 900px) { .cards { grid-template-columns: repeat(2, 1fr); } .two-col { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { .cards { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 600px) { .cards { grid-template-columns: 1fr; } .container { padding: 1rem; } header { padding: 0.75rem 1rem; } .rate-item { grid-template-columns: 1fr 1fr; gap: 0.5rem; } }
   </style>
 </head>
 <body>
   <header>
-    <h1>🖨️ Printful <span id="connBadge" style="background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border);">checking...</span></h1>
+    <h1>Printful <span id="connBadge" style="background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow-border);">checking...</span></h1>
     <div class="header-actions">
       <span id="syncStatus"></span>
-      <a href="/">← Main Dashboard</a>
-      <button class="btn sm" onclick="loadAll()" id="refreshBtn">⟳ Refresh</button>
+      <a href="/">Main Dashboard</a>
+      <button class="btn sm" onclick="loadAll()" id="refreshBtn">Refresh</button>
       <button class="btn sm primary" onclick="triggerSync()" id="syncBtn">Sync Printful</button>
     </div>
   </header>
-
   <div id="toast" class="toast"></div>
-
   <div class="container">
     <div class="cards" id="statusCards">
       <div class="card"><div class="label">Status</div><div class="skeleton" style="width:60%;height:1.5rem;margin-top:0.25rem;"></div></div>
@@ -127,71 +92,45 @@
       <div class="card"><div class="label">Orders</div><div class="skeleton" style="width:40%;height:1.5rem;margin-top:0.25rem;"></div></div>
       <div class="card"><div class="label">Last Sync</div><div class="skeleton" style="width:70%;height:1.5rem;margin-top:0.25rem;"></div></div>
     </div>
-
     <div class="section">
       <div class="section-header">
-        <h2>📦 Shipping Rates</h2>
+        <h2>Shipping Rates</h2>
         <div class="actions">
           <button class="btn sm ghost" onclick="fetchPrintfulRates()" id="pfRateBtn">Compare Printful Rates</button>
           <button class="btn sm green" onclick="saveRates()" id="saveRateBtn">Save Changes</button>
         </div>
       </div>
       <div class="section-body" id="shippingRates">
-        <div class="empty"><div class="icon">📦</div><div class="skeleton" style="width:200px;margin:0 auto;"></div></div>
+        <div class="empty"><div class="skeleton" style="width:200px;margin:0 auto;"></div></div>
       </div>
       <div class="section-footer" id="shippingFooter" style="display:none;">
         <span id="rateStatus" style="font-size:0.75rem;color:var(--text-muted);"></span>
-        <span style="font-size:0.72rem;color:var(--text-muted);">Edit values above → click Save Changes</span>
-      </div>
-    </div>
-
-    <div class="two-col">
-      <div class="section">
-        <div class="section-header"><h2>🛍️ Products</h2></div>
-        <div class="section-body" id="printfulProducts">
-          <div class="skeleton" style="height:3rem;margin-bottom:0.5rem;"></div>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-header"><h2>📋 Printful Orders</h2></div>
-        <div class="section-body" id="printfulOrders" style="padding:0;">
-          <div style="padding:1.25rem;"><div class="skeleton" style="height:3rem;"></div></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-header">
-        <h2>📋 Fulfillment Log</h2>
-        <div class="actions"><button class="btn sm ghost" onclick="renderFulfillmentOrders()">⟳</button></div>
-      </div>
-      <div class="section-body" id="fulfillmentOrders" style="padding:0;">
-        <div style="padding:1.25rem;"><div class="skeleton" style="height:2rem;"></div></div>
+        <span style="font-size:0.72rem;color:var(--text-muted);">Edit values above then click Save Changes</span>
       </div>
     </div>
   </div>
-
   <script>
-    const API = '/api';
+    var API = '/api';
     let C = window.__CACHE__ || {};
 
-    function fetchT(url, opts = {}, ms = 30000) {
-      const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), ms);
-      return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(t));
+    function fetchT(url, opts, ms) {
+      opts = opts || {}; ms = ms || 30000;
+      var ac = new AbortController();
+      var t = setTimeout(function() { ac.abort(); }, ms);
+      return fetch(url, Object.assign({}, opts, { signal: ac.signal })).finally(function() { clearTimeout(t); });
     }
 
-    function toast(text, type = 'success') {
-      const el = document.getElementById('toast');
+    function toast(text, type) {
+      type = type || 'success';
+      var el = document.getElementById('toast');
       el.textContent = text;
       el.className = 'toast ' + type + ' show';
-      setTimeout(() => el.classList.remove('show'), 4000);
+      setTimeout(function() { el.classList.remove('show'); }, 4000);
     }
 
     function timeAgo(iso) {
       if (!iso) return 'never';
-      const ms = Date.now() - new Date(iso).getTime();
-      const m = Math.floor(ms / 60000);
+      var m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
       if (m < 1) return 'just now';
       if (m < 60) return m + 'm ago';
       return Math.floor(m / 60) + 'h ago';
@@ -199,93 +138,56 @@
 
     function renderStatus(pf) {
       pf = pf || C.status || { connected: false, error: 'Loading...' };
-      const meta = C.meta || {};
-      const orderCount = (Array.isArray(C.orders) ? C.orders : []).length;
-      const badge = document.getElementById('connBadge');
+      var meta = C.meta || {};
+      var orderCount = (Array.isArray(C.orders) ? C.orders : []).length;
+      var badge = document.getElementById('connBadge');
       badge.textContent = pf.connected ? 'Connected' : 'Disconnected';
       badge.style.cssText = pf.connected
         ? 'background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);font-size:0.7rem;padding:2px 8px;border-radius:20px;'
         : 'background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);font-size:0.7rem;padding:2px 8px;border-radius:20px;';
-
-      document.getElementById('statusCards').innerHTML = `
-        <div class="card ${pf.connected ? 'ok' : 'err'}">
-          <div class="label">API Status</div>
-          <div class="val" style="color:${pf.connected ? 'var(--green)' : 'var(--red)'};">${pf.connected ? '● Connected' : '● Error'}</div>
-          <div class="sub">${pf.connected ? 'Printful API responding' : (pf.error || 'Connection failed')}</div>
-        </div>
-        <div class="card ok">
-          <div class="label">Active Product</div>
-          <div class="val" style="font-size:1rem;color:var(--text);">${pf.product || '—'}</div>
-          <div class="sub">${pf.variants || 0} size variants</div>
-        </div>
-        <div class="card ${orderCount > 0 ? 'ok' : 'warn'}">
-          <div class="label">Total Orders</div>
-          <div class="val" style="color:var(--accent-light);">${orderCount}</div>
-          <div class="sub">${orderCount === 0 ? 'No orders yet' : 'Sent to Printful'}</div>
-        </div>
-        <div class="card ${meta.lastSync ? 'ok' : 'warn'}">
-          <div class="label">Last Synced</div>
-          <div class="val" style="font-size:1rem;color:var(--text);">${timeAgo(meta.lastSync)}</div>
-          <div class="sub">${meta.syncing ? 'Syncing now...' : (meta.cached?.products || 0) + ' product(s) cached'}</div>
-        </div>`;
+      document.getElementById('statusCards').innerHTML =
+        '<div class="card ' + (pf.connected ? 'ok' : 'err') + '">' +
+          '<div class="label">API Status</div>' +
+          '<div class="val" style="color:' + (pf.connected ? 'var(--green)' : 'var(--red)') + ';">' + (pf.connected ? 'Connected' : 'Error') + '</div>' +
+          '<div class="sub">' + (pf.connected ? 'Printful API responding' : (pf.error || 'Connection failed')) + '</div>' +
+        '</div>' +
+        '<div class="card ok">' +
+          '<div class="label">Active Product</div>' +
+          '<div class="val" style="font-size:1rem;color:var(--text);">' + (pf.product || '—') + '</div>' +
+          '<div class="sub">' + (pf.variants || 0) + ' size variants</div>' +
+        '</div>' +
+        '<div class="card ' + (orderCount > 0 ? 'ok' : 'warn') + '">' +
+          '<div class="label">Total Orders</div>' +
+          '<div class="val" style="color:var(--accent-light);">' + orderCount + '</div>' +
+          '<div class="sub">' + (orderCount === 0 ? 'No orders yet' : 'Sent to Printful') + '</div>' +
+        '</div>' +
+        '<div class="card ' + (meta.lastSync ? 'ok' : 'warn') + '">' +
+          '<div class="label">Last Synced</div>' +
+          '<div class="val" style="font-size:1rem;color:var(--text);">' + timeAgo(meta.lastSync) + '</div>' +
+          '<div class="sub">' + (meta.syncing ? 'Syncing now...' : ((meta.cached && meta.cached.products) || 0) + ' product(s) cached') + '</div>' +
+        '</div>';
     }
 
-    function renderSyncMeta(meta) {
-      meta = meta || C.meta || {};
-      const el = document.getElementById('syncStatus');
+    function renderSyncMeta() {
+      var meta = C.meta || {};
+      var el = document.getElementById('syncStatus');
       if (meta.lastSync) { el.textContent = 'Synced ' + timeAgo(meta.lastSync); el.style.color = 'var(--green)'; }
       else if (meta.syncing) { el.textContent = 'Syncing...'; el.style.color = 'var(--yellow)'; }
       else { el.textContent = ''; }
     }
 
-    function renderProducts(products) {
-      products = products || C.products || [];
-      const el = document.getElementById('printfulProducts');
-      if (!products.length) { el.innerHTML = '<div class="empty"><div class="icon">🛍️</div><div class="text">No products configured</div></div>'; return; }
-      el.innerHTML = products.map(p => `
-        <div class="product-item">
-          ${p.image ? '<img src="' + p.image + '" class="product-img" alt="" />' : '<div class="product-img"></div>'}
-          <div class="product-info">
-            <h3>${p.title}</h3>
-            <div class="product-meta">ID: ${p.id} · ${p.variant_count || (p.variants ? p.variants.length : 0)} variants</div>
-            ${p.variants ? '<div class="variant-tags">' + p.variants.map(v => '<span class="variant-tag">' + (v.size || v.name) + (v.price ? ' · $' + v.price : '') + '</span>').join('') + '</div>' : ''}
-          </div>
-        </div>`).join('');
-    }
-
-    function renderOrders(orders) {
-      orders = Array.isArray(orders) ? orders : (Array.isArray(C.orders) ? C.orders : []);
-      const el = document.getElementById('printfulOrders');
-      if (!orders.length) { el.innerHTML = '<div class="empty" style="padding:2rem;"><div class="icon">📋</div><div class="text">No orders yet</div><div class="hint">Orders appear here after customers purchase</div></div>'; return; }
-      el.innerHTML = '<table><thead><tr><th>Order</th><th>Status</th><th>Date</th></tr></thead><tbody>' +
-        orders.slice(0, 15).map(o => {
-          const st = o.status || 'pending';
-          const cls = st === 'fulfilled' ? 'green' : st === 'failed' ? 'red' : st === 'canceled' ? 'yellow' : 'blue';
-          return '<tr><td style="font-weight:600;">#' + (o.id || o.external_id) + '</td><td><span class="badge ' + cls + '">' + st + '</span></td><td style="color:var(--text-dim);">' + (o.created ? new Date(o.created * 1000).toLocaleDateString() : '—') + '</td></tr>';
-        }).join('') + '</tbody></table>';
-    }
-
-    function renderFulfillmentOrders() {
-      const el = document.getElementById('fulfillmentOrders');
-      el.innerHTML = '<div style="padding:1.25rem;"><div class="skeleton" style="height:2rem;"></div></div>';
-      fetchT(API + '/fulfillment-orders').then(r => r.json()).then(data => {
-        const orders = data.orders || [];
-        if (!orders.length) { el.innerHTML = '<div class="empty" style="padding:2rem;"><div class="icon">📦</div><div class="text">No fulfillment orders</div><div class="hint">Orders appear after customers purchase prints</div></div>'; return; }
-        el.innerHTML = '<table><thead><tr><th>Order</th><th>Artwork</th><th>Artist</th><th>Size</th><th>Frame</th><th>Price</th><th>Status</th><th>Date</th></tr></thead><tbody>' +
-          orders.map(o => {
-            const st = o.status || 'pending';
-            const cls = st === 'sent_to_printful' ? 'blue' : st === 'fulfilled' ? 'green' : st === 'failed' ? 'red' : 'yellow';
-            return '<tr><td style="font-weight:600;">' + (o.order_name || o.shopify_order_id) + '</td><td>' + (o.artwork_title || '—') + '</td><td>' + (o.artist || '—') + '</td><td>' + (o.size || '—') + '</td><td>' + (o.frame || '—') + '</td><td style="font-weight:600;">$' + (o.price || '—') + '</td><td><span class="badge ' + cls + '">' + st.replace(/_/g, ' ') + '</span></td><td style="color:var(--text-dim);">' + (o.created_at ? new Date(o.created_at).toLocaleDateString() : '—') + '</td></tr>';
-          }).join('') + '</tbody></table>';
-      }).catch(() => { el.innerHTML = '<div class="empty" style="padding:2rem;"><div class="text">Could not load orders</div></div>'; });
-    }
-
     function loadShipping() {
-      const el = document.getElementById('shippingRates');
-      const footer = document.getElementById('shippingFooter');
-      fetchT(API + '/shipping/rates').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(data => {
+      var el = document.getElementById('shippingRates');
+      var footer = document.getElementById('shippingFooter');
+      fetchT(API + '/shipping/rates').then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function(data) {
         if (data.error || data.errors) throw new Error(data.error || JSON.stringify(data.errors));
-        if (!data.profiles || !data.profiles.length) { el.innerHTML = '<div class="empty"><div class="icon">📦</div><div class="text">No shipping profiles</div><div class="hint">Set up shipping in Shopify admin first</div></div>'; return; }
+        if (!data.profiles || !data.profiles.length) {
+          el.innerHTML = '<div class="empty"><div class="text">No shipping profiles found</div><div class="hint">Set up shipping in Shopify admin first</div></div>';
+          return;
+        }
         var html = '<div class="rate-grid">';
         for (var i = 0; i < data.profiles.length; i++) {
           var profile = data.profiles[i];
@@ -306,10 +208,10 @@
         html += '</div>';
         el.innerHTML = html;
         footer.style.display = 'flex';
-      }).catch(e => {
+      }).catch(function(e) {
         var msg = e.message || '';
         var isAuth = msg.indexOf('token') > -1 || msg.indexOf('Invalid API') > -1 || msg.indexOf('401') > -1;
-        el.innerHTML = '<div class="empty"><div class="icon">⚠️</div><div class="text">' + (isAuth ? 'Shopify API token expired' : 'Could not load shipping rates') + '</div><div class="hint">' + (isAuth ? 'Re-authorize the app in Shopify Admin or update the token.' : msg) + '</div></div>';
+        el.innerHTML = '<div class="empty"><div class="text">' + (isAuth ? 'Shopify API token expired' : 'Could not load shipping rates') + '</div><div class="hint">' + (isAuth ? 'Re-authorize the app in Shopify Admin or update the token.' : msg) + '</div></div>';
         footer.style.display = 'none';
       });
     }
@@ -320,9 +222,7 @@
       var rows = document.querySelectorAll('.rate-item');
       var saved = 0, errors = 0;
       for (var i = 0; i < rows.length; i++) {
-        var row = rows[i];
-        var input = row.querySelector('.rate-input');
-        var price = parseFloat(input.value);
+        var row = rows[i], input = row.querySelector('.rate-input'), price = parseFloat(input.value);
         if (isNaN(price) || price < 0) continue;
         try {
           var res = await fetchT(API + '/shipping/rates', {
@@ -335,13 +235,12 @@
         } catch (ex) { errors++; input.style.borderColor = 'var(--red)'; }
       }
       btn.disabled = false; btn.textContent = 'Save Changes';
-      toast(errors === 0 ? 'Saved ' + saved + ' shipping rate(s)' : saved + ' saved, ' + errors + ' failed', errors ? 'error' : 'success');
+      toast(errors === 0 ? 'Saved ' + saved + ' rate(s)' : saved + ' saved, ' + errors + ' failed', errors ? 'error' : 'success');
       setTimeout(function() { loadShipping(); }, 1500);
     }
 
     async function fetchPrintfulRates() {
-      var btn = document.getElementById('pfRateBtn');
-      var status = document.getElementById('rateStatus');
+      var btn = document.getElementById('pfRateBtn'), status = document.getElementById('rateStatus');
       btn.disabled = true; btn.textContent = 'Fetching...';
       var dests = [
         { label: 'US', country: 'US', province: 'NY', postal_code: '10001', city: 'New York', address1: '123 Main St' },
@@ -349,17 +248,16 @@
       ];
       var info = '';
       for (var i = 0; i < dests.length; i++) {
-        var dest = dests[i];
         try {
           var res = await fetchT(API + '/carrier-service/rates', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rate: { destination: dest, items: [{ sku: 'NP-MEDIUM-UNFRAMED', quantity: 1 }], currency: 'USD' } }),
+            body: JSON.stringify({ rate: { destination: dests[i], items: [{ sku: 'NP-MEDIUM-UNFRAMED', quantity: 1 }], currency: 'USD' } }),
           });
           var data = await res.json();
-          if (data.rates && data.rates.length) info += dest.label + ': $' + (parseInt(data.rates[0].total_price) / 100).toFixed(2) + '  ';
+          if (data.rates && data.rates.length) info += dests[i].label + ': $' + (parseInt(data.rates[0].total_price) / 100).toFixed(2) + '  ';
         } catch (ex) {}
       }
-      status.textContent = info ? 'Printful actual cost → ' + info : 'Could not fetch Printful rates';
+      status.textContent = info ? 'Printful actual cost: ' + info : 'Could not fetch Printful rates';
       btn.disabled = false; btn.textContent = 'Compare Printful Rates';
     }
 
@@ -368,7 +266,7 @@
       btn.disabled = true; btn.textContent = 'Syncing...';
       try {
         await fetchT(API + '/printful/sync', { method: 'POST' });
-        toast('Sync started — refreshing in 5s...');
+        toast('Sync started - refreshing in 5s...');
         setTimeout(function() { location.reload(); }, 5000);
       } catch (e) {
         toast('Sync failed: ' + e.message, 'error');
@@ -393,971 +291,16 @@
         renderAll();
         toast('Dashboard refreshed');
       } catch (e) { toast('Refresh failed', 'error'); }
-      btn.disabled = false; btn.textContent = '⟳ Refresh';
+      btn.disabled = false; btn.textContent = 'Refresh';
     }
 
     function renderAll() {
       renderSyncMeta();
       renderStatus();
-      renderProducts();
-      renderOrders();
-      renderFulfillmentOrders();
       loadShipping();
     }
 
-    // Boot
     if (C.status) { renderAll(); } else { loadAll(); }
-  </script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Neverland Prints — Printful Dashboard</title>
-  <style>
-    :root {
-      --bg: #0a0a0b; --surface: #141417; --surface2: #1e1e22; --surface3: #28282e;
-      --border: #2a2a30; --border-light: #38383f;
-      --text: #e8e8ec; --text-dim: #8b8b95; --text-muted: #5a5a64;
-      --accent: #7c5cfc; --accent-light: #a78bfa; --accent-bg: rgba(124,92,252,0.1);
-      --green: #22c55e; --green-bg: rgba(34,197,94,0.1); --green-border: rgba(34,197,94,0.25);
-      --yellow: #eab308; --yellow-bg: rgba(234,179,8,0.1); --yellow-border: rgba(234,179,8,0.25);
-      --red: #ef4444; --red-bg: rgba(239,68,68,0.1); --red-border: rgba(239,68,68,0.25);
-      --blue: #3b82f6; --blue-bg: rgba(59,130,246,0.1);
-      --radius: 10px; --radius-sm: 6px;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
-
-    /* ── Header ── */
-    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.75rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; backdrop-filter: blur(12px); }
-    header h1 { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
-    header h1 span { font-size: 0.7rem; background: var(--green-bg); color: var(--green); padding: 2px 8px; border-radius: 20px; border: 1px solid var(--green-border); }
-    .header-actions { display: flex; gap: 0.5rem; align-items: center; }
-    .header-actions a { color: var(--text-dim); text-decoration: none; font-size: 0.8rem; padding: 0.4rem 0.75rem; border-radius: var(--radius-sm); transition: all 0.15s; }
-    .header-actions a:hover { color: var(--text); background: var(--surface2); }
-    #syncStatus { font-size: 0.7rem; color: var(--text-muted); max-width: 200px; text-align: right; }
-
-    .container { max-width: 1240px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
-
-    /* ── Toast ── */
-    .toast { position: fixed; top: 1rem; right: 1rem; z-index: 100; padding: 0.75rem 1.25rem; border-radius: var(--radius); font-size: 0.85rem; font-weight: 500; transform: translateX(120%); transition: transform 0.3s ease; max-width: 400px; }
-    .toast.show { transform: translateX(0); }
-    .toast.success { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); }
-    .toast.error { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
-
-    /* ── Status Cards ── */
-    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; position: relative; overflow: hidden; }
-    .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
-    .card.ok::before { background: var(--green); }
-    .card.warn::before { background: var(--yellow); }
-    .card.err::before { background: var(--red); }
-    .card .label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
-    .card .val { font-size: 1.5rem; font-weight: 700; }
-    .card .sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem; }
-
-    /* ── Sections ── */
-    .section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1.5rem; overflow: hidden; }
-    .section-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
-    .section-header h2 { font-size: 0.9rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
-    .section-header .actions { display: flex; gap: 0.5rem; align-items: center; }
-    .section-body { padding: 1.25rem; }
-    .section-footer { padding: 0.75rem 1.25rem; border-top: 1px solid var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; }
-
-    /* ── Buttons ── */
-    .btn { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.9rem; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.78rem; font-weight: 600; border: 1px solid var(--border); background: var(--surface2); color: var(--text); transition: all 0.15s; }
-    .btn:hover { background: var(--surface3); border-color: var(--border-light); }
-    .btn:active { transform: scale(0.97); }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .btn.primary:hover { background: var(--accent-light); }
-    .btn.green { background: var(--green); border-color: var(--green); color: #fff; }
-    .btn.green:hover { background: #16a34a; }
-    .btn.sm { padding: 0.3rem 0.6rem; font-size: 0.72rem; }
-    .btn.ghost { background: transparent; border-color: transparent; color: var(--text-dim); }
-    .btn.ghost:hover { color: var(--text); background: var(--surface2); }
-
-    /* ── Badges ── */
-    .badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 2px 8px; border-radius: 20px; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
-    .badge.green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
-    .badge.yellow { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-border); }
-    .badge.red { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
-    .badge.blue { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(59,130,246,0.25); }
-    .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-
-    /* ── Tables ── */
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.6rem 0.75rem; background: var(--surface2); }
-    td { padding: 0.65rem 0.75rem; font-size: 0.82rem; border-bottom: 1px solid var(--border); }
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: rgba(255,255,255,0.02); }
-
-    /* ── Shipping Rate Rows ── */
-    .rate-grid { display: grid; gap: 0; }
-    .rate-item { display: grid; grid-template-columns: 140px 1fr 120px 80px; align-items: center; gap: 1rem; padding: 0.85rem 0; border-bottom: 1px solid var(--border); }
-    .rate-item:last-child { border-bottom: none; }
-    .rate-zone { font-weight: 600; font-size: 0.85rem; }
-    .rate-method { color: var(--text-dim); font-size: 0.82rem; }
-    .rate-input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 0.5rem 0.65rem; border-radius: var(--radius-sm); font-size: 0.9rem; font-weight: 600; width: 100%; text-align: right; font-family: 'SF Mono', 'Fira Code', monospace; transition: border-color 0.15s; }
-    .rate-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
-    .rate-currency { font-size: 0.75rem; color: var(--text-muted); }
-
-    /* ── Product Cards ── */
-    .product-item { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
-    .product-item:last-child { border-bottom: none; }
-    .product-img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: var(--surface2); flex-shrink: 0; }
-    .product-info h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem; }
-    .product-meta { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem; }
-    .variant-tags { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-    .variant-tag { background: var(--surface3); color: var(--text-dim); padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 500; border: 1px solid var(--border); }
-
-    /* ── Empty State ── */
-    .empty { text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); }
-    .empty .icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.5; }
-    .empty .text { font-size: 0.85rem; }
-    .empty .hint { font-size: 0.75rem; margin-top: 0.35rem; color: var(--text-muted); }
-
-    /* ── Grid layouts ── */
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-
-    /* ── Skeleton loading ── */
-    .skeleton { background: linear-gradient(90deg, var(--surface2) 25%, var(--surface3) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; height: 1rem; }
-    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-    /* ── Responsive ── */
-    @media (max-width: 900px) { .cards { grid-template-columns: repeat(2, 1fr); } .two-col { grid-template-columns: 1fr; } }
-    @media (max-width: 600px) { .cards { grid-template-columns: 1fr; } .container { padding: 1rem; } header { padding: 0.75rem 1rem; } .rate-item { grid-template-columns: 1fr 1fr; gap: 0.5rem; } }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>🖨️ Printful <span id="connBadge">checking...</span></h1>
-    <div class="header-actions">
-      <span id="syncStatus"></span>
-      <a href="/">← Main Dashboard</a>
-      <button class="btn sm" onclick="loadAll()" id="refreshBtn">⟳ Refresh</button>
-      <button class="btn sm primary" onclick="triggerSync()" id="syncBtn">Sync Printful</button>
-    </div>
-  </header>
-
-  <div id="toast" class="toast"></div>
-
-  <div class="container">
-    <!-- Status Cards -->
-    <div class="cards" id="statusCards">
-      <div class="card"><div class="label">Status</div><div class="skeleton" style="width:60%;height:1.5rem;margin-top:0.25rem;"></div></div>
-      <div class="card"><div class="label">Product</div><div class="skeleton" style="width:80%;height:1.5rem;margin-top:0.25rem;"></div></div>
-      <div class="card"><div class="label">Orders</div><div class="skeleton" style="width:40%;height:1.5rem;margin-top:0.25rem;"></div></div>
-      <div class="card"><div class="label">Last Sync</div><div class="skeleton" style="width:70%;height:1.5rem;margin-top:0.25rem;"></div></div>
-    </div>
-
-    <!-- Shipping Rates -->
-    <div class="section">
-      <div class="section-header">
-        <h2>📦 Shipping Rates</h2>
-        <div class="actions">
-          <button class="btn sm ghost" onclick="fetchPrintfulRates()" id="pfRateBtn">Compare Printful Rates</button>
-          <button class="btn sm green" onclick="saveRates()" id="saveRateBtn">Save Changes</button>
-        </div>
-      </div>
-      <div class="section-body" id="shippingRates">
-        <div class="empty"><div class="icon">📦</div><div class="skeleton" style="width:200px;margin:0 auto;"></div></div>
-      </div>
-      <div class="section-footer" id="shippingFooter" style="display:none;">
-        <span id="rateStatus" style="font-size:0.75rem;color:var(--text-muted);"></span>
-        <span style="font-size:0.72rem;color:var(--text-muted);">These rates appear at Shopify checkout. Edit the values and click Save.</span>
-      </div>
-    </div>
-
-    <div class="two-col">
-      <!-- Products -->
-      <div class="section">
-        <div class="section-header">
-          <h2>🛍️ Products</h2>
-        </div>
-        <div class="section-body" id="printfulProducts">
-          <div class="skeleton" style="height:3rem;margin-bottom:0.5rem;"></div>
-        </div>
-      </div>
-
-      <!-- Orders -->
-      <div class="section">
-        <div class="section-header">
-          <h2>📋 Printful Orders</h2>
-        </div>
-        <div class="section-body" id="printfulOrders">
-          <div class="skeleton" style="height:3rem;margin-bottom:0.5rem;"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Fulfillment Orders -->
-    <div class="section">
-      <div class="section-header">
-        <h2>📋 Fulfillment Log</h2>
-        <div class="actions">
-          <button class="btn sm ghost" onclick="renderFulfillmentOrders()">⟳</button>
-        </div>
-      </div>
-      <div class="section-body" id="fulfillmentOrders" style="padding:0;">
-        <div style="padding:1.25rem;"><div class="skeleton" style="height:2rem;"></div></div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    const API = '/api';
-    let C = window.__CACHE__ || {};
-
-    // ── Utilities ──
-    function fetchT(url, opts = {}, ms = 30000) {
-      const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), ms);
-      return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(t));
-    }
-
-    function toast(text, type = 'success') {
-      const el = document.getElementById('toast');
-      el.textContent = text;
-      el.className = 'toast ' + type + ' show';
-      setTimeout(() => el.classList.remove('show'), 4000);
-    }
-
-    function timeAgo(iso) {
-      if (!iso) return 'never';
-      const ms = Date.now() - new Date(iso).getTime();
-      const m = Math.floor(ms / 60000);
-      if (m < 1) return 'just now';
-      if (m < 60) return m + 'm ago';
-      const h = Math.floor(m / 60);
-      return h + 'h ago';
-    }
-
-    // ── Render: Status Cards ──
-    function renderStatus(pf) {
-      pf = pf || C.status || { connected: false, error: 'Loading...' };
-      const meta = C.meta || {};
-      const orderCount = (Array.isArray(C.orders) ? C.orders : []).length;
-      const badge = document.getElementById('connBadge');
-      badge.textContent = pf.connected ? 'Connected' : 'Disconnected';
-      badge.style.background = pf.connected ? 'var(--green-bg)' : 'var(--red-bg)';
-      badge.style.color = pf.connected ? 'var(--green)' : 'var(--red)';
-      badge.style.borderColor = pf.connected ? 'var(--green-border)' : 'var(--red-border)';
-      badge.style.border = '1px solid';
-
-      document.getElementById('statusCards').innerHTML = `
-        <div class="card ${pf.connected ? 'ok' : 'err'}">
-          <div class="label">API Status</div>
-          <div class="val" style="color:${pf.connected ? 'var(--green)' : 'var(--red)'};">${pf.connected ? '● Connected' : '● Error'}</div>
-          <div class="sub">${pf.connected ? 'Printful API responding normally' : (pf.error || 'Connection failed')}</div>
-        </div>
-        <div class="card ok">
-          <div class="label">Active Product</div>
-          <div class="val" style="font-size:1rem;color:var(--text);">${pf.product || '—'}</div>
-          <div class="sub">${pf.variants || 0} size variants</div>
-        </div>
-        <div class="card ${orderCount > 0 ? 'ok' : 'warn'}">
-          <div class="label">Total Orders</div>
-          <div class="val" style="color:var(--accent-light);">${orderCount}</div>
-          <div class="sub">${orderCount === 0 ? 'No orders yet' : 'Sent to Printful'}</div>
-        </div>
-        <div class="card ${meta.lastSync ? 'ok' : 'warn'}">
-          <div class="label">Last Synced</div>
-          <div class="val" style="font-size:1rem;color:var(--text);">${timeAgo(meta.lastSync)}</div>
-          <div class="sub">${meta.syncing ? 'Syncing now...' : (meta.cached?.products || 0) + ' product(s) cached'}</div>
-        </div>
-      `;
-    }
-
-    // ── Render: Sync Meta ──
-    function renderSyncMeta(meta) {
-      meta = meta || C.meta || {};
-      const el = document.getElementById('syncStatus');
-      if (meta.lastSync) {
-        el.textContent = 'Synced ' + timeAgo(meta.lastSync);
-        el.style.color = 'var(--green)';
-      } else if (meta.syncing) {
-        el.textContent = 'Syncing...';
-        el.style.color = 'var(--yellow)';
-      } else {
-        el.textContent = '';
-      }
-    }
-
-    // ── Render: Products ──
-    function renderProducts(products) {
-      products = products || C.products || [];
-      const el = document.getElementById('printfulProducts');
-      if (!products.length) {
-        el.innerHTML = '<div class="empty"><div class="icon">🛍️</div><div class="text">No products configured</div></div>';
-        return;
-      }
-      el.innerHTML = products.map(p => `
-        <div class="product-item">
-          ${p.image ? `<img src="${p.image}" class="product-img" alt="${p.title}" />` : '<div class="product-img"></div>'}
-          <div class="product-info">
-            <h3>${p.title}</h3>
-            <div class="product-meta">ID: ${p.id} · ${p.variant_count || p.variants?.length || 0} variants</div>
-            ${p.variants ? `<div class="variant-tags">
-              ${p.variants.map(v => `<span class="variant-tag">${v.size || v.name}${v.price ? ' · $' + v.price : ''}</span>`).join('')}
-            </div>` : ''}
-          </div>
-        </div>
-      `).join('');
-    }
-
-    // ── Render: Orders ──
-    function renderOrders(orders) {
-      orders = Array.isArray(orders) ? orders : (Array.isArray(C.orders) ? C.orders : []);
-      const el = document.getElementById('printfulOrders');
-      if (!orders.length) {
-        el.innerHTML = '<div class="empty"><div class="icon">📋</div><div class="text">No orders yet</div><div class="hint">Orders appear here after customers purchase</div></div>';
-        return;
-      }
-      el.innerHTML = '<table><thead><tr><th>Order</th><th>Status</th><th>Date</th></tr></thead><tbody>' +
-        orders.slice(0, 15).map(o => {
-          const st = o.status || 'pending';
-          const cls = st === 'fulfilled' ? 'green' : st === 'failed' ? 'red' : st === 'canceled' ? 'yellow' : 'blue';
-          return `<tr>
-            <td style="font-weight:600;">#${o.id || o.external_id}</td>
-            <td><span class="badge ${cls}">${st}</span></td>
-            <td style="color:var(--text-dim);">${o.created ? new Date(o.created * 1000).toLocaleDateString() : '—'}</td>
-          </tr>`;
-        }).join('') +
-        '</tbody></table>';
-    }
-
-    // ── Render: Fulfillment Orders ──
-    function renderFulfillmentOrders() {
-      const el = document.getElementById('fulfillmentOrders');
-      el.innerHTML = '<div style="padding:1.25rem;"><div class="skeleton" style="height:2rem;"></div></div>';
-      fetchT(`${API}/fulfillment-orders`).then(r => r.json()).then(data => {
-        const orders = data.orders || [];
-        if (!orders.length) {
-          el.innerHTML = '<div class="empty"><div class="icon">📦</div><div class="text">No fulfillment orders</div><div class="hint">Orders appear here after customers purchase prints</div></div>';
-          return;
-        }
-        el.innerHTML = `<table>
-          <thead><tr><th>Order</th><th>Artwork</th><th>Artist</th><th>Size</th><th>Frame</th><th>Price</th><th>Status</th><th>Date</th></tr></thead>
-          <tbody>${orders.map(o => {
-            const st = o.status || 'pending';
-            const cls = st === 'sent_to_printful' ? 'blue' : st === 'fulfilled' ? 'green' : st === 'failed' ? 'red' : 'yellow';
-            return `<tr>
-              <td style="font-weight:600;">${o.order_name || o.shopify_order_id}</td>
-              <td>${o.artwork_title || '—'}</td>
-              <td>${o.artist || '—'}</td>
-              <td>${o.size || '—'}</td>
-              <td>${o.frame || '—'}</td>
-              <td style="font-weight:600;">$${o.price || '—'}</td>
-              <td><span class="badge ${cls}">${st.replace(/_/g, ' ')}</span></td>
-              <td style="color:var(--text-dim);">${o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table>`;
-      }).catch(() => {
-        el.innerHTML = '<div class="empty"><div class="text">Could not load orders</div></div>';
-      });
-    }
-
-    // ── Shipping Rates ──
-    function loadShipping() {
-      const el = document.getElementById('shippingRates');
-      const footer = document.getElementById('shippingFooter');
-      fetchT(`${API}/shipping/rates`).then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      }).then(data => {
-        if (data.error || data.errors) throw new Error(data.error || JSON.stringify(data.errors));
-        if (!data.profiles?.length) {
-          el.innerHTML = '<div class="empty"><div class="icon">📦</div><div class="text">No shipping profiles</div><div class="hint">Set up shipping in Shopify admin first</div></div>';
-          return;
-        }
-        let html = '<div class="rate-grid">';
-        for (const profile of data.profiles) {
-          for (const zone of profile.zones || []) {
-            for (const method of zone.methods || []) {
-              html += `
-                <div class="rate-item" data-profile="${profile.id}" data-lg="${profile.locationGroupId}" data-zone="${zone.id}" data-method="${method.id}">
-                  <div class="rate-zone">${zone.name}</div>
-                  <div class="rate-method">${method.name}</div>
-                  <div><input type="number" step="0.01" min="0" class="rate-input" value="${parseFloat(method.price).toFixed(2)}" /></div>
-                  <div class="rate-currency">${method.currency}</div>
-                </div>
-              `;
-            }
-          }
-        }
-        html += '</div>';
-        el.innerHTML = html;
-        footer.style.display = 'flex';
-      }).catch(e => {
-        const msg = e.message || '';
-        const isAuth = msg.includes('token') || msg.includes('Invalid API') || msg.includes('401');
-        el.innerHTML = `<div class="empty">
-          <div class="icon">⚠️</div>
-          <div class="text">${isAuth ? 'Shopify API token expired' : 'Could not load shipping rates'}</div>
-          <div class="hint">${isAuth
-            ? 'The access token needs to be refreshed. Go to Shopify Admin → Apps → re-authorize.'
-            : e.message}</div>
-        </div>`;
-        footer.style.display = 'none';
-      });
-    }
-
-    async function saveRates() {
-      const btn = document.getElementById('saveRateBtn');
-      btn.disabled = true; btn.textContent = 'Saving...';
-      const rows = document.querySelectorAll('.rate-item');
-      let saved = 0, errors = 0;
-      for (const row of rows) {
-        const input = row.querySelector('.rate-input');
-        const price = parseFloat(input.value);
-        if (isNaN(price) || price < 0) continue;
-        try {
-          const res = await fetchT(`${API}/shipping/rates`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              profileId: row.dataset.profile, locationGroupId: row.dataset.lg,
-              zoneId: row.dataset.zone, methodId: row.dataset.method, price,
-            }),
-          });
-          const data = await res.json();
-          if (data.success) { saved++; input.style.borderColor = 'var(--green)'; }
-          else { errors++; input.style.borderColor = 'var(--red)'; }
-        } catch { errors++; input.style.borderColor = 'var(--red)'; }
-      }
-      btn.disabled = false; btn.textContent = 'Save Changes';
-      toast(errors === 0 ? `Saved ${saved} shipping rate(s)` : `${saved} saved, ${errors} failed`, errors ? 'error' : 'success');
-      setTimeout(() => loadShipping(), 1500);
-    }
-
-    async function fetchPrintfulRates() {
-      const btn = document.getElementById('pfRateBtn');
-      const status = document.getElementById('rateStatus');
-      btn.disabled = true; btn.textContent = 'Fetching...';
-      status.textContent = '';
-      const dests = [
-        { label: 'US', country: 'US', province: 'NY', postal_code: '10001', city: 'New York', address1: '123 Main St' },
-        { label: 'UK', country: 'GB', province: '', postal_code: 'W1D 1BS', city: 'London', address1: '1 Oxford St' },
-      ];
-      let info = '';
-      for (const dest of dests) {
-        try {
-          const res = await fetchT(`${API}/carrier-service/rates`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rate: { destination: dest, items: [{ sku: 'NP-MEDIUM-UNFRAMED', quantity: 1 }], currency: 'USD' } }),
-          });
-          const data = await res.json();
-          if (data.rates?.length) info += `${dest.label}: $${(parseInt(data.rates[0].total_price) / 100).toFixed(2)}  `;
-        } catch {}
-      }
-      status.textContent = info ? 'Printful actual: ' + info : 'Could not fetch Printful rates';
-      btn.disabled = false; btn.textContent = 'Compare Printful Rates';
-    }
-
-    // ── Sync & Refresh ──
-    async function triggerSync() {
-      const btn = document.getElementById('syncBtn');
-      btn.disabled = true; btn.textContent = 'Syncing...';
-      try {
-        await fetchT(`${API}/printful/sync`, { method: 'POST' });
-        toast('Sync started — refreshing in 5s...');
-        setTimeout(() => location.reload(), 5000);
-      } catch (e) {
-        toast('Sync failed: ' + e.message, 'error');
-        btn.disabled = false; btn.textContent = 'Sync Printful';
-      }
-    }
-
-    async function loadAll() {
-      const btn = document.getElementById('refreshBtn');
-      btn.disabled = true; btn.textContent = 'Loading...';
-      try {
-        const [statusRes, productsRes, ordersRes, metaRes] = await Promise.allSettled([
-          fetchT(`${API}/printful/status`).then(r => r.json()),
-          fetchT(`${API}/printful/products`).then(r => r.json()),
-          fetchT(`${API}/printful/orders`).then(r => r.json()),
-          fetchT(`${API}/printful/cache-meta`).then(r => r.json()),
-        ]);
-        if (statusRes.status === 'fulfilled') C.status = statusRes.value;
-        if (productsRes.status === 'fulfilled') C.products = productsRes.value.products || productsRes.value;
-        if (ordersRes.status === 'fulfilled') C.orders = Array.isArray(ordersRes.value) ? ordersRes.value : [];
-        if (metaRes.status === 'fulfilled') C.meta = metaRes.value;
-        renderAll();
-        toast('Dashboard refreshed');
-      } catch (e) {
-        toast('Refresh failed: ' + e.message, 'error');
-      }
-      btn.disabled = false; btn.textContent = '⟳ Refresh';
-    }
-
-    function renderAll() {
-      renderSyncMeta();
-      renderStatus();
-      renderProducts();
-      renderOrders();
-      renderFulfillmentOrders();
-      loadShipping();
-    }
-
-    // ── Boot ──
-    // If cache injected by server, render instantly
-    if (C.status) {
-      renderAll();
-    } else {
-      // Cold start — fetch everything
-      loadAll();
-    }
-  </script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Neverland Prints — Printful Dashboard</title>
-  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
-  <script>
-    // Initialize Shopify App Bridge when loaded in Shopify admin
-    if (window.shopify) {
-      // App Bridge 4.x auto-initializes
-    } else if (window.__SHOPIFY_DEV_HOST) {
-      // dev mode
-    }
-  </script>
-  <style>
-    :root {
-      --bg: #0f0f0f; --surface: #1a1a1a; --surface2: #242424;
-      --border: #333; --text: #e8e8e8; --text-dim: #888;
-      --accent: #7c5cfc; --accent-light: #a78bfa;
-      --green: #22c55e; --yellow: #eab308; --red: #ef4444; --blue: #3b82f6;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-
-    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; }
-    header h1 { font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
-    header nav { display: flex; gap: 1rem; align-items: center; }
-    header nav a { color: var(--text-dim); text-decoration: none; font-size: 0.85rem; }
-    header nav a:hover { color: var(--text); }
-
-    .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; }
-    .card .label { font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
-    .card .val { font-size: 2rem; font-weight: 700; color: var(--accent-light); }
-    .card .sub { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem; }
-    .card .val.green { color: var(--green); }
-    .card .val.red { color: var(--red); }
-    .card .val.yellow { color: var(--yellow); }
-
-    .section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
-    .section h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
-
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
-    .badge.connected { background: rgba(34,197,94,0.15); color: var(--green); }
-    .badge.disconnected { background: rgba(239,68,68,0.15); color: var(--red); }
-    .badge.pending { background: rgba(234,179,8,0.15); color: var(--yellow); }
-    .badge.sent { background: rgba(59,130,246,0.15); color: var(--blue); }
-    .badge.fulfilled { background: rgba(34,197,94,0.15); color: var(--green); }
-    .badge.failed { background: rgba(239,68,68,0.15); color: var(--red); }
-
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
-    td { padding: 0.6rem 0.75rem; font-size: 0.85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    tr:hover td { background: var(--surface2); }
-
-    .rate-row { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
-    .rate-row:last-child { border-bottom: none; }
-    .rate-zone { font-weight: 600; min-width: 140px; }
-    .rate-name { color: var(--text-dim); min-width: 160px; }
-    .rate-price { font-size: 1.1rem; font-weight: 700; color: var(--green); min-width: 80px; }
-    .rate-input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.9rem; width: 100px; }
-    .rate-input:focus { outline: none; border-color: var(--accent); }
-
-    .btn { background: var(--accent); color: #fff; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
-    .btn:hover { background: var(--accent-light); }
-    .btn.sm { padding: 0.3rem 0.6rem; font-size: 0.75rem; }
-    .btn.green { background: var(--green); }
-    .btn.green:hover { background: #16a34a; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .msg { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; display: none; }
-    .msg.success { display: block; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: var(--green); }
-    .msg.error { display: block; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--red); }
-
-    .empty { text-align: center; padding: 2rem; color: var(--text-dim); }
-
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-    @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>🖨️ Printful Dashboard</h1>
-    <nav>
-      <a href="/">← Main Dashboard</a>
-      <span id="syncStatus" style="font-size:0.75rem;color:var(--text-dim);">loading cache...</span>
-      <button class="btn" onclick="triggerSync()" id="syncBtn">🔄 Sync Now</button>
-      <button class="btn" onclick="loadAll()">⟳ Refresh</button>
-    </nav>
-  </header>
-
-  <div class="container">
-    <!-- Status Cards -->
-    <div class="cards" id="statusCards">
-      <div class="card"><div class="label">Loading...</div><div class="val">—</div></div>
-    </div>
-
-    <div id="statusMsg" class="msg"></div>
-
-    <!-- Shipping Rates -->
-    <div class="section">
-      <h2>📦 Shipping Rates</h2>
-      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:1rem;">
-        These flat rates appear at Shopify checkout. Update them to match Printful's current pricing.
-      </p>
-      <div id="shippingRates"><div class="empty">Loading shipping rates...</div></div>
-      <div style="margin-top:1rem;display:flex;gap:0.75rem;align-items:center;">
-        <button class="btn green" onclick="saveRates()">💾 Save Rates</button>
-        <button class="btn" onclick="fetchPrintfulRates()">🔄 Fetch Printful Rates</button>
-        <span id="rateStatus" style="font-size:0.8rem;color:var(--text-dim);"></span>
-      </div>
-    </div>
-
-    <div class="two-col">
-      <!-- Printful Products -->
-      <div class="section">
-        <h2>🛍️ Printful Products</h2>
-        <div id="printfulProducts"><div class="empty">Loading...</div></div>
-      </div>
-
-      <!-- Printful Orders -->
-      <div class="section">
-        <h2>📋 Printful Orders</h2>
-        <div id="printfulOrders"><div class="empty">Loading...</div></div>
-      </div>
-    </div>
-
-    <!-- Fulfillment Orders from DB -->
-    <div class="section">
-      <h2>📋 Fulfillment Orders (Local DB)</h2>
-      <div id="fulfillmentOrders"><div class="empty">Loading...</div></div>
-    </div>
-  </div>
-
-  <script>
-    const API = '/api';
-    let C = window.__CACHE__ || {};  // Server injects cached data here
-
-    // Fetch with timeout
-    function fetchT(url, opts = {}, ms = 30000) {
-      const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), ms);
-      return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(t));
-    }
-
-    function showMsg(text, type) {
-      const el = document.getElementById('statusMsg');
-      el.className = 'msg ' + type;
-      el.textContent = text;
-      setTimeout(() => { el.className = 'msg'; }, 5000);
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // RENDER FUNCTIONS
-    // ═══════════════════════════════════════════════════════
-
-    function renderStatus(pf) {
-      pf = pf || C.status || { connected: false, error: 'No data yet' };
-      const cards = document.getElementById('statusCards');
-      cards.innerHTML = `
-        <div class="card">
-          <div class="label">Printful API</div>
-          <div class="val ${pf.connected ? 'green' : 'red'}">${pf.connected ? '✓ Connected' : '✗ Error'}</div>
-          <div class="sub">${pf.connected ? pf.product || '' : pf.error || 'Not connected'}</div>
-        </div>
-        <div class="card">
-          <div class="label">Product</div>
-          <div class="val" style="font-size:1.2rem;">${pf.product || '—'}</div>
-          <div class="sub">${pf.variants || 0} variants available</div>
-        </div>
-        <div class="card">
-          <div class="label">Auto-Confirm Orders</div>
-          <div class="val" style="font-size:1.2rem;color:var(--yellow)">Off</div>
-          <div class="sub">Orders stay as drafts on Printful</div>
-        </div>
-      `;
-    }
-
-    function renderProducts(products) {
-      products = products || C.products || [];
-      const container = document.getElementById('printfulProducts');
-      if (!products.length) {
-        container.innerHTML = '<div class="empty">No products configured</div>';
-        return;
-      }
-      container.innerHTML = products.map(p => `
-        <div style="padding:0.75rem 0;border-bottom:1px solid var(--border);">
-          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;">
-            ${p.image ? `<img src="${p.image}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;" />` : ''}
-            <div>
-              <div style="font-size:0.9rem;font-weight:600;">${p.title}</div>
-              <div style="font-size:0.75rem;color:var(--text-dim);">Product ID: ${p.id} · ${p.variant_count || p.variants?.length || 0} variants</div>
-            </div>
-          </div>
-          ${p.variants ? `<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-left:60px;">
-            ${p.variants.map(v => `<span class="badge connected" style="font-size:0.65rem;">${v.size || v.name}</span>`).join('')}
-          </div>` : ''}
-        </div>
-      `).join('');
-    }
-
-    function renderOrders(orders) {
-      orders = Array.isArray(orders) ? orders : (Array.isArray(C.orders) ? C.orders : []);
-      const container = document.getElementById('printfulOrders');
-      if (!orders.length) {
-        container.innerHTML = '<div class="empty">No orders sent to Printful yet</div>';
-        return;
-      }
-      container.innerHTML = orders.slice(0, 10).map(o => `
-        <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
-          <span class="badge ${o.status === 'fulfilled' ? 'fulfilled' : o.status === 'failed' ? 'failed' : 'sent'}">${o.status}</span>
-          <div>
-            <div style="font-size:0.85rem;font-weight:500;">#${o.id || o.external_id}</div>
-            <div style="font-size:0.75rem;color:var(--text-dim);">${o.created ? new Date(o.created * 1000).toLocaleDateString() : ''}</div>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    function renderFulfillmentOrders() {
-      const container = document.getElementById('fulfillmentOrders');
-      container.innerHTML = '<div class="empty">No fulfillment orders yet — orders will appear here after customers purchase</div>';
-      fetchT(`${API}/fulfillment-orders`).then(r => r.json()).then(data => {
-        const orders = data.orders || [];
-        if (!orders.length) return;
-        container.innerHTML = `
-          <table>
-            <thead><tr>
-              <th>Order</th><th>Artwork</th><th>Artist</th><th>Size</th><th>Frame</th><th>Price</th><th>Status</th><th>Date</th>
-            </tr></thead>
-            <tbody>
-              ${orders.map(o => `
-                <tr>
-                  <td>${o.order_name || o.shopify_order_id}</td>
-                  <td>${o.artwork_title || '—'}</td>
-                  <td>${o.artist || '—'}</td>
-                  <td>${o.size || '—'}</td>
-                  <td>${o.frame || '—'}</td>
-                  <td>$${o.price || '—'}</td>
-                  <td><span class="badge ${o.status === 'sent_to_printful' ? 'sent' : o.status === 'fulfilled' ? 'fulfilled' : o.status === 'failed' ? 'failed' : 'pending'}">${o.status}</span></td>
-                  <td style="color:var(--text-dim)">${o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        `;
-      }).catch(() => {});
-    }
-
-    function renderSyncMeta(meta) {
-      meta = meta || C.meta || {};
-      const el = document.getElementById('syncStatus');
-      if (meta.lastSync) {
-        const ago = Math.round((Date.now() - new Date(meta.lastSync).getTime()) / 60000);
-        el.textContent = `Last sync: ${ago < 1 ? 'just now' : ago + 'm ago'} · ${meta.cached?.products || 0} product(s) cached`;
-        el.style.color = 'var(--green)';
-      } else if (meta.syncing) {
-        el.textContent = 'Syncing in background...';
-        el.style.color = 'var(--yellow)';
-      } else {
-        el.textContent = C.status ? 'Cached' : 'Waiting for first sync...';
-        el.style.color = 'var(--yellow)';
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // LIVE API FALLBACK — if cache was empty (cold start),
-    // fetch live data from API endpoints and re-render
-    // ═══════════════════════════════════════════════════════
-    async function loadLive() {
-      const cacheEmpty = !C.status || !C.status.connected;
-      if (!cacheEmpty) return; // cache was good, no need
-
-      document.getElementById('syncStatus').textContent = 'Cache warming up — fetching live data...';
-      document.getElementById('syncStatus').style.color = 'var(--yellow)';
-
-      try {
-        const [statusRes, productsRes, ordersRes, metaRes] = await Promise.allSettled([
-          fetchT(`${API}/printful/status`).then(r => r.json()),
-          fetchT(`${API}/printful/products`).then(r => r.json()),
-          fetchT(`${API}/printful/orders`).then(r => r.json()),
-          fetchT(`${API}/printful/cache-meta`).then(r => r.json()),
-        ]);
-
-        if (statusRes.status === 'fulfilled') {
-          C.status = statusRes.value;
-          renderStatus(C.status);
-        }
-        if (productsRes.status === 'fulfilled') {
-          C.products = productsRes.value.products || productsRes.value;
-          renderProducts(C.products);
-        }
-        if (ordersRes.status === 'fulfilled') {
-          C.orders = Array.isArray(ordersRes.value) ? ordersRes.value : [];
-          renderOrders(C.orders);
-        }
-        if (metaRes.status === 'fulfilled') {
-          C.meta = metaRes.value;
-          renderSyncMeta(C.meta);
-        }
-      } catch (e) {
-        console.error('Live fetch failed:', e);
-      }
-
-      // If still no data after live fetch, auto-retry in 5s (cache might still be syncing)
-      if (!C.status || !C.status.connected) {
-        document.getElementById('syncStatus').textContent = 'Server cache is syncing — will retry in 5s...';
-        setTimeout(loadLive, 5000);
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // SHIPPING — needs live Shopify data (not from Printful cache)
-    // ═══════════════════════════════════════════════════════
-    let rateData = null;
-
-    function loadShipping() {
-      const container = document.getElementById('shippingRates');
-      fetchT(`${API}/shipping/rates`).then(r => {
-        if (!r.ok) throw new Error(`Shopify API error (${r.status})`);
-        return r.json();
-      }).then(data => {
-        rateData = data;
-        if (!data.profiles || !data.profiles.length) {
-          container.innerHTML = '<div class="empty">No shipping profiles found — configure shipping in Shopify admin first</div>';
-          return;
-        }
-        let html = '';
-        for (const profile of data.profiles) {
-          for (const zone of profile.zones || []) {
-            for (const method of zone.methods || []) {
-              html += `
-                <div class="rate-row" data-profile="${profile.id}" data-lg="${profile.locationGroupId}" data-zone="${zone.id}" data-method="${method.id}">
-                  <span class="rate-zone">${zone.name}</span>
-                  <span class="rate-name">${method.name}</span>
-                  <span class="rate-price">$</span>
-                  <input type="number" step="0.01" min="0" class="rate-input" value="${parseFloat(method.price).toFixed(2)}" />
-                  <span style="font-size:0.8rem;color:var(--text-dim)">${method.currency}</span>
-                </div>
-              `;
-            }
-          }
-        }
-        container.innerHTML = html || '<div class="empty">No shipping zones configured</div>';
-      }).catch(e => {
-        container.innerHTML = `<div class="empty" style="color:var(--yellow);">
-          ⚠ Shipping rates unavailable<br>
-          <span style="font-size:0.75rem;">This usually means the Shopify API token needs the <code>read_shipping</code> scope, or the token has expired.<br>
-          Printful fulfillment and order creation still work independently.<br>
-          To fix: re-install the app or update the token in Render environment variables.</span>
-        </div>`;
-      });
-    }
-
-    async function saveRates() {
-      const rows = document.querySelectorAll('.rate-row');
-      let saved = 0, errors = 0;
-      for (const row of rows) {
-        const input = row.querySelector('.rate-input');
-        const price = parseFloat(input.value);
-        if (isNaN(price) || price < 0) continue;
-        try {
-          const res = await fetchT(`${API}/shipping/rates`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              profileId: row.dataset.profile, locationGroupId: row.dataset.lg,
-              zoneId: row.dataset.zone, methodId: row.dataset.method, price,
-            }),
-          });
-          const data = await res.json();
-          if (data.success) saved++; else errors++;
-        } catch (e) { errors++; }
-      }
-      showMsg(errors === 0 ? `✅ Saved ${saved} rate(s)!` : `Saved ${saved}, ${errors} failed`, errors ? 'error' : 'success');
-      loadShipping();
-    }
-
-    async function fetchPrintfulRates() {
-      const status = document.getElementById('rateStatus');
-      status.textContent = 'Fetching from Printful...';
-      const dests = [
-        { label: 'Domestic', country: 'US', province: 'NY', postal_code: '10001', city: 'New York', address1: '123 Main St' },
-        { label: 'International', country: 'GB', province: '', postal_code: 'W1D 1BS', city: 'London', address1: '1 Oxford St' },
-      ];
-      let info = 'Printful rates: ';
-      for (const dest of dests) {
-        try {
-          const res = await fetchT(`${API}/carrier-service/rates`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rate: { destination: dest, items: [{ sku: 'NP-MEDIUM-UNFRAMED', quantity: 1 }], currency: 'USD' } }),
-          });
-          const data = await res.json();
-          if (data.rates?.length) info += `${dest.label}: $${(parseInt(data.rates[0].total_price) / 100).toFixed(2)}  `;
-        } catch (e) { /* skip */ }
-      }
-      status.textContent = info;
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // SYNC — manual refresh from Printful
-    // ═══════════════════════════════════════════════════════
-    async function triggerSync() {
-      const btn = document.getElementById('syncBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ Syncing...';
-      try {
-        await fetchT(`${API}/printful/sync`, { method: 'POST' });
-        showMsg('Sync started — refreshing page in 5s...', 'success');
-        setTimeout(() => location.reload(), 5000);
-      } catch (e) {
-        showMsg('Sync failed: ' + e.message, 'error');
-        btn.disabled = false;
-        btn.textContent = '🔄 Sync Now';
-      }
-    }
-
-    // Refresh all data from API (used by Refresh button)
-    async function loadAll() {
-      C = {}; // clear cache to force live fetch
-      renderStatus({ connected: false, error: 'Refreshing...' });
-      document.getElementById('printfulProducts').innerHTML = '<div class="empty">Refreshing...</div>';
-      document.getElementById('printfulOrders').innerHTML = '<div class="empty">Refreshing...</div>';
-      await loadLive();
-      renderFulfillmentOrders();
-      loadShipping();
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // BOOT — render cached data instantly, then fill gaps
-    // ═══════════════════════════════════════════════════════
-    renderSyncMeta();
-    renderStatus();
-    renderProducts();
-    renderOrders();
-    renderFulfillmentOrders();
-    loadShipping();
-
-    // If cache was empty (cold start / Render free tier spin-up), fetch live
-    loadLive();
   </script>
 </body>
 </html>
