@@ -1006,13 +1006,22 @@
           if (frameSelectorPanel) frameSelectorPanel.style.display = 'none';
           // Reset frame preview to no frame
           document.querySelectorAll('.frame-option').forEach(b => b.classList.remove('is-active'));
-          const noneBtn = document.querySelector('.frame-option[data-frame="none"]');
-          if (noneBtn) noneBtn.classList.add('is-active');
           if (framePreview) framePreview.setAttribute('data-frame', 'none');
           if (roomFrame) roomFrame.setAttribute('data-frame', 'none');
           currentFrameColor = 'none';
         } else {
           if (frameSelectorPanel) frameSelectorPanel.style.display = '';
+          // Auto-select black if no frame color chosen yet
+          if (!currentFrameColor || currentFrameColor === 'none') {
+            const blackBtn = document.querySelector('.frame-option[data-frame="black"]');
+            if (blackBtn) {
+              document.querySelectorAll('.frame-option').forEach(b => b.classList.remove('is-active'));
+              blackBtn.classList.add('is-active');
+              currentFrameColor = 'black';
+              if (framePreview) framePreview.setAttribute('data-frame', 'black');
+              if (roomFrame) roomFrame.setAttribute('data-frame', 'black');
+            }
+          }
         }
         updateArtPrice();
         updateRoomView();
@@ -1092,7 +1101,11 @@
     renderRoomView(asset);
   }
 
-  // ─── ROOM VIEW — Printful Mockup + Fallback ──────────
+  // ─── ROOM VIEW — Industry-Standard Mockup System ──────────
+
+  var currentRoom = 'living';
+
+  var ROOM_LABELS = { living: 'Living Room', bedroom: 'Bedroom', dining: 'Dining Room' };
 
   function renderRoomView(asset) {
     const container = document.getElementById('art-room-view');
@@ -1104,48 +1117,8 @@
       return;
     }
 
-    // Show a button — user clicks to generate mockup on demand
-    container.innerHTML = '<div class="room-preview">' +
-      '<div class="room-preview__heading">See It On Your Wall</div>' +
-      '<div id="mockup-trigger" style="text-align:center;padding:30px 20px;">' +
-        '<button id="mockup-btn" type="button" style="' +
-          'display:inline-flex;align-items:center;gap:8px;padding:12px 24px;' +
-          'border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;' +
-          'font-size:0.9rem;color:#333;transition:all .2s;">' +
-          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>' +
-          'Preview on wall' +
-        '</button>' +
-      '</div>' +
-    '</div>';
-
-    var btn = document.getElementById('mockup-btn');
-    if (btn) {
-      btn.onmouseover = function(){ btn.style.borderColor='#8b7355'; btn.style.color='#8b7355'; };
-      btn.onmouseout = function(){ btn.style.borderColor='#ccc'; btn.style.color='#333'; };
-      btn.addEventListener('click', function() {
-        var trigger = document.getElementById('mockup-trigger');
-        trigger.innerHTML =
-          '<div style="text-align:center;padding:40px 20px;">' +
-            '<div class="catalog-loading__spinner" style="width:28px;height:28px;border-width:3px;margin:0 auto 12px;"></div>' +
-            '<span style="font-size:0.82rem;color:var(--text-muted);">Generating realistic preview…</span>' +
-          '</div>';
-
-        var base = getApiBase();
-        fetch(base + '/api/storefront/mockup/' + encodeURIComponent(asset.id))
-          .then(function(r) { return r.ok ? r.json() : Promise.reject(r); })
-          .then(function(data) {
-            if (data.mockup_url) {
-              showMockupImage(container, data.mockup_url, asset.title);
-              asset.mockup_url = data.mockup_url;
-            } else {
-              showRoomFallback(container, asset);
-            }
-          })
-          .catch(function() {
-            showRoomFallback(container, asset);
-          });
-      });
-    }
+    // Show room preview directly
+    showRoomFallback(container, asset);
   }
 
   function showMockupImage(container, mockupUrl, title) {
@@ -1159,40 +1132,75 @@
     '</div>';
   }
 
+  function buildRoomTabs() {
+    var tabs = '';
+    var rooms = ['living', 'bedroom', 'dining'];
+    for (var i = 0; i < rooms.length; i++) {
+      var r = rooms[i];
+      var active = r === currentRoom ? ' is-active' : '';
+      tabs += '<button class="room-tab' + active + '" data-room="' + r + '" type="button">' +
+        escHtml(ROOM_LABELS[r]) + '</button>';
+    }
+    return '<div class="room-preview__tabs">' + tabs + '</div>';
+  }
+
   function showRoomFallback(container, asset) {
+    // Get mockup background URL from meta tag
+    var bgMeta = document.querySelector('meta[name="mockup-bg-url"]');
+    var bgUrl = bgMeta ? bgMeta.getAttribute('content') : '';
+
     container.innerHTML = '<div class="room-preview">' +
       '<div class="room-preview__heading">See It On Your Wall</div>' +
-      '<div class="room-preview__scene">' +
-        '<div class="room-preview__wall">' +
-          '<div class="room-preview__art-frame" id="room-art-frame" data-frame="none">' +
+      '<div class="room-preview__scene" id="room-scene" style="' + (bgUrl ? 'background-image:url(' + bgUrl + ')' : '') + '">' +
+        '<div class="room-preview__art-mount" id="room-art-mount">' +
+          '<div class="room-preview__frame" id="room-art-frame" data-frame="none">' +
             '<img src="' + (asset.images.s800 || asset.images.s1200) + '" alt="' + escHtml(asset.title) + '" draggable="false">' +
           '</div>' +
-          '<div class="room-preview__dims" id="room-dims"></div>' +
-        '</div>' +
-        '<div class="room-preview__person" title="170 cm reference">' +
-          '<svg viewBox="0 0 40 120" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-            '<circle cx="20" cy="8" r="7" fill="#9b8e7e"/>' +
-            '<path d="M20 16 C12 16 8 24 8 36 L12 36 14 56 10 90 16 90 20 64 24 90 30 90 26 56 28 36 32 36 C32 24 28 16 20 16Z" fill="#9b8e7e"/>' +
-          '</svg>' +
-          '<span class="room-preview__person-label">170 cm</span>' +
-        '</div>' +
-        '<div class="room-preview__sofa">' +
-          '<svg viewBox="0 0 260 90" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-            '<rect x="15" y="30" width="230" height="50" rx="6" fill="#8a7d6d"/>' +
-            '<rect x="5" y="20" width="35" height="60" rx="8" fill="#7a6e5e"/>' +
-            '<rect x="220" y="20" width="35" height="60" rx="8" fill="#7a6e5e"/>' +
-            '<rect x="25" y="10" width="210" height="25" rx="5" fill="#7a6e5e"/>' +
-            '<rect x="35" y="80" width="12" height="10" rx="2" fill="#6b5f50"/>' +
-            '<rect x="213" y="80" width="12" height="10" rx="2" fill="#6b5f50"/>' +
-          '</svg>' +
+          '<div class="room-preview__dim-w" id="room-dim-w">' +
+            '<span class="room-preview__dim-end"></span>' +
+            '<span class="room-preview__dim-line"></span>' +
+            '<span class="room-preview__dim-val" id="room-dim-w-val"></span>' +
+            '<span class="room-preview__dim-line"></span>' +
+            '<span class="room-preview__dim-end"></span>' +
+          '</div>' +
+          '<div class="room-preview__dim-h" id="room-dim-h">' +
+            '<span class="room-preview__dim-end"></span>' +
+            '<span class="room-preview__dim-line"></span>' +
+            '<span class="room-preview__dim-val" id="room-dim-h-val"></span>' +
+            '<span class="room-preview__dim-line"></span>' +
+            '<span class="room-preview__dim-end"></span>' +
+          '</div>' +
         '</div>' +
       '</div>' +
-      '<span class="room-preview__caption">Scale reference — artwork shown proportionally on a standard wall</span>' +
+      '<span class="room-preview__caption">Proportional room preview — dimensions update with size selection</span>' +
     '</div>';
+
     updateRoomView();
   }
 
+  // Tier scale factors relative to maxPrint (extra_large = 100%)
+  var TIER_SCALE = { small: 0.35, medium: 0.55, large: 0.75, extra_large: 1.0 };
+
+  function getArtDimsCm() {
+    // Parse maxPrint from asset (e.g. "85 × 150 cm" or "219 × 158 cm")
+    var mp = currentAsset && currentAsset.maxPrint || '';
+    var m = mp.match(/(\d+(?:\.\d+)?)\s*[×x]\s*(\d+(?:\.\d+)?)/i);
+    if (!m) return null;
+    var maxW = parseFloat(m[1]);
+    var maxH = parseFloat(m[2]);
+    // Scale down by tier
+    var tier = currentVariantSize?.priceTier || currentAsset?.priceTier || 'medium';
+    var scale = TIER_SCALE[tier] || 0.55;
+    return { w: Math.round(maxW * scale), h: Math.round(maxH * scale) };
+  }
+
   function updateRoomView() {
+    // If a Printful mockup is showing, re-fetch for the new size/frame combo
+    if (mockupGenerated && currentAsset) {
+      fetchAndShowMockup(currentAsset);
+      return;
+    }
+
     const frame = document.getElementById('room-art-frame');
     if (!frame) return;
 
@@ -1205,46 +1213,52 @@
       frame.dataset.frame = 'none';
     }
 
-    // Parse size dimensions (e.g. "40×60 cm" or "60x80 cm")
-    const sizeStr = currentVariantSize?.size || '';
-    const match = sizeStr.match(/(\d+)\s*[×x]\s*(\d+)/i);
     const img = frame.querySelector('img');
-    const dims = document.getElementById('room-dims');
+    const dimWVal = document.getElementById('room-dim-w-val');
+    const dimHVal = document.getElementById('room-dim-h-val');
+    const dimW = document.getElementById('room-dim-w');
+    const dimH = document.getElementById('room-dim-h');
 
-    if (match && img) {
-      const wCm = parseInt(match[1]);
-      const hCm = parseInt(match[2]);
+    var dims = getArtDimsCm();
+    if (dims && img) {
+      var wCm = dims.w;
+      var hCm = dims.h;
 
-      // Scale: the room scene represents ~200cm of wall height
-      // The scene CSS height is 280px, wall portion is ~65% = 182px
-      // So scale = 182/200 = 0.91 px/cm
-      const SCALE = 0.91;
-      const maxW = 260; // max px width in scene
-      const maxH = 160; // max px height in scene
+      // Wall-height-based scaling: average wall = 250cm
+      var scene = document.getElementById('room-scene');
+      var sceneH = scene ? scene.offsetHeight : 420;
+      var isMobile = window.innerWidth <= 768;
+      var WALL_HEIGHT_CM = isMobile ? 350 : 250;
+      var WALL_RATIO = 0.65;
+      var wallPx = sceneH * WALL_RATIO;
+      var pxPerCm = wallPx / WALL_HEIGHT_CM;
 
-      let imgW = Math.round(wCm * SCALE);
-      let imgH = Math.round(hCm * SCALE);
+      var imgW = Math.round(wCm * pxPerCm);
+      var imgH = Math.round(hCm * pxPerCm);
 
-      // Clamp to scene limits while maintaining aspect ratio
-      if (imgW > maxW) { imgH = Math.round(imgH * (maxW / imgW)); imgW = maxW; }
-      if (imgH > maxH) { imgW = Math.round(imgW * (maxH / imgH)); imgH = maxH; }
+      // Clamp to reasonable limits relative to scene
+      var maxPxW = Math.round(sceneH * 0.7);
+      var maxPxH = Math.round(wallPx * 0.85);
+      if (imgW > maxPxW) { imgH = Math.round(imgH * (maxPxW / imgW)); imgW = maxPxW; }
+      if (imgH > maxPxH) { imgW = Math.round(imgW * (maxPxH / imgH)); imgH = maxPxH; }
 
       img.style.width = imgW + 'px';
       img.style.height = imgH + 'px';
       img.style.maxWidth = imgW + 'px';
       img.style.maxHeight = imgH + 'px';
 
-      if (dims) dims.textContent = wCm + ' × ' + hCm + ' cm';
+      if (dimWVal) dimWVal.textContent = wCm + ' cm';
+      if (dimHVal) dimHVal.textContent = hCm + ' cm';
+      if (dimW) dimW.style.display = '';
+      if (dimH) dimH.style.display = '';
     } else if (img) {
-      // Fallback — use tier-based defaults
-      const tierSizes = { small: [90, 70], medium: [110, 90], large: [140, 110], extra_large: [180, 140] };
-      const tier = currentVariantSize?.priceTier || 'small';
-      const [w, h] = tierSizes[tier] || [90, 70];
-      img.style.width = w + 'px';
-      img.style.height = h + 'px';
-      img.style.maxWidth = w + 'px';
-      img.style.maxHeight = h + 'px';
-      if (dims) dims.textContent = PRICE_TIERS[tier]?.label || '';
+      // No maxPrint — hide dimensions, use reasonable default
+      img.style.width = '120px';
+      img.style.height = '90px';
+      img.style.maxWidth = '120px';
+      img.style.maxHeight = '90px';
+      if (dimW) dimW.style.display = 'none';
+      if (dimH) dimH.style.display = 'none';
     }
   }
 

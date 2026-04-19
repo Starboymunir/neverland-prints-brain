@@ -108,6 +108,45 @@
         <span style="font-size:0.72rem;color:var(--text-muted);">Edit values above then click Save Changes</span>
       </div>
     </div>
+
+    <!-- Fulfillment Architecture -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Fulfillment Flow</h2>
+        <div class="actions">
+          <button class="btn sm primary" onclick="registerWebhooks()" id="whRegBtn">Register Webhooks</button>
+        </div>
+      </div>
+      <div class="section-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+          <div>
+            <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.75rem;color:var(--accent-light);">How Orders Are Fulfilled</div>
+            <div id="flowSteps" style="font-size:0.78rem;color:var(--text-dim);line-height:1.8;">
+              <div>1. Customer places order on Shopify</div>
+              <div>2. Shopify sends webhook to our backend</div>
+              <div>3. Backend looks up artwork image (Google Drive)</div>
+              <div>4. Backend creates Printful order via API</div>
+              <div>5. Printful prints, packs, ships to customer</div>
+            </div>
+            <div style="margin-top:0.75rem;padding:0.6rem;background:var(--accent-bg);border:1px solid rgba(124,92,252,0.2);border-radius:var(--radius-sm);font-size:0.72rem;color:var(--accent-light);">
+              No Printful product sync needed — each order is created on-demand with the artwork image.
+              This works for unlimited products.
+            </div>
+          </div>
+          <div>
+            <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.75rem;color:var(--accent-light);">Webhook Status</div>
+            <div id="webhookStatus" style="font-size:0.78rem;color:var(--text-dim);">
+              <div class="skeleton" style="width:200px;height:1rem;margin-bottom:0.5rem;"></div>
+              <div class="skeleton" style="width:180px;height:1rem;"></div>
+            </div>
+            <div style="margin-top:1rem;font-size:0.78rem;font-weight:600;color:var(--accent-light);">Recent Fulfillments</div>
+            <div id="recentFulfillments" style="font-size:0.78rem;color:var(--text-dim);margin-top:0.5rem;">
+              <div class="skeleton" style="width:250px;height:1rem;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   <script>
     var API = '/api';
@@ -298,6 +337,71 @@
       renderSyncMeta();
       renderStatus();
       loadShipping();
+      loadWebhooks();
+      loadFulfillments();
+    }
+
+    function loadWebhooks() {
+      var el = document.getElementById('webhookStatus');
+      fetchT(API + '/webhooks').then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.webhooks || !data.webhooks.length) {
+          el.innerHTML = '<div style="color:var(--red);">No webhooks registered</div><div style="font-size:0.72rem;margin-top:0.25rem;">Click "Register Webhooks" to enable auto-fulfillment</div>';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < data.webhooks.length; i++) {
+          var w = data.webhooks[i];
+          html += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">' +
+            '<span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;"></span>' +
+            '<span style="font-weight:500;">' + w.topic + '</span>' +
+            '</div>';
+        }
+        el.innerHTML = html;
+      }).catch(function() {
+        el.innerHTML = '<div style="color:var(--text-muted);">Could not check webhooks</div>';
+      });
+    }
+
+    function loadFulfillments() {
+      var el = document.getElementById('recentFulfillments');
+      fetchT(API + '/fulfillment-orders').then(function(r) { return r.json(); }).then(function(data) {
+        var orders = data.orders || [];
+        if (!orders.length) {
+          el.innerHTML = '<div style="color:var(--text-muted);">No fulfillments yet — orders will appear here when customers buy</div>';
+          return;
+        }
+        var html = '';
+        var show = orders.slice(0, 5);
+        for (var i = 0; i < show.length; i++) {
+          var o = show[i];
+          var statusColor = o.status === 'sent_to_printful' ? 'var(--green)' : o.status === 'pending' ? 'var(--yellow)' : 'var(--text-dim)';
+          html += '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">' +
+            '<span style="font-size:0.7rem;padding:1px 6px;border-radius:3px;background:' + statusColor + '20;color:' + statusColor + ';">' + o.status + '</span>' +
+            '<span>' + (o.artwork_title || 'Order') + '</span>' +
+            '</div>';
+        }
+        if (orders.length > 5) html += '<div style="margin-top:0.25rem;color:var(--text-muted);">+ ' + (orders.length - 5) + ' more</div>';
+        el.innerHTML = html;
+      }).catch(function() {
+        el.innerHTML = '<div style="color:var(--text-muted);">—</div>';
+      });
+    }
+
+    async function registerWebhooks() {
+      var btn = document.getElementById('whRegBtn');
+      btn.disabled = true; btn.textContent = 'Registering...';
+      try {
+        var res = await fetchT(API + '/webhooks/register', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        var data = await res.json();
+        toast('Webhooks: ' + data.results.map(function(r) { return r.topic + ' → ' + r.status; }).join(', '));
+        loadWebhooks();
+      } catch (e) {
+        toast('Failed to register webhooks', 'error');
+      }
+      btn.disabled = false; btn.textContent = 'Register Webhooks';
     }
 
     if (C.status) { renderAll(); } else { loadAll(); }

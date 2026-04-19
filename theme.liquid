@@ -93,6 +93,9 @@
 
   {{ 'neverland.css' | asset_url | stylesheet_tag }}
 
+  <meta name="watermark-url" content="{{ 'watermark-2.png' | asset_url }}">
+  <meta name="mockup-bg-url" content="{{ 'mockup-bg.jpg' | asset_url }}">
+
   <script>
     document.documentElement.className = document.documentElement.className.replace('no-js', 'js');
   </script>

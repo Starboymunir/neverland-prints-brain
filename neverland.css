@@ -625,6 +625,29 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
 @media (max-width: 1100px) { .product-grid--4col { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 768px) { .product-grid--4col { grid-template-columns: repeat(2, 1fr); } }
 
+/* Catalog cards (All Prints / Similar Artworks) */
+.catalog-card { position: relative; background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden; transition: all var(--dur) var(--ease); }
+.catalog-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.08); }
+.catalog-card__link { display: block; text-decoration: none; color: inherit; }
+.catalog-card__overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 14px; background: rgba(255,255,255,0.95); backdrop-filter: blur(8px); text-align: center; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; transform: translateY(100%); transition: transform 0.3s var(--ease-out); pointer-events: none; }
+.catalog-card:hover .catalog-card__overlay { transform: translateY(0); }
+@media (hover: none) { .catalog-card__overlay { display: none; } }
+.catalog-card__info { padding: 14px 12px 16px; }
+.catalog-card__title { font-family: var(--font-body); font-size: 0.9rem; font-weight: 500; line-height: 1.35; color: var(--text); margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.catalog-card__artist { font-size: 0.68rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+.catalog-card__meta { font-size: 0.68rem; color: var(--text-muted); margin-bottom: 6px; }
+.catalog-card__meta-sep { margin: 0 4px; }
+.catalog-card__price { display: flex; align-items: center; gap: 8px; }
+.catalog-card__price-current { font-weight: 600; font-size: 0.88rem; color: var(--text); }
+.catalog-card__price-compare { font-size: 0.78rem; color: var(--text-muted); text-decoration: line-through; }
+.catalog-card__quality { position: absolute; top: 12px; left: 12px; background: var(--text); color: var(--white); font-size: 0.58rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 12px; border-radius: var(--radius); }
+@media (max-width: 768px) {
+  .catalog-card__info { padding: 10px 8px 12px; }
+  .catalog-card__title { font-size: 0.8rem; margin-bottom: 3px; }
+  .catalog-card__artist { font-size: 0.58rem; }
+  .catalog-card__price-current { font-size: 0.8rem; }
+}
+
 .product-card { position: relative; background: var(--bg-card); border-radius: var(--radius-lg); overflow: hidden; transition: all var(--dur) var(--ease); }
 .product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.08); }
 .product-card__link { display: block; text-decoration: none; color: inherit; }
@@ -818,9 +841,14 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
 .add-to-cart:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .product-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-bottom: 20px; }
-.product-meta__item { display: flex; flex-direction: column; gap: 2px; }
-.product-meta__label { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
-.product-meta__value { font-size: 0.86rem; font-weight: 400; }
+.product-meta__item { display: flex; flex-direction: column; gap: 4px; }
+.product-meta__label { display: block; font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.product-meta__value { display: block; font-size: 0.86rem; font-weight: 400; }
+
+/* pp-specs — art-detail page meta (rendered by JS) */
+.pp-specs__row { display: flex; flex-direction: column; gap: 4px; }
+.pp-specs__label { display: block; font-size: 0.62rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+.pp-specs__value { display: block; font-size: 0.86rem; font-weight: 400; }
 
 .product-accordion__item { border-bottom: 1px solid var(--border); }
 .product-accordion__trigger { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 16px 0; font-size: 0.86rem; font-weight: 600; color: var(--text); text-align: left; }
@@ -845,32 +873,32 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
 
 /* Black Frame */
 .frame-preview[data-frame="black"] { background: #f0ede8; }
-.frame-preview[data-frame="black"] .frame-preview__mat { padding: 24px; background: #ffffff; box-shadow: 0 0 0 14px #1a1a1a, 0 0 0 16px #0d0d0d, 0 4px 30px rgba(0,0,0,0.25); }
+.frame-preview[data-frame="black"] .frame-preview__mat { padding: 0; background: transparent; box-shadow: 0 0 0 14px #1a1a1a, 0 0 0 16px #0d0d0d, 0 4px 30px rgba(0,0,0,0.25); }
 .frame-preview[data-frame="black"] .frame-preview__img-wrap { box-shadow: inset 0 0 4px rgba(0,0,0,0.15); }
 
 /* White Frame */
 .frame-preview[data-frame="white"] { background: #f0ede8; }
-.frame-preview[data-frame="white"] .frame-preview__mat { padding: 24px; background: #ffffff; box-shadow: 0 0 0 14px #f5f5f5, 0 0 0 16px #e0e0e0, 0 4px 30px rgba(0,0,0,0.15); }
+.frame-preview[data-frame="white"] .frame-preview__mat { padding: 0; background: transparent; box-shadow: 0 0 0 14px #f5f5f5, 0 0 0 16px #e0e0e0, 0 4px 30px rgba(0,0,0,0.15); }
 .frame-preview[data-frame="white"] .frame-preview__img-wrap { box-shadow: inset 0 0 4px rgba(0,0,0,0.08); }
 
 /* Natural Wood Frame */
 .frame-preview[data-frame="natural"] { background: #f0ede8; }
-.frame-preview[data-frame="natural"] .frame-preview__mat { padding: 24px; background: #ffffff; box-shadow: 0 0 0 14px #c4a882, 0 0 0 16px #a88b6a, 0 4px 30px rgba(0,0,0,0.2); }
+.frame-preview[data-frame="natural"] .frame-preview__mat { padding: 0; background: transparent; box-shadow: 0 0 0 14px #c4a882, 0 0 0 16px #a88b6a, 0 4px 30px rgba(0,0,0,0.2); }
 .frame-preview[data-frame="natural"] .frame-preview__img-wrap { box-shadow: inset 0 0 4px rgba(0,0,0,0.1); }
 
 /* Walnut Frame */
 .frame-preview[data-frame="walnut"] { background: #f0ede8; }
-.frame-preview[data-frame="walnut"] .frame-preview__mat { padding: 24px; background: #ffffff; box-shadow: 0 0 0 14px #5c3d2e, 0 0 0 16px #3e2a1e, 0 4px 30px rgba(0,0,0,0.3); }
+.frame-preview[data-frame="walnut"] .frame-preview__mat { padding: 0; background: transparent; box-shadow: 0 0 0 14px #5c3d2e, 0 0 0 16px #3e2a1e, 0 4px 30px rgba(0,0,0,0.3); }
 .frame-preview[data-frame="walnut"] .frame-preview__img-wrap { box-shadow: inset 0 0 4px rgba(0,0,0,0.12); }
 
 /* ── PP-Frame (Art Detail page) — mirror frame-preview styles ── */
 .pp-frame { transition: all 0.4s ease; }
 .pp-frame__mat { transition: all 0.4s ease; position: relative; }
 .pp-frame[data-frame="none"] .pp-frame__mat { padding: 0; background: transparent; }
-.pp-frame[data-frame="black"] .pp-frame__mat { padding: 24px; background: #ffffff; box-shadow: 0 0 0 14px #1a1a1a, 0 0 0 16px #0d0d0d, 0 4px 30px rgba(0,0,0,0.25); }
-.pp-frame[data-frame="white"] .pp-frame__mat { padding: 24px; background: #ffffff; box-shadow: 0 0 0 14px #f5f5f5, 0 0 0 16px #e0e0e0, 0 4px 30px rgba(0,0,0,0.15); }
-.pp-frame[data-frame="natural"] .pp-frame__mat { padding: 24px; background: #ffffff; box-shadow: 0 0 0 14px #c4a882, 0 0 0 16px #a88b6a, 0 4px 30px rgba(0,0,0,0.2); }
-.pp-frame[data-frame="walnut"] .pp-frame__mat { padding: 24px; background: #ffffff; box-shadow: 0 0 0 14px #5c3d2e, 0 0 0 16px #3e2a1e, 0 4px 30px rgba(0,0,0,0.3); }
+.pp-frame[data-frame="black"] .pp-frame__mat { padding: 0; background: transparent; box-shadow: 0 0 0 14px #1a1a1a, 0 0 0 16px #0d0d0d, 0 4px 30px rgba(0,0,0,0.25); }
+.pp-frame[data-frame="white"] .pp-frame__mat { padding: 0; background: transparent; box-shadow: 0 0 0 14px #f5f5f5, 0 0 0 16px #e0e0e0, 0 4px 30px rgba(0,0,0,0.15); }
+.pp-frame[data-frame="natural"] .pp-frame__mat { padding: 0; background: transparent; box-shadow: 0 0 0 14px #c4a882, 0 0 0 16px #a88b6a, 0 4px 30px rgba(0,0,0,0.2); }
+.pp-frame[data-frame="walnut"] .pp-frame__mat { padding: 0; background: transparent; box-shadow: 0 0 0 14px #5c3d2e, 0 0 0 16px #3e2a1e, 0 4px 30px rgba(0,0,0,0.3); }
 
 /* Frame Selector */
 .frame-selector { margin-top: 20px; }
@@ -887,32 +915,88 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
 .frame-option__swatch--walnut { background: #5c3d2e; }
 .frame-option__name { font-size: 0.62rem; font-weight: 500; letter-spacing: 0.04em; color: var(--text-sec); text-transform: uppercase; }
 
-/* Room Preview — See It On Your Wall */
-.room-preview { margin-top: 24px; border-radius: var(--radius-lg); overflow: hidden; }
+/* Room Preview — Photo Background Mockup */
+.room-preview { margin-top: 24px; border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-alt); }
 .room-preview__heading { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-sec); padding: 14px 16px 0; }
-.room-preview__scene { position: relative; height: 300px; background: linear-gradient(180deg, #e8e2d8 0%, #e8e2d8 65%, #9b8e7e 65%, #8a7d6d 100%); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 0; overflow: hidden; }
-.room-preview__wall { position: absolute; top: 12%; left: 50%; transform: translateX(-50%); z-index: 2; text-align: center; }
-.room-preview__art-frame { display: inline-flex; align-items: center; justify-content: center; transition: all 0.4s ease; }
-.room-preview__art-frame img { object-fit: contain; display: block; box-shadow: 0 4px 16px rgba(0,0,0,0.2); transition: all 0.4s ease; }
 
-/* Room frame styles */
-.room-preview__art-frame[data-frame="none"] img { box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
-.room-preview__art-frame[data-frame="black"] { padding: 8px; background: #fff; box-shadow: 0 0 0 5px #1a1a1a, 0 4px 20px rgba(0,0,0,0.3); }
-.room-preview__art-frame[data-frame="white"] { padding: 8px; background: #fff; box-shadow: 0 0 0 5px #f0f0f0, 0 0 0 6px #ddd, 0 4px 20px rgba(0,0,0,0.2); }
-.room-preview__art-frame[data-frame="natural"] { padding: 8px; background: #fff; box-shadow: 0 0 0 5px #c4a882, 0 0 0 6px #a88b6a, 0 4px 20px rgba(0,0,0,0.25); }
-.room-preview__art-frame[data-frame="walnut"] { padding: 8px; background: #fff; box-shadow: 0 0 0 5px #5c3d2e, 0 0 0 6px #3e2a1e, 0 4px 20px rgba(0,0,0,0.3); }
+/* Room Selector Tabs — hidden (single photo bg) */
+.room-preview__tabs { display: none; }
 
-.room-preview__dims { margin-top: 6px; font-size: 0.68rem; font-weight: 500; color: rgba(0,0,0,0.45); letter-spacing: 0.04em; text-align: center; }
+/* Scene — photo background room */
+.room-preview__scene {
+  position: relative; height: 420px; overflow: hidden;
+  background-color: #f0ebe3;
+  background-size: cover; background-position: center center; background-repeat: no-repeat;
+}
 
-/* Human silhouette for scale */
-.room-preview__person { position: absolute; bottom: 0; right: 12%; z-index: 3; text-align: center; }
-.room-preview__person svg { width: 30px; height: 155px; opacity: 0.25; }
-.room-preview__person-label { display: block; font-size: 0.56rem; color: rgba(0,0,0,0.35); letter-spacing: 0.04em; margin-top: -2px; }
+/* Art mount — centered on the wall area of the photo */
+.room-preview__art-mount {
+  position: absolute; top: 12%; left: 50%; transform: translateX(-50%);
+  z-index: 3; text-align: center;
+}
 
-/* Sofa silhouette for room scale */
-.room-preview__sofa { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 3; }
-.room-preview__sofa svg { width: 220px; height: 80px; opacity: 0.22; }
-.room-preview__caption { display: block; text-align: center; padding: 10px; font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; background: var(--bg-alt); }
+/* Art frame with mat/passepartout */
+.room-preview__frame {
+  display: inline-block; position: relative; line-height: 0;
+  transition: all 0.3s ease;
+}
+.room-preview__frame img {
+  display: block; object-fit: contain;
+  transition: width 0.4s ease, height 0.4s ease;
+}
+
+/* Frame variants — thick frame + white mat + realistic wall shadow */
+.room-preview__frame[data-frame="none"] {
+  border: none; padding: 0; background: transparent;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18), 0 1px 4px rgba(0,0,0,0.10);
+}
+.room-preview__frame[data-frame="black"] {
+  border: 6px solid #1a1a1a; padding: 0; background: transparent;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.12), 4px 4px 12px rgba(0,0,0,0.10);
+}
+.room-preview__frame[data-frame="white"] {
+  border: 6px solid #f5f5f5; padding: 0; background: transparent;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.20), 0 0 0 1px rgba(0,0,0,0.05), 4px 4px 12px rgba(0,0,0,0.08);
+}
+.room-preview__frame[data-frame="natural"] {
+  border: 6px solid #c4a882; padding: 0; background: transparent;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.24), 0 2px 8px rgba(0,0,0,0.10), 4px 4px 12px rgba(0,0,0,0.08);
+}
+.room-preview__frame[data-frame="walnut"] {
+  border: 6px solid #5c3d2e; padding: 0; background: transparent;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.12), 4px 4px 12px rgba(0,0,0,0.10);
+}
+
+/* Dimension annotations — architectural style */
+.room-preview__dim-w {
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 8px; gap: 0; height: 14px;
+}
+.room-preview__dim-h {
+  position: absolute; right: -36px; top: 0; bottom: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0; width: 14px;
+}
+.room-preview__dim-line {
+  flex: 1; background: rgba(0,0,0,0.20);
+}
+.room-preview__dim-w .room-preview__dim-line { height: 1px; min-width: 12px; }
+.room-preview__dim-h .room-preview__dim-line { width: 1px; min-height: 8px; }
+.room-preview__dim-end {
+  display: block; width: 1px; height: 8px; background: rgba(0,0,0,0.20);
+}
+.room-preview__dim-h .room-preview__dim-end { width: 8px; height: 1px; }
+.room-preview__dim-val {
+  font-size: 0.58rem; font-weight: 500; color: rgba(0,0,0,0.45);
+  letter-spacing: 0.03em; padding: 0 5px; white-space: nowrap;
+  font-family: var(--font-body, system-ui);
+}
+.room-preview__dim-h .room-preview__dim-val {
+  writing-mode: vertical-rl; text-orientation: mixed;
+  padding: 4px 0;
+}
+
+.room-preview__caption { display: block; text-align: center; padding: 10px; font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
 
 /* Trust Badges */
 .product-trust { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; padding: 16px 0; border-bottom: 1px solid var(--border); }
@@ -924,14 +1008,18 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
   .frame-preview[data-frame="black"] .frame-preview__mat,
   .frame-preview[data-frame="white"] .frame-preview__mat,
   .frame-preview[data-frame="natural"] .frame-preview__mat,
-  .frame-preview[data-frame="walnut"] .frame-preview__mat { padding: 16px; }
+  .frame-preview[data-frame="walnut"] .frame-preview__mat { padding: 0; }
   .pp-frame[data-frame="black"] .pp-frame__mat,
   .pp-frame[data-frame="white"] .pp-frame__mat,
   .pp-frame[data-frame="natural"] .pp-frame__mat,
-  .pp-frame[data-frame="walnut"] .pp-frame__mat { padding: 16px; }
-  .room-preview__scene { height: 240px; }
-  .room-preview__person svg { width: 24px; height: 120px; }
-  .room-preview__sofa svg { width: 170px; height: 65px; }
+  .pp-frame[data-frame="walnut"] .pp-frame__mat { padding: 0; }
+  .room-preview__scene { height: auto; min-height: 260px; background-size: 100% auto; background-position: top center; }
+  .room-preview__dim-h { right: -28px; }
+  .room-preview__dim-val { font-size: 0.52rem; }
+  .room-preview__frame[data-frame="black"],
+  .room-preview__frame[data-frame="white"],
+  .room-preview__frame[data-frame="natural"],
+  .room-preview__frame[data-frame="walnut"] { border-width: 4px; padding: 0; }
 }
 
 

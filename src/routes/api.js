@@ -2531,4 +2531,81 @@ router.post("/carrier-service/rates", async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════
+// WEBHOOK MANAGEMENT — view & register Shopify webhooks
+// ═══════════════════════════════════════════════════════════
+
+const config = require("../config");
+const SHOPIFY_BASE = `https://${config.shopify.storeDomain}/admin/api/${config.shopify.apiVersion}`;
+const SHOPIFY_HEADERS = {
+  "Content-Type": "application/json",
+  "X-Shopify-Access-Token": config.shopify.adminApiToken,
+};
+
+// GET /api/webhooks — list registered Shopify webhooks
+router.get("/webhooks", async (req, res) => {
+  try {
+    const r = await fetch(`${SHOPIFY_BASE}/webhooks.json`, { headers: SHOPIFY_HEADERS });
+    const data = await r.json();
+    const webhooks = (data.webhooks || []).map(w => ({
+      id: w.id, topic: w.topic, address: w.address, created_at: w.created_at,
+    }));
+    res.json({ webhooks });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/webhooks/register — register all required webhooks
+router.post("/webhooks/register", async (req, res) => {
+  const backendUrl = req.body.backendUrl || `https://${req.get("host")}`;
+  const required = [
+    { topic: "orders/create", path: "/webhooks/order-created" },
+    { topic: "orders/paid", path: "/webhooks/order-paid" },
+  ];
+
+  // Get existing
+  const existing = await fetch(`${SHOPIFY_BASE}/webhooks.json`, { headers: SHOPIFY_HEADERS }).then(r => r.json());
+  const existingTopics = (existing.webhooks || []).map(w => w.topic);
+
+  const results = [];
+  for (const wh of required) {
+    if (existingTopics.includes(wh.topic)) {
+      results.push({ topic: wh.topic, status: "already_registered" });
+      continue;
+    }
+    try {
+      const r = await fetch(`${SHOPIFY_BASE}/webhooks.json`, {
+        method: "POST",
+        headers: SHOPIFY_HEADERS,
+        body: JSON.stringify({ webhook: { topic: wh.topic, address: backendUrl + wh.path, format: "json" } }),
+      });
+      const data = await r.json();
+      results.push({ topic: wh.topic, status: data.webhook ? "registered" : "error", detail: data.errors });
+    } catch (e) {
+      results.push({ topic: wh.topic, status: "error", detail: e.message });
+    }
+  }
+  res.json({ results });
+});
+
+// GET /api/printful/architecture — explain how fulfillment works
+router.get("/printful/architecture", (req, res) => {
+  res.json({
+    model: "API-based fulfillment (no Printful product sync needed)",
+    flow: [
+      "1. Customer places order on Shopify",
+      "2. Shopify sends webhook to our backend",
+      "3. Backend looks up artwork image from Google Drive",
+      "4. Backend creates Printful order via API with the image",
+      "5. Printful prints, packs, and ships to customer",
+    ],
+    why_no_sync: "Printful's product sync is designed for <100 products. With 63k+ products, use API-based fulfillment instead. Each order is created on-demand with the artwork image — no pre-mapping needed.",
+    product: "Enhanced Matte Paper Poster (Product 268)",
+    variants: Object.keys(PrintfulService.SIZE_MAP).length + " size mappings",
+    webhooks_needed: ["orders/create", "orders/paid"],
+    cost_example: "30×40cm poster to NYC: ~$17.65 (print $11.22 + shipping $4.99 + tax $1.44)",
+  });
+});
+
 module.exports = router;
