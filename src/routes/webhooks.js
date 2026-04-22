@@ -11,12 +11,12 @@
 const express = require("express");
 const crypto = require("crypto");
 const supabase = require("../db/supabase");
-const PrintfulService = require("../services/printful");
+const ProdigiService = require("../services/prodigi");
 
 const router = express.Router();
 
 const SHOPIFY_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
-const printful = new PrintfulService();
+const prodigi = new ProdigiService();
 
 /**
  * Verify Shopify webhook signature (HMAC-SHA256)
@@ -157,65 +157,64 @@ router.post("/order-created", async (req, res) => {
         } catch (e) { /* ignore */ }
       }
 
-      // ── AUTO-FULFILL via Printful ────────────────────────
-      if (process.env.PRINTFUL_API_KEY && order.shipping_address) {
-        console.log("   🖨️  Sending to Printful for fulfillment...");
+      // ── AUTO-FULFILL via Prodigi ────────────────────────
+      if (process.env.PRODIGI_API_KEY && order.shipping_address) {
+        console.log("   🖨️  Sending to Prodigi for fulfillment...");
         for (const item of orderItems) {
           try {
-            // Build high-res image URL from Drive file ID
-            // s0 = max resolution, no size cap
+            // Build high-res image URL from Drive file ID (s0 = max resolution)
             const imageUrl = item.driveFileId
               ? `https://lh3.googleusercontent.com/d/${item.driveFileId}=s0`
               : item.previewUrl;
 
             if (!imageUrl) {
-              console.log(`   ⚠️  No image URL for "${item.artworkTitle}" — skip Printful`);
+              console.log(`   ⚠️  No image URL for "${item.artworkTitle}" — skip Prodigi`);
               continue;
             }
 
-            // Map size string to variant ID
-            const sizeKey = item.size.replace(/\s/g, "").replace(/cm/gi, "");
-            const mapping = PrintfulService.SIZE_MAP[sizeKey] || PrintfulService.DEFAULT_VARIANT;
-            const variantId = mapping.variantId;
+            // Parse the exact print dimensions from the Size property
+            // Format: "40 × 28.57 cm" → widthCm=40, heightCm=28.57
+            const dims = ProdigiService.parseSizeCm(item.size);
+            if (!dims) {
+              console.error(`   ⚠️  Cannot parse size "${item.size}" for "${item.artworkTitle}" — skip Prodigi`);
+              continue;
+            }
 
-            const pfOrder = await printful.createOrder({
+            const pgOrder = await prodigi.createOrder({
               recipient: {
-                name: order.shipping_address.first_name + " " + order.shipping_address.last_name,
-                address1: order.shipping_address.address1,
-                address2: order.shipping_address.address2 || "",
-                city: order.shipping_address.city,
-                state_code: order.shipping_address.province_code || "",
+                name:         order.shipping_address.first_name + " " + order.shipping_address.last_name,
+                email:        order.email,
+                address1:     order.shipping_address.address1,
+                address2:     order.shipping_address.address2 || "",
+                city:         order.shipping_address.city,
+                state_code:   order.shipping_address.province_code || "",
                 country_code: order.shipping_address.country_code,
-                zip: order.shipping_address.zip,
+                zip:          order.shipping_address.zip,
               },
               imageUrl,
-              size: item.size,
-              title: item.artworkTitle,
+              widthCm:   dims.widthCm,
+              heightCm:  dims.heightCm,
+              title:     item.artworkTitle,
               externalId: `${item.orderId}-${item.lineItemId}`,
-              variantId,
             });
 
-            console.log(`   🖨️  Printful order #${pfOrder.id} created for "${item.artworkTitle}"`);
+            console.log(`   🖨️  Prodigi order ${pgOrder.id} (${pgOrder.sku}) created for "${item.artworkTitle}"`);
 
-            // Update fulfillment record with Printful order ID
+            // Persist the Prodigi order ID
             try {
               await supabase
                 .from("fulfillment_orders")
                 .update({
-                  printful_order_id: String(pfOrder.id),
-                  status: "sent_to_printful",
+                  prodigi_order_id: pgOrder.id,
+                  prodigi_sku:      pgOrder.sku,
+                  status:           "sent_to_prodigi",
                 })
                 .eq("shopify_order_id", item.orderId)
                 .eq("line_item_id", item.lineItemId);
-            } catch (e) { /* table may not exist */ }
+            } catch (e) { /* table may not exist yet */ }
 
-            // Auto-confirm if PRINTFUL_AUTO_CONFIRM is set
-            if (process.env.PRINTFUL_AUTO_CONFIRM === "true") {
-              await printful.confirmOrder(pfOrder.id);
-              console.log(`   ✅ Printful order #${pfOrder.id} auto-confirmed`);
-            }
-          } catch (pfErr) {
-            console.error(`   ❌ Printful error for "${item.artworkTitle}": ${pfErr.message.slice(0, 150)}`);
+          } catch (pgErr) {
+            console.error(`   ❌ Prodigi error for "${item.artworkTitle}": ${pgErr.message.slice(0, 200)}`);
           }
         }
       }

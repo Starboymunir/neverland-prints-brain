@@ -22,6 +22,8 @@ const EmbeddingService = require("../services/embedding");
 const PrintfulService = require("../services/printful");
 const printful = new PrintfulService();
 const printfulCache = require("../services/printful-cache");
+const ProdigiService = require("../services/prodigi");
+const prodigi = new ProdigiService();
 
 const router = express.Router();
 
@@ -2592,20 +2594,89 @@ router.post("/webhooks/register", async (req, res) => {
 // GET /api/printful/architecture — explain how fulfillment works
 router.get("/printful/architecture", (req, res) => {
   res.json({
-    model: "API-based fulfillment (no Printful product sync needed)",
+    model: "API-based fulfillment via Prodigi (custom dimensions supported)",
     flow: [
       "1. Customer places order on Shopify",
       "2. Shopify sends webhook to our backend",
-      "3. Backend looks up artwork image from Google Drive",
-      "4. Backend creates Printful order via API with the image",
-      "5. Printful prints, packs, and ships to customer",
+      "3. Backend reads artwork dimensions from line item properties",
+      "4. Backend maps to closest Prodigi FAP SKU (fitPrintArea preserves ratio)",
+      "5. Prodigi prints, packs, and ships to customer worldwide",
     ],
-    why_no_sync: "Printful's product sync is designed for <100 products. With 63k+ products, use API-based fulfillment instead. Each order is created on-demand with the artwork image — no pre-mapping needed.",
-    product: "Enhanced Matte Paper Poster (Product 268)",
-    variants: Object.keys(PrintfulService.SIZE_MAP).length + " size mappings",
+    provider: "Prodigi Fine Art Paper (FAP)",
+    why_prodigi: "Supports custom artwork dimensions via fitPrintArea, ships globally including Nigeria, well-documented REST API v4.",
     webhooks_needed: ["orders/create", "orders/paid"],
-    cost_example: "30×40cm poster to NYC: ~$17.65 (print $11.22 + shipping $4.99 + tax $1.44)",
   });
+});
+
+// ── Prodigi endpoints ──────────────────────────────────────────────────────
+
+/**
+ * GET /api/prodigi/status
+ * Check Prodigi API connectivity and show active provider info.
+ */
+router.get("/prodigi/status", async (req, res) => {
+  try {
+    const result = await prodigi.verifyConnection();
+    res.json({
+      provider: "Prodigi",
+      ...result,
+      skuCatalogSize: 30,
+      sandbox: process.env.PRODIGI_SANDBOX === "true",
+      configured: !!process.env.PRODIGI_API_KEY,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/prodigi/quote
+ * Get a print cost quote without creating an order.
+ * Body: { countryCode, widthCm, heightCm, currencyCode? }
+ */
+router.post("/prodigi/quote", async (req, res) => {
+  try {
+    const { countryCode, widthCm, heightCm, currencyCode } = req.body;
+    if (!countryCode || !widthCm || !heightCm) {
+      return res.status(400).json({ error: "countryCode, widthCm and heightCm are required" });
+    }
+    const result = await prodigi.getQuote({ countryCode, widthCm, heightCm, currencyCode });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/prodigi/sku-lookup
+ * Find the best Prodigi SKU for given dimensions (useful for testing).
+ * Query: ?widthCm=40&heightCm=28.57
+ */
+router.get("/prodigi/sku-lookup", (req, res) => {
+  const widthCm  = parseFloat(req.query.widthCm);
+  const heightCm = parseFloat(req.query.heightCm);
+  if (!widthCm || !heightCm) {
+    return res.status(400).json({ error: "widthCm and heightCm query params required" });
+  }
+  const sku = ProdigiService.findClosestSku(widthCm, heightCm);
+  res.json({
+    requested: { widthCm, heightCm },
+    matched:   sku,
+    sizingNote: "fitPrintArea used — artwork fills the print area at correct aspect ratio",
+  });
+});
+
+/**
+ * GET /api/prodigi/order/:id
+ * Get a Prodigi order by ID (for tracking fulfillment status).
+ */
+router.get("/prodigi/order/:id", async (req, res) => {
+  try {
+    const data = await prodigi.getOrder(req.params.id);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
