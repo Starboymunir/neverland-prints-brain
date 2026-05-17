@@ -34,6 +34,10 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: PRODIGI_API_KEY
+        sync: false
+      - key: PRODIGI_SANDBOX
+        value: "false"
       - key: PRINTFUL_API_KEY
         sync: false
       - key: PRINTFUL_AUTO_CONFIRM
