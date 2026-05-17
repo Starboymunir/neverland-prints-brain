@@ -34,10 +34,16 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
-      - key: PRODIGI_API_KEY
+      - key: FINERWORKS_WEB_API_KEY
         sync: false
-      - key: PRODIGI_SANDBOX
-        value: "false"
+      - key: FINERWORKS_APP_KEY
+        sync: false
+      - key: FINERWORKS_TEST_MODE
+        value: "true"
+      - key: FINERWORKS_DEFAULT_SHIPPING_CODE
+        value: "SD"
+      - key: FINERWORKS_PAYMENT_TOKEN
+        sync: false
       - key: PRINTFUL_API_KEY
         sync: false
       - key: PRINTFUL_AUTO_CONFIRM

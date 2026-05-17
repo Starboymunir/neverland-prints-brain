@@ -23,8 +23,11 @@ In Render service settings, set these before first successful boot:
 - `SHOPIFY_CLIENT_SECRET`
 - `GEMINI_API_KEY`
 - `OPENAI_API_KEY` (if used)
-- `PRODIGI_API_KEY`
-- `PRODIGI_SANDBOX` (`true` for testing, `false` for live)
+- `FINERWORKS_WEB_API_KEY`
+- `FINERWORKS_APP_KEY`
+- `FINERWORKS_TEST_MODE` (`true` for testing, `false` for live)
+- `FINERWORKS_DEFAULT_SHIPPING_CODE` (e.g. `SD`)
+- `FINERWORKS_PAYMENT_TOKEN` (`xxxx` for test mode)
 
 Optional legacy vars:
 
@@ -36,7 +39,7 @@ Optional legacy vars:
 Check:
 
 - `GET /api/health` returns 200
-- `GET /api/prodigi/status` returns `connected: true`
+- `GET /api/finerworks/status` returns `connected: true`
 
 ## 4) Re-register Shopify webhooks
 
@@ -54,18 +57,18 @@ Then verify:
 
 1. Place a test order from storefront.
 2. Confirm webhook receives order.
-3. Confirm DB row in `fulfillment_orders` updates to `sent_to_prodigi`.
-4. Confirm `prodigi_order_id` exists.
+3. Confirm DB row in `fulfillment_orders` updates to `sent_to_finerworks`.
+4. Confirm `finerworks_order_id` exists.
 
 ## 6) Go live safely
 
-1. Keep `PRODIGI_SANDBOX=true` for first test cycle.
-2. Switch to `PRODIGI_SANDBOX=false` only after successful end-to-end test.
+1. Keep `FINERWORKS_TEST_MODE=true` for first test cycle.
+2. Switch to `FINERWORKS_TEST_MODE=false` only after successful end-to-end test.
 3. Run one low-value live order and verify tracking/status updates.
 
 ## Common failure points
 
 - Missing Shopify secret/token
-- Wrong Prodigi key/environment mismatch (live key used against sandbox API or vice versa)
+- Wrong FinerWorks credential pair (`web_api_key` + `app_key`)
 - Missing webhook registration after URL change
 - `GOOGLE_SERVICE_ACCOUNT_KEY_PATH` not available inside Render runtime

@@ -11,12 +11,12 @@
 const express = require("express");
 const crypto = require("crypto");
 const supabase = require("../db/supabase");
-const ProdigiService = require("../services/prodigi");
+const FinerWorksService = require("../services/finerworks");
 
 const router = express.Router();
 
 const SHOPIFY_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
-const prodigi = new ProdigiService();
+const finerworks = new FinerWorksService();
 
 /**
  * Verify Shopify webhook signature (HMAC-SHA256)
@@ -75,6 +75,7 @@ router.post("/order-created", async (req, res) => {
           size: props["Size"] || "",
           frame: props["Frame"] || "Unframed",
           priceTier: props["_price_tier"] || "",
+          finerworksProductCode: props["_finerworks_product_code"] || "",
           driveFileId: props["_drive_file_id"] || "",
           previewUrl: props["_preview"] || "",
           quantity: item.quantity,
@@ -157,9 +158,9 @@ router.post("/order-created", async (req, res) => {
         } catch (e) { /* ignore */ }
       }
 
-      // ── AUTO-FULFILL via Prodigi ────────────────────────
-      if (process.env.PRODIGI_API_KEY && order.shipping_address) {
-        console.log("   🖨️  Sending to Prodigi for fulfillment...");
+      // ── AUTO-FULFILL via FinerWorks ─────────────────────
+      if (process.env.FINERWORKS_WEB_API_KEY && process.env.FINERWORKS_APP_KEY && order.shipping_address) {
+        console.log("   🖨️  Sending to FinerWorks for fulfillment...");
         for (const item of orderItems) {
           try {
             // Build high-res image URL from Drive file ID (s0 = max resolution)
@@ -168,19 +169,21 @@ router.post("/order-created", async (req, res) => {
               : item.previewUrl;
 
             if (!imageUrl) {
-              console.log(`   ⚠️  No image URL for "${item.artworkTitle}" — skip Prodigi`);
+              console.log(`   ⚠️  No image URL for "${item.artworkTitle}" — skip FinerWorks`);
               continue;
             }
 
             // Parse the exact print dimensions from the Size property
             // Format: "40 × 28.57 cm" → widthCm=40, heightCm=28.57
-            const dims = ProdigiService.parseSizeCm(item.size);
+            const dims = FinerWorksService.parseSizeCm(item.size);
             if (!dims) {
-              console.error(`   ⚠️  Cannot parse size "${item.size}" for "${item.artworkTitle}" — skip Prodigi`);
+              console.error(`   ⚠️  Cannot parse size "${item.size}" for "${item.artworkTitle}" — skip FinerWorks`);
               continue;
             }
 
-            const pgOrder = await prodigi.createOrder({
+            const productCode = item.finerworksProductCode || FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
+
+            const fwOrder = await finerworks.createOrder({
               recipient: {
                 name:         order.shipping_address.first_name + " " + order.shipping_address.last_name,
                 email:        order.email,
@@ -192,29 +195,29 @@ router.post("/order-created", async (req, res) => {
                 zip:          order.shipping_address.zip,
               },
               imageUrl,
-              widthCm:   dims.widthCm,
-              heightCm:  dims.heightCm,
+              productCode,
+              quantity: item.quantity || 1,
               title:     item.artworkTitle,
               externalId: `${item.orderId}-${item.lineItemId}`,
             });
 
-            console.log(`   🖨️  Prodigi order ${pgOrder.id} (${pgOrder.sku}) created for "${item.artworkTitle}"`);
+            console.log(`   🖨️  FinerWorks order ${fwOrder.id} (${productCode}) submitted for "${item.artworkTitle}"`);
 
-            // Persist the Prodigi order ID
+            // Persist FinerWorks order metadata
             try {
               await supabase
                 .from("fulfillment_orders")
                 .update({
-                  prodigi_order_id: pgOrder.id,
-                  prodigi_sku:      pgOrder.sku,
-                  status:           "sent_to_prodigi",
+                  finerworks_order_id: fwOrder.id,
+                  finerworks_product_code: productCode,
+                  status: "sent_to_finerworks",
                 })
                 .eq("shopify_order_id", item.orderId)
                 .eq("line_item_id", item.lineItemId);
             } catch (e) { /* table may not exist yet */ }
 
-          } catch (pgErr) {
-            console.error(`   ❌ Prodigi error for "${item.artworkTitle}": ${pgErr.message.slice(0, 200)}`);
+          } catch (fwErr) {
+            console.error(`   ❌ FinerWorks error for "${item.artworkTitle}": ${fwErr.message.slice(0, 200)}`);
           }
         }
       }
