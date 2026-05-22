@@ -948,14 +948,15 @@ router.get("/storefront/filters", async (req, res) => {
           .map(([value, count]) => ({ value, count }))
           .sort((a, b) => b.count - a.count);
 
+      const cap = (arr, n) => Array.isArray(arr) ? arr.slice(0, n) : [];
       cached = {
-        styles,
-        moods,
-        orientations,
-        eras,
-        subjects,
-        countries: toSortedArr(countryCounts),
-        continents: toSortedArr(continentCounts),
+        styles: cap(styles, 150),
+        moods: cap(moods, 150),
+        orientations: cap(orientations, 40),
+        eras: cap(eras, 120),
+        subjects: cap(subjects, 200),
+        countries: cap(toSortedArr(countryCounts), 250),
+        continents: cap(toSortedArr(continentCounts), 10),
       };
 
       setCache("filter_values", cached);
