@@ -99,7 +99,7 @@ async function storefrontCatalogFromShopify(req) {
     return true;
   });
 
-  const total = filtered.length;
+  const totalBeforeDisplayFilter = filtered.length;
   const from = (page - 1) * perPage;
   const to = from + perPage;
   filtered = filtered.slice(from, to);
@@ -110,7 +110,7 @@ async function storefrontCatalogFromShopify(req) {
     const comparePrice = firstVariant?.compare_at_price || null;
     const src = p.image?.src || "";
     return {
-      id: p.handle || String(p.id),
+      id: String(p.id),
       title: p.title,
       artist: p.vendor || "Unknown Artist",
       style: null,
@@ -129,7 +129,9 @@ async function storefrontCatalogFromShopify(req) {
       comparePrice,
       maxPrint: "",
     };
-  });
+  }).filter((item) => item.image && parseFloat(item.price || 0) > 0);
+
+  const total = totalBeforeDisplayFilter;
 
   return {
     items,
