@@ -697,15 +697,12 @@ router.get("/storefront/catalog", async (req, res) => {
       filters: { artist, style, mood, orientation, era, subject, country, continent, sort, q: search, tag },
     });
   } catch (err) {
-    if (isSupabaseFetchFailure(err)) {
-      try {
-        const fallback = await storefrontCatalogFromShopify(req);
-        return res.json(fallback);
-      } catch (fbErr) {
-        return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
-      }
+    try {
+      const fallback = await storefrontCatalogFromShopify(req);
+      return res.json(fallback);
+    } catch (fbErr) {
+      return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
     }
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -796,16 +793,13 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
       tags: asset.tags || [],
     });
   } catch (err) {
-    if (isSupabaseFetchFailure(err)) {
-      try {
-        const fallback = await storefrontAssetFromShopify(req.params.assetId);
-        if (!fallback) return res.status(404).json({ error: "Asset not found" });
-        return res.json(fallback);
-      } catch (fbErr) {
-        return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
-      }
+    try {
+      const fallback = await storefrontAssetFromShopify(req.params.assetId);
+      if (!fallback) return res.status(404).json({ error: "Asset not found" });
+      return res.json(fallback);
+    } catch (fbErr) {
+      return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
     }
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -869,15 +863,12 @@ router.get("/storefront/artists", async (req, res) => {
     res.set("Cache-Control", "public, max-age=3600");
     res.json({ artists: limited, total: artists.length });
   } catch (err) {
-    if (isSupabaseFetchFailure(err)) {
-      try {
-        const fallback = await storefrontArtistsFromShopify(req);
-        return res.json(fallback);
-      } catch (fbErr) {
-        return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
-      }
+    try {
+      const fallback = await storefrontArtistsFromShopify(req);
+      return res.json(fallback);
+    } catch (fbErr) {
+      return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
     }
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -981,15 +972,12 @@ router.get("/storefront/filters", async (req, res) => {
       ],
     });
   } catch (err) {
-    if (isSupabaseFetchFailure(err)) {
-      try {
-        const fallback = await storefrontFiltersFromShopify();
-        return res.json(fallback);
-      } catch (fbErr) {
-        return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
-      }
+    try {
+      const fallback = await storefrontFiltersFromShopify();
+      return res.json(fallback);
+    } catch (fbErr) {
+      return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
     }
-    res.status(500).json({ error: err.message });
   }
 });
 
