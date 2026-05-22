@@ -723,6 +723,10 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
       .single();
 
     if (error || !asset) {
+      if (error && isSupabaseFetchFailure(error)) {
+        const fallback = await storefrontAssetFromShopify(req.params.assetId);
+        if (fallback) return res.json(fallback);
+      }
       return res.status(404).json({ error: "Asset not found" });
     }
 
