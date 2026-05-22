@@ -38,6 +38,261 @@ function setCache(key, data) {
   _cache[key] = { data, ts: Date.now() };
 }
 
+function isSupabaseFetchFailure(err) {
+  const msg = (err && err.message) ? String(err.message) : "";
+  return /fetch failed|ENOTFOUND|ECONNRESET|ETIMEDOUT/i.test(msg);
+}
+
+function toPriceTierFromAmount(amount) {
+  const n = parseFloat(amount || 0);
+  if (n >= 119) return "extra_large";
+  if (n >= 79) return "large";
+  if (n >= 49) return "medium";
+  return "small";
+}
+
+function imageSetFromSrc(src) {
+  if (!src) return { s400: "", s600: "", s800: "", s1200: "", s1600: "", s2000: "" };
+  return { s400: src, s600: src, s800: src, s1200: src, s1600: src, s2000: src };
+}
+
+async function shopifyAdminGet(resource, params = {}) {
+  const domain = config.shopify.storeDomain;
+  const token = config.shopify.adminApiToken;
+  if (!domain || !token) throw new Error("Shopify admin credentials not configured");
+
+  const url = new URL(`https://${domain}/admin/api/${config.shopify.apiVersion}/${resource}`);
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
+  }
+
+  const res = await fetch(url, {
+    headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Shopify ${resource} ${res.status}: ${text.slice(0, 220)}`);
+  return JSON.parse(text);
+}
+
+async function storefrontCatalogFromShopify(req) {
+  const page = Math.max(1, parseInt(req.query.page || "1", 10));
+  const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page || "24", 10)));
+  const artist = (req.query.artist || "").toLowerCase();
+  const subject = (req.query.subject || "").toLowerCase();
+  const search = (req.query.q || req.query.search || "").toLowerCase();
+
+  const data = await shopifyAdminGet("products.json", {
+    status: "active",
+    limit: 250,
+    fields: "id,title,handle,vendor,product_type,tags,image,variants,created_at",
+  });
+  const products = data.products || [];
+
+  let filtered = products.filter((p) => {
+    const vendor = (p.vendor || "").toLowerCase();
+    const type = (p.product_type || "").toLowerCase();
+    const tags = (p.tags || "").toLowerCase();
+    const title = (p.title || "").toLowerCase();
+    if (artist && vendor !== artist) return false;
+    if (subject && type !== subject) return false;
+    if (search && !(`${title} ${vendor} ${type} ${tags}`).includes(search)) return false;
+    return true;
+  });
+
+  const total = filtered.length;
+  const from = (page - 1) * perPage;
+  const to = from + perPage;
+  filtered = filtered.slice(from, to);
+
+  const items = filtered.map((p) => {
+    const firstVariant = Array.isArray(p.variants) && p.variants.length ? p.variants[0] : null;
+    const price = firstVariant?.price || "29.99";
+    const comparePrice = firstVariant?.compare_at_price || null;
+    const src = p.image?.src || "";
+    return {
+      id: p.handle || String(p.id),
+      title: p.title,
+      artist: p.vendor || "Unknown Artist",
+      style: null,
+      mood: null,
+      era: null,
+      subject: p.product_type || null,
+      country: null,
+      continent: null,
+      orientation: "landscape",
+      quality: "standard",
+      image: src,
+      imageSrcset: { s400: src, s600: src, s800: src, s1200: src, s1600: src },
+      driveFileId: null,
+      priceTier: toPriceTierFromAmount(price),
+      price,
+      comparePrice,
+      maxPrint: "",
+    };
+  });
+
+  return {
+    items,
+    total,
+    page,
+    perPage,
+    totalPages: Math.max(1, Math.ceil(total / perPage)),
+    filters: {
+      artist: req.query.artist || null,
+      style: req.query.style || null,
+      mood: req.query.mood || null,
+      orientation: req.query.orientation || null,
+      era: req.query.era || null,
+      subject: req.query.subject || null,
+      country: req.query.country || null,
+      continent: req.query.continent || null,
+      sort: req.query.sort || "newest",
+      q: req.query.q || req.query.search || null,
+      tag: req.query.tag || null,
+    },
+    fallback: "shopify",
+  };
+}
+
+async function storefrontArtistsFromShopify(req) {
+  const limit = req.query.limit ? Math.max(1, parseInt(req.query.limit, 10)) : 0;
+  const searchQ = (req.query.q || req.query.search || "").trim().toLowerCase();
+  const sortBy = req.query.sort || "count";
+
+  const data = await shopifyAdminGet("products.json", {
+    status: "active",
+    limit: 250,
+    fields: "vendor",
+  });
+
+  const counts = {};
+  for (const p of data.products || []) {
+    const name = (p.vendor || "Unknown Artist").trim();
+    counts[name] = (counts[name] || 0) + 1;
+  }
+
+  let artists = Object.entries(counts).map(([name, count]) => ({ artist: name, name, count }));
+  if (searchQ) artists = artists.filter((a) => a.name.toLowerCase().includes(searchQ));
+  if (sortBy === "alpha") artists.sort((a, b) => a.name.localeCompare(b.name));
+  else artists.sort((a, b) => b.count - a.count);
+
+  const limited = limit > 0 ? artists.slice(0, limit) : artists;
+  return { artists: limited, total: artists.length, fallback: "shopify" };
+}
+
+async function storefrontAssetFromShopify(assetId) {
+  let product = null;
+
+  if (/^\d+$/.test(String(assetId))) {
+    const data = await shopifyAdminGet(`products/${assetId}.json`, {
+      fields: "id,title,handle,vendor,body_html,product_type,tags,image,images,variants",
+    });
+    product = data.product || null;
+  } else {
+    const data = await shopifyAdminGet("products.json", {
+      handle: assetId,
+      limit: 1,
+      fields: "id,title,handle,vendor,body_html,product_type,tags,image,images,variants",
+    });
+    product = (data.products || [])[0] || null;
+  }
+
+  if (!product) return null;
+
+  let priceMap = {};
+  try {
+    const mapPath = path.join(__dirname, "..", "config", "skeleton-price-map.json");
+    priceMap = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
+  } catch (e) {}
+
+  const src = product.image?.src || (product.images && product.images[0] && product.images[0].src) || "";
+  const firstVariant = Array.isArray(product.variants) && product.variants.length ? product.variants[0] : null;
+  const basePrice = firstVariant?.price || "29.99";
+  const comparePrice = firstVariant?.compare_at_price || null;
+
+  const variants = (product.variants || []).map((v) => {
+    const pTier = toPriceTierFromAmount(v.price);
+    return {
+      id: v.id,
+      label: v.option1 || v.title,
+      size: v.option1 || v.title,
+      widthCm: null,
+      heightCm: null,
+      dpi: null,
+      quality: "standard",
+      priceTier: pTier,
+    };
+  });
+
+  return {
+    id: product.handle || String(product.id),
+    title: product.title,
+    artist: product.vendor || "Unknown Artist",
+    description: product.body_html || "",
+    style: null,
+    mood: null,
+    palette: null,
+    subject: product.product_type || null,
+    orientation: "landscape",
+    quality: "standard",
+    maxPrint: "",
+    widthPx: null,
+    heightPx: null,
+    driveFileId: null,
+    images: imageSetFromSrc(src),
+    mockup_url: null,
+    priceTier: toPriceTierFromAmount(basePrice),
+    basePrice,
+    comparePrice,
+    variants,
+    priceMap,
+    shopifyProductId: product.id,
+    tags: product.tags ? String(product.tags).split(",").map((t) => t.trim()).filter(Boolean) : [],
+    fallback: "shopify",
+  };
+}
+
+async function storefrontFiltersFromShopify() {
+  const data = await shopifyAdminGet("products.json", {
+    status: "active",
+    limit: 250,
+    fields: "vendor,product_type,tags",
+  });
+  const products = data.products || [];
+
+  const countMap = (arr) => {
+    const m = {};
+    for (const v of arr) {
+      const key = (v || "").trim();
+      if (!key) continue;
+      m[key] = (m[key] || 0) + 1;
+    }
+    return Object.entries(m).map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count);
+  };
+
+  const styles = countMap(products.map((p) => p.product_type || ""));
+  const subjects = styles;
+  const artists = countMap(products.map((p) => p.vendor || ""));
+
+  return {
+    styles,
+    moods: [],
+    orientations: [],
+    eras: [],
+    subjects,
+    countries: [],
+    continents: [],
+    artists,
+    priceTiers: [
+      { tier: "small", label: "Small", price: "$29.99", framedPrice: "$39.99" },
+      { tier: "medium", label: "Medium", price: "$49.99", framedPrice: "$64.99" },
+      { tier: "large", label: "Large", price: "$79.99", framedPrice: "$99.99" },
+      { tier: "extra_large", label: "Extra Large", price: "$119.99", framedPrice: "$149.99" },
+    ],
+    fallback: "shopify",
+  };
+}
+
 /**
  * Paginate through ALL rows for a Supabase query (bypasses 1000-row limit).
  * @param {string} table - table name
@@ -440,6 +695,14 @@ router.get("/storefront/catalog", async (req, res) => {
       filters: { artist, style, mood, orientation, era, subject, country, continent, sort, q: search, tag },
     });
   } catch (err) {
+    if (isSupabaseFetchFailure(err)) {
+      try {
+        const fallback = await storefrontCatalogFromShopify(req);
+        return res.json(fallback);
+      } catch (fbErr) {
+        return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
+      }
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -527,6 +790,15 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
       tags: asset.tags || [],
     });
   } catch (err) {
+    if (isSupabaseFetchFailure(err)) {
+      try {
+        const fallback = await storefrontAssetFromShopify(req.params.assetId);
+        if (!fallback) return res.status(404).json({ error: "Asset not found" });
+        return res.json(fallback);
+      } catch (fbErr) {
+        return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
+      }
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -591,6 +863,14 @@ router.get("/storefront/artists", async (req, res) => {
     res.set("Cache-Control", "public, max-age=3600");
     res.json({ artists: limited, total: artists.length });
   } catch (err) {
+    if (isSupabaseFetchFailure(err)) {
+      try {
+        const fallback = await storefrontArtistsFromShopify(req);
+        return res.json(fallback);
+      } catch (fbErr) {
+        return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
+      }
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -695,6 +975,14 @@ router.get("/storefront/filters", async (req, res) => {
       ],
     });
   } catch (err) {
+    if (isSupabaseFetchFailure(err)) {
+      try {
+        const fallback = await storefrontFiltersFromShopify();
+        return res.json(fallback);
+      } catch (fbErr) {
+        return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
+      }
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -1734,9 +2022,13 @@ router.get("/health", async (req, res) => {
   const checks = { server: "ok", version: "2026-03-12a-oom-fix", supabase: "unknown", drive: "unknown" };
 
   try {
-    const { count } = await supabase.from("assets").select("*", { count: "exact", head: true });
-    checks.supabase = "ok";
-    checks.assetCount = count;
+    const { count, error } = await supabase.from("assets").select("*", { count: "exact", head: true });
+    if (error) {
+      checks.supabase = `error: ${error.message}`;
+    } else {
+      checks.supabase = "ok";
+      checks.assetCount = count;
+    }
   } catch (e) {
     checks.supabase = `error: ${e.message}`;
   }
