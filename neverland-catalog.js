@@ -543,10 +543,16 @@
     if (searchInput && searchInput.value.trim()) {
       filters.q = searchInput.value.trim();
     }
-    // Check for continent filter (set via map, stored in URL)
-    const continentParam = getUrlParam('continent');
-    if (continentParam && !filters.continent) {
-      filters.continent = continentParam;
+    // Fall back to URL params for filters that may not be representable in the
+    // dropdowns (e.g. an artist not in the "top N artists" list). Without this,
+    // visiting /pages/catalog?artist=X silently dropped the artist filter and
+    // rendered the entire catalog.
+    const URL_FILTER_KEYS = ['artist', 'style', 'mood', 'orientation', 'era', 'subject', 'country', 'continent', 'tag'];
+    for (const key of URL_FILTER_KEYS) {
+      if (!filters[key]) {
+        const v = getUrlParam(key);
+        if (v) filters[key] = v;
+      }
     }
     return filters;
   }
@@ -910,12 +916,22 @@
       let sizeList = [];
 
       if (asset.variants && asset.variants.length > 0) {
-        // API returned explicit variant sizes
-        sizeList = asset.variants.map(v => ({
-          tier: v.priceTier,
-          label: PRICE_TIERS[v.priceTier]?.label || v.label || v.size,
-          size: v.size || '',
-        }));
+        // API returned explicit variant sizes — dedupe by priceTier (multiple
+        // resolution-engine rows can land in the same tier bucket, which used
+        // to render the same tier label twice, e.g. "Medium" appearing twice).
+        const seenTiers = new Set();
+        for (const v of asset.variants) {
+          const tier = v.priceTier;
+          if (!tier || seenTiers.has(tier)) continue;
+          seenTiers.add(tier);
+          sizeList.push({
+            tier,
+            label: PRICE_TIERS[tier]?.label || v.label || v.size,
+            size: v.size || '',
+          });
+        }
+        const tierOrder = ['small', 'medium', 'large', 'extra_large'];
+        sizeList.sort((a, b) => tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier));
       } else if (asset.priceMap) {
         // Derive sizes from priceMap keys (deduplicate unframed/framed pairs)
         const seen = new Set();

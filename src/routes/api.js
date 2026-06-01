@@ -620,6 +620,9 @@ router.get("/storefront/catalog", async (req, res) => {
         query = query.order("created_at", { ascending: false });
         break;
     }
+    // Stable tiebreaker so artworks don't reshuffle / repeat across paginated pages
+    // when many rows share the same created_at / quality_tier / title.
+    query = query.order("id", { ascending: true });
 
     // Pagination
     const from = (page - 1) * perPage;
@@ -677,15 +680,10 @@ router.get("/storefront/catalog", async (req, res) => {
       }
     }
 
-    // Artist diversity: limit same artist appearing more than 3 times per page
-    if (sort !== "title_asc" && sort !== "title_desc") {
-      const artistCounts = {};
-      items = items.filter(item => {
-        const key = item.artist || "Unknown";
-        artistCounts[key] = (artistCounts[key] || 0) + 1;
-        return artistCounts[key] <= 3;
-      });
-    }
+    // NOTE: A previous per-page artist-diversity cap was removed because it
+    // ran AFTER pagination — it dropped items from the current page without
+    // reducing `count`, which made the page count + total artwork count
+    // contradict each other and produced uneven page sizes.
 
     res.set("Cache-Control", "public, max-age=60");
     res.json({
@@ -1144,23 +1142,36 @@ router.get("/storefront/similar-asset/:assetId", async (req, res) => {
     }
 
     // Fallback: tag-based similarity
+    // Build a filter on any matching dimension (style OR mood OR subject) so
+    // we don't always return the same first-N rows for assets that share no
+    // style with anything (which made the "Recommended for you" section look
+    // identical on every product page).
     let query = supabase
       .from("assets")
-      .select("id, title, drive_file_id, artist, style, mood, ratio_class, max_print_width_cm, max_print_height_cm")
+      .select("id, title, drive_file_id, artist, style, mood, subject, ratio_class, max_print_width_cm, max_print_height_cm")
       .neq("id", req.params.assetId)
       .in("ingestion_status", ["ready", "analyzed"]);
 
-    if (asset.style) query = query.eq("style", asset.style);
+    const orParts = [];
+    if (asset.style)   orParts.push(`style.eq.${asset.style}`);
+    if (asset.mood)    orParts.push(`mood.eq.${asset.mood}`);
+    if (asset.subject) orParts.push(`subject.eq.${asset.subject}`);
+    if (asset.artist)  orParts.push(`artist.eq.${asset.artist}`);
+    if (orParts.length > 0) {
+      query = query.or(orParts.join(","));
+    }
 
-    const { data: similar } = await query.limit(limit * 3);
+    // Over-fetch and shuffle so different visits surface different similar items
+    const { data: similar } = await query.limit(limit * 8);
 
     const scored = (similar || []).map((s) => {
       let score = 0;
-      if (s.style === asset.style) score += 3;
-      if (s.mood === asset.mood) score += 2;
+      if (s.style   === asset.style)        score += 3;
+      if (s.mood    === asset.mood)         score += 2;
+      if (s.subject === asset.subject)      score += 2;
       if (s.ratio_class === asset.ratio_class) score += 1;
-      if (s.artist !== asset.artist) score += 1;
-      return { ...s, _score: score };
+      if (s.artist  !== asset.artist)       score += 1; // diversity bonus
+      return { ...s, _score: score + Math.random() * 0.5 }; // jitter for variety
     });
 
     scored.sort((a, b) => b._score - a._score);
