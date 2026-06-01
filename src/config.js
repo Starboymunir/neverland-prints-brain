@@ -34,7 +34,9 @@ module.exports = {
   // Resolution Engine
   resolution: {
     pxPerCm: parseFloat(process.env.PX_PER_CM) || 35.43,
-    minPrintDpi: parseInt(process.env.MIN_PRINT_DPI, 10) || 150,
+    // Safety floor for what we'll offer for sale. Bumped from 150 → 200
+    // per client request (rather print smaller-and-clearer than bigger-and-blurry).
+    minPrintDpi: parseInt(process.env.MIN_PRINT_DPI, 10) || 200,
   },
 
   // Server

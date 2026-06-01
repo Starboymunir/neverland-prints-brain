@@ -727,8 +727,15 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
 
     const tier = computePriceTier(asset.max_print_width_cm, asset.max_print_height_cm);
 
+    // Hard DPI floor at API boundary (existing DB rows may have been generated
+    // under the old 150 minimum). Bumped to 200 per client: rather print
+    // smaller-and-sharp than larger-and-soft.
+    const DPI_FLOOR = parseInt(process.env.MIN_PRINT_DPI, 10) || 200;
+
     // Build variant options with price tiers
-    const variants = (asset.asset_variants || []).map((v) => {
+    const variants = (asset.asset_variants || [])
+      .filter((v) => (v.effective_dpi || 0) >= DPI_FLOOR)
+      .map((v) => {
       const area = (v.width_cm || 0) * (v.height_cm || 0);
       let vTier;
       if (area <= 600) vTier = "small";
@@ -1238,7 +1245,9 @@ router.get("/storefront/product/:shopifyProductId", async (req, res) => {
       ratioClass: asset.ratio_class,
       qualityTier: asset.quality_tier,
       maxPrint: `${asset.max_print_width_cm} × ${asset.max_print_height_cm} cm`,
-      variants: (asset.asset_variants || []).map(v => ({
+      variants: (asset.asset_variants || [])
+        .filter((v) => (v.effective_dpi || 0) >= (parseInt(process.env.MIN_PRINT_DPI, 10) || 200))
+        .map(v => ({
         label: v.label,
         size: `${v.width_cm} × ${v.height_cm} cm`,
         dpi: v.effective_dpi,
@@ -2961,6 +2970,75 @@ router.get("/finerworks/product-code", (req, res) => {
     productCode,
     note: "Uses archival-matte default code pattern; replace with your curated product codes where needed.",
   });
+});
+
+/**
+ * GET /api/finerworks/price-compare
+ * Side-by-side: our storefront tier price vs FinerWorks base cost for a
+ * grid of common print sizes. Lets the client sanity-check margins.
+ *
+ * Query (optional): ?sizes=8x10,12x18,16x20,18x24,24x36,30x40
+ *   sizes are inches (FW product codes use inches).
+ */
+router.get("/finerworks/price-compare", async (req, res) => {
+  try {
+    const defaultSizes = ["8x10", "11x14", "12x18", "16x20", "18x24", "20x30", "24x36", "30x40"];
+    const sizesParam = (req.query.sizes || "").trim();
+    const sizes = sizesParam ? sizesParam.split(",").map((s) => s.trim()) : defaultSizes;
+
+    // Build FW product codes for each size (archival matte: 5M6M9S{min}X{max})
+    const codes = sizes.map((s) => {
+      const [w, h] = s.split("x").map(Number);
+      if (!w || !h) return null;
+      const min = Math.min(w, h);
+      const max = Math.max(w, h);
+      return { size: s, code: `5M6M9S${min}X${max}`, widthIn: w, heightIn: h };
+    }).filter(Boolean);
+
+    const fwResp = await finerworks.getPrices({ productCodes: codes.map((c) => c.code) });
+    const fwPriceByCode = {};
+    (fwResp.prices || fwResp.product_prices || []).forEach((p) => {
+      fwPriceByCode[p.product_code || p.product_sku || p.sku] = p;
+    });
+
+    const rows = codes.map((c) => {
+      const widthCm = +(c.widthIn * 2.54).toFixed(2);
+      const heightCm = +(c.heightIn * 2.54).toFixed(2);
+      const ourTier = computePriceTier(widthCm, heightCm);
+      const fw = fwPriceByCode[c.code] || null;
+      const fwBase = fw ? parseFloat(fw.product_price ?? fw.total_price ?? fw.base_price ?? 0) : null;
+      const ourPrice = parseFloat(ourTier.price);
+      const margin = fwBase != null ? +(ourPrice - fwBase).toFixed(2) : null;
+      const marginPct = fwBase != null && ourPrice > 0 ? +((margin / ourPrice) * 100).toFixed(1) : null;
+
+      return {
+        size_in: c.size,
+        size_cm: `${widthCm} \u00d7 ${heightCm} cm`,
+        product_code: c.code,
+        media: fw?.debug?.Description?.Media || "Archival Matte Paper",
+        our_tier: ourTier.tier,
+        our_price_usd: ourPrice,
+        compare_at_usd: parseFloat(ourTier.comparePrice),
+        finerworks_cost_usd: fwBase,
+        margin_usd: margin,
+        margin_pct: marginPct,
+      };
+    });
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      note: "FinerWorks costs are base print cost only (paper). Add shipping for true COGS.",
+      tier_thresholds: {
+        small: "area <= 600 cm^2 \u2192 $29.99",
+        medium: "area <= 1800 cm^2 \u2192 $49.99",
+        large: "area <= 4000 cm^2 \u2192 $79.99",
+        extra_large: "area > 4000 cm^2 \u2192 $119.99",
+      },
+      rows,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
