@@ -1241,13 +1241,14 @@
       var hCm = dims.h;
 
       // Scene background is a photo of a real 2.6m (260cm) gallery wall.
-      // Wall spans y ≈ 5.9% (just below ceiling track lights) to y ≈ 85.4%
-      // (top of baseboard) → 79.5% of scene height represents 260cm.
+      // Wall surface spans y ≈ 8.3% (just below ceiling track lights) to
+      // y ≈ 84% (top of baseboard) → 75.7% of scene height represents
+      // 260cm in the real world.
       var scene = document.getElementById('room-scene');
       var sceneH = scene ? scene.offsetHeight : 480;
       var sceneW = scene ? scene.offsetWidth  : sceneH * 1.5;
       var WALL_HEIGHT_CM = 260;
-      var WALL_RATIO = 0.795;
+      var WALL_RATIO = 0.757;
       var wallPx = sceneH * WALL_RATIO;
       var pxPerCm = wallPx / WALL_HEIGHT_CM;
 
@@ -1255,10 +1256,11 @@
       var imgH = Math.round(hCm * pxPerCm);
 
       // Wall in the photo is ~75% of scene width (excluding window left +
-      // doorway right). Clamp horizontally to that. Clamp height to 95% of
-      // the wall so even 260cm art stays under the track-light ceiling.
+      // doorway right). Clamp horizontally to that. Clamp height to 85%
+      // of the wall so even 260cm art stays clear of the track-light
+      // spotlight pools at the top of the wall.
       var maxPxW = Math.round(sceneW * 0.70);
-      var maxPxH = Math.round(wallPx * 0.95);
+      var maxPxH = Math.round(wallPx * 0.85);
       if (imgW > maxPxW) { imgH = Math.round(imgH * (maxPxW / imgW)); imgW = maxPxW; }
       if (imgH > maxPxH) { imgW = Math.round(imgW * (maxPxH / imgH)); imgH = maxPxH; }
 

@@ -924,23 +924,25 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
 
 /* Scene — photo mockup of an empty 2.6m gallery wall. All art positioning
    is anchored as a % of the scene so it stays aligned at any width.
-   Image geometry (1536x1024):
-     wall top      ≈  60px (5.9%)   - just below track-light ceiling
-     baseboard top ≈ 875px (85.4%)  - bottom of art always sits here
-     usable wall x ≈ 180–1330 (49% center)
-   That gives a wall height of 79.5% of scene height = 260cm. */
+   Image geometry (1536x1024), re-measured:
+     ceiling/track  ≈   0–85 px ( 0–8.3%)
+     wall surface   ≈  85–860 px (8.3–84.0%)  ← 775px = 75.7% = 260cm
+     baseboard      ≈ 860–895 px (84–87.4%)
+     floor          ≈ 895–1024 px (87.4–100%)
+     wall x-center  ≈ 755 / 1536 = 49.2%
+   Art's image bottom rests right at the baseboard line (y≈84% → bottom:16%). */
 .room-preview__scene {
-  position: relative; width: 100%; aspect-ratio: 3 / 2; height: auto; overflow: hidden;
+  position: relative; width: 100%; aspect-ratio: 3 / 2; height: auto;
+  min-height: 320px; overflow: hidden;
   background-color: #ede5d3;
   background-size: cover; background-position: center center; background-repeat: no-repeat;
 }
 
-/* Art mount — anchored on the baseboard line of the photo (y=85.4% of
-   scene height) and horizontally centered on the wall (x=49.2% — the
-   wall in the photo is slightly left-of-image-center because of the
-   right-side doorway). Tall pieces grow UPWARD into the wall. */
+/* Art mount — anchored on the baseboard line. The dim-w element is
+   positioned absolutely BELOW the mount so it never pushes the image
+   down onto the floor. Tall pieces grow UPWARD into the wall. */
 .room-preview__art-mount {
-  position: absolute; bottom: 14.6%; left: 49.2%; transform: translateX(-50%);
+  position: absolute; bottom: 17%; left: 49.2%; transform: translateX(-50%);
   z-index: 3; text-align: center;
 }
 
@@ -976,8 +978,11 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
   box-shadow: 0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.12), 4px 4px 12px rgba(0,0,0,0.10);
 }
 
-/* Dimension annotations — architectural style */
+/* Dimension annotations — architectural style. dim-w is absolute so
+   it sits OUTSIDE the mount's content box and doesn't displace the
+   image bottom away from the baseboard anchor. */
 .room-preview__dim-w {
+  position: absolute; left: 0; right: 0; top: 100%;
   display: flex; align-items: center; justify-content: center;
   margin-top: 8px; gap: 0; height: 14px;
 }
