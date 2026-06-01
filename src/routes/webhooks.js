@@ -168,6 +168,11 @@ router.post("/order-created", async (req, res) => {
               ? `https://lh3.googleusercontent.com/d/${item.driveFileId}=s0`
               : item.previewUrl;
 
+            // Smaller thumbnail for FinerWorks invoice preview
+            const thumbnailUrl = item.driveFileId
+              ? `https://lh3.googleusercontent.com/d/${item.driveFileId}=s400`
+              : item.previewUrl;
+
             if (!imageUrl) {
               console.log(`   ⚠️  No image URL for "${item.artworkTitle}" — skip FinerWorks`);
               continue;
@@ -183,6 +188,31 @@ router.post("/order-created", async (req, res) => {
 
             const productCode = item.finerworksProductCode || FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
 
+            // FinerWorks requires pixel dimensions in product_image_file.
+            // Look them up from Supabase by asset_id.
+            let pixelWidth = 0;
+            let pixelHeight = 0;
+            if (item.assetId) {
+              try {
+                const { data: asset } = await supabase
+                  .from("assets")
+                  .select("width_px,height_px")
+                  .eq("id", item.assetId)
+                  .single();
+                if (asset) {
+                  pixelWidth  = asset.width_px  || 0;
+                  pixelHeight = asset.height_px || 0;
+                }
+              } catch (e) { /* fall through to default */ }
+            }
+            // Fallback so FW doesn't reject with "missing or invalid info"
+            if (!pixelWidth || !pixelHeight) {
+              // Assume the image is at least large enough for the requested print
+              // at 300dpi. 1cm = 0.393700787 inches.
+              pixelWidth  = Math.round(dims.widthCm  * 0.393700787 * 300);
+              pixelHeight = Math.round(dims.heightCm * 0.393700787 * 300);
+            }
+
             const fwOrder = await finerworks.createOrder({
               recipient: {
                 name:         order.shipping_address.first_name + " " + order.shipping_address.last_name,
@@ -193,8 +223,12 @@ router.post("/order-created", async (req, res) => {
                 state_code:   order.shipping_address.province_code || "",
                 country_code: order.shipping_address.country_code,
                 zip:          order.shipping_address.zip,
+                phone:        order.shipping_address.phone || order.phone || null,
               },
               imageUrl,
+              thumbnailUrl,
+              pixelWidth,
+              pixelHeight,
               productCode,
               quantity: item.quantity || 1,
               title:     item.artworkTitle,

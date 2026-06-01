@@ -132,6 +132,9 @@ class FinerWorksService {
   async createOrder({
     recipient,
     imageUrl,
+    thumbnailUrl,
+    pixelWidth,
+    pixelHeight,
     productCode,
     quantity = 1,
     title,
@@ -139,6 +142,21 @@ class FinerWorksService {
     shippingCode,
   }) {
     const { first, last } = this._splitName(recipient.name);
+
+    // product_image is required as an object (schema: product_image_file)
+    // when not submitting a virtual-inventory SKU. Build it from the supplied
+    // image URL plus pixel dimensions (FinerWorks rejects with "missing or
+    // invalid info" if dims aren't provided).
+    let productImage = null;
+    if (imageUrl) {
+      productImage = {
+        pixel_width: pixelWidth || 0,
+        pixel_height: pixelHeight || 0,
+        product_url_file: imageUrl,
+        product_url_thumbnail: thumbnailUrl || imageUrl,
+        library_file: null,
+      };
+    }
 
     const order = {
       order_po: externalId,
@@ -164,7 +182,7 @@ class FinerWorksService {
           product_order_po: externalId,
           product_qty: quantity,
           product_sku: productCode,
-          product_image: imageUrl || null,
+          product_image: productImage,
           product_title: title || "Artwork Print",
           template: null,
           product_guid: "00000000-0000-0000-0000-000000000000",
