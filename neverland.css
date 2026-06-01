@@ -938,11 +938,14 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
   background-size: cover; background-position: center center; background-repeat: no-repeat;
 }
 
-/* Art mount — anchored on the baseboard line. The dim-w element is
-   positioned absolutely BELOW the mount so it never pushes the image
-   down onto the floor. Tall pieces grow UPWARD into the wall. */
+/* Art mount — hung at gallery eye-level (industry standard: art's
+   vertical CENTER at ~145cm above the floor on a 260cm wall, i.e. 56%
+   up the wall). With baseboard at y=84% of scene and wall top at y=8%
+   of scene, eye-level lands at y=42% from the top. Anchor the mount's
+   CENTER there so art of any size stays at eye-level. */
 .room-preview__art-mount {
-  position: absolute; bottom: 17%; left: 51.4%; transform: translateX(-50%);
+  position: absolute; top: 42%; left: 51.4%;
+  transform: translate(-50%, -50%);
   z-index: 3; text-align: center;
 }
 
