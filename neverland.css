@@ -922,16 +922,39 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
 /* Room Selector Tabs — hidden (single photo bg) */
 .room-preview__tabs { display: none; }
 
-/* Scene — photo background room */
+/* Scene — clean gallery wall rendered in CSS (no stock-photo dependency).
+   Top 78% is wall, bottom 22% is floor. Subtle vertical gradient adds depth
+   without looking artificial. */
 .room-preview__scene {
-  position: relative; height: 420px; overflow: hidden;
-  background-color: #f0ebe3;
-  background-size: cover; background-position: center center; background-repeat: no-repeat;
+  position: relative; height: 480px; overflow: hidden;
+  background:
+    /* baseboard shadow line */
+    linear-gradient(to bottom, transparent 0, transparent calc(78% - 1px), rgba(0,0,0,0.10) calc(78% - 1px), rgba(0,0,0,0.10) 78%, transparent 78%) no-repeat,
+    /* baseboard strip */
+    linear-gradient(to bottom, transparent 0, transparent 78%, #ece4d6 78%, #ece4d6 80%, transparent 80%) no-repeat,
+    /* wood floor — warm oak tone with subtle plank lines */
+    repeating-linear-gradient(
+      90deg,
+      #c9a877 0px, #c9a877 60px,
+      #bf9d6a 60px, #bf9d6a 62px,
+      #c9a877 62px, #c9a877 140px,
+      #b89461 140px, #b89461 142px
+    ),
+    /* wall — warm off-white with a faint vertical gradient for depth */
+    linear-gradient(to bottom, #f5efe3 0%, #ede5d3 78%, #d8c9a8 78%, #b89461 100%);
+}
+.room-preview__scene::before {
+  /* subtle ambient corner shadow on the wall */
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 35%, transparent 40%, rgba(0,0,0,0.06) 100%);
+  pointer-events: none; z-index: 1;
 }
 
-/* Art mount — centered on the wall area of the photo */
+/* Art mount — anchored just above the baseboard so the art always sits
+   on the wall regardless of size. Tall pieces grow upward, not down into
+   the floor (fixes 191cm portrait clipping). */
 .room-preview__art-mount {
-  position: absolute; top: 12%; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: 26%; left: 50%; transform: translateX(-50%);
   z-index: 3; text-align: center;
 }
 
