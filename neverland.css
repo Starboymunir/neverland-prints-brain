@@ -942,7 +942,7 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
    positioned absolutely BELOW the mount so it never pushes the image
    down onto the floor. Tall pieces grow UPWARD into the wall. */
 .room-preview__art-mount {
-  position: absolute; bottom: 17%; left: 49.2%; transform: translateX(-50%);
+  position: absolute; bottom: 17%; left: 51.4%; transform: translateX(-50%);
   z-index: 3; text-align: center;
 }
 
@@ -1027,7 +1027,9 @@ img[loading="eager"], img[fetchpriority="high"] { opacity: 1; }
   .pp-frame[data-frame="white"] .pp-frame__mat,
   .pp-frame[data-frame="natural"] .pp-frame__mat,
   .pp-frame[data-frame="walnut"] .pp-frame__mat { padding: 0; }
-  .room-preview__scene { height: auto; min-height: 260px; background-size: 100% auto; background-position: top center; }
+  /* DO NOT override background-size/position here — base rule uses
+     `cover` + `center center` so the photo's baseboard line stays at
+     y=84% of the scene at every viewport. */
   .room-preview__dim-h { right: -28px; }
   .room-preview__dim-val { font-size: 0.52rem; }
   .room-preview__frame[data-frame="black"],
