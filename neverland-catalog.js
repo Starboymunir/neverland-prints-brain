@@ -1240,28 +1240,25 @@
       var wCm = dims.w;
       var hCm = dims.h;
 
-      // CSS scene paints wall on top 78%, floor on bottom 22%. Map the art
-      // onto the visible wall area using true cm-to-px math.
+      // Scene background is a photo of a real 2.6m (260cm) gallery wall.
+      // Wall spans y ≈ 5.9% (just below ceiling track lights) to y ≈ 85.4%
+      // (top of baseboard) → 79.5% of scene height represents 260cm.
       var scene = document.getElementById('room-scene');
       var sceneH = scene ? scene.offsetHeight : 480;
-      var sceneW = scene ? scene.offsetWidth  : sceneH;
-      var isMobile = window.innerWidth <= 768;
-      // Real-world wall height we'll "simulate" inside the wall portion.
-      // 240cm is a typical residential ceiling. Mobile gets a slightly
-      // larger reference so art doesn't render tiny.
-      var WALL_HEIGHT_CM = isMobile ? 280 : 240;
-      var WALL_RATIO = 0.78;
+      var sceneW = scene ? scene.offsetWidth  : sceneH * 1.5;
+      var WALL_HEIGHT_CM = 260;
+      var WALL_RATIO = 0.795;
       var wallPx = sceneH * WALL_RATIO;
       var pxPerCm = wallPx / WALL_HEIGHT_CM;
 
       var imgW = Math.round(wCm * pxPerCm);
       var imgH = Math.round(hCm * pxPerCm);
 
-      // Clamp:
-      //   width  → max 78% of scene WIDTH (was using height — wrong for landscape)
-      //   height → max 90% of wall height (was 85%, leaves more headroom for 191cm pieces)
-      var maxPxW = Math.round(sceneW * 0.78);
-      var maxPxH = Math.round(wallPx * 0.90);
+      // Wall in the photo is ~75% of scene width (excluding window left +
+      // doorway right). Clamp horizontally to that. Clamp height to 95% of
+      // the wall so even 260cm art stays under the track-light ceiling.
+      var maxPxW = Math.round(sceneW * 0.70);
+      var maxPxH = Math.round(wallPx * 0.95);
       if (imgW > maxPxW) { imgH = Math.round(imgH * (maxPxW / imgW)); imgW = maxPxW; }
       if (imgH > maxPxH) { imgW = Math.round(imgW * (maxPxH / imgH)); imgH = maxPxH; }
 

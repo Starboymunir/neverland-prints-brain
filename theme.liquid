@@ -94,9 +94,7 @@
   {{ 'neverland.css' | asset_url | stylesheet_tag }}
 
   <meta name="watermark-url" content="{{ 'watermark-2.png' | asset_url }}">
-  {%- comment -%} Gallery-wall mockup is rendered in CSS (no stock photo). Leaving meta empty
-  signals the JS to fall back to the CSS scene background. {%- endcomment -%}
-  <meta name="mockup-bg-url" content="">
+  <meta name="mockup-bg-url" content="{{ 'mockup-wall.jpg' | asset_url }}">
 
   <script>
     document.documentElement.className = document.documentElement.className.replace('no-js', 'js');
