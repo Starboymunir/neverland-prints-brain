@@ -1207,10 +1207,11 @@ router.get("/storefront/similar-asset/:assetId", async (req, res) => {
  */
 function computePriceTier(maxWidthCm, maxHeightCm) {
   const area = (maxWidthCm || 0) * (maxHeightCm || 0);
-  if (area <= 600) return { tier: "small", price: "29.99", comparePrice: "39.99" };
-  if (area <= 1800) return { tier: "medium", price: "49.99", comparePrice: "64.99" };
-  if (area <= 4000) return { tier: "large", price: "79.99", comparePrice: "99.99" };
-  return { tier: "extra_large", price: "119.99", comparePrice: "149.99" };
+  // Prices: FW base cost / (1 - 0.70 margin), charm-rounded. See sync-prices.js.
+  if (area <= 600) return { tier: "small", price: "33.99", comparePrice: "44.99" };
+  if (area <= 1800) return { tier: "medium", price: "69.99", comparePrice: "90.99" };
+  if (area <= 4000) return { tier: "large", price: "159.99", comparePrice: "209.99" };
+  return { tier: "extra_large", price: "319.99", comparePrice: "419.99" };
 }
 
 // ──────────────────────────────────────

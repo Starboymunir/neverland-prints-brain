@@ -11,10 +11,10 @@
   const WATERMARK_URL = (document.querySelector('link[href*="neverland.css"]')?.href || '').replace('neverland.css', 'watermark-1.png') || 'https://cdn.shopify.com/s/files/1/0675/4300/7316/t/3/assets/watermark-1.png';
   const WATERMARK_HTML = `<img src="${WATERMARK_URL}" alt="" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22%;max-width:80px;opacity:0.04;pointer-events:none;user-select:none;z-index:2;" aria-hidden="true">`;
   const PRICE_TIERS = {
-    small:       { unframed: '29.99', framed: '39.99', label: 'Small' },
-    medium:      { unframed: '49.99', framed: '64.99', label: 'Medium' },
-    large:       { unframed: '79.99', framed: '99.99', label: 'Large' },
-    extra_large: { unframed: '119.99', framed: '149.99', label: 'Extra Large' },
+    small:       { unframed: "33.99",       framed: "44.99",       label: "Small" },
+    medium:      { unframed: "69.99",      framed: "90.99",      label: "Medium" },
+    large:       { unframed: "159.99",       framed: "209.99",       label: "Large" },
+    extra_large: { unframed: "319.99", framed: "419.99", label: "Extra Large" }
   };
 
   let priceMap = null;     // skeleton variant IDs, loaded from API
