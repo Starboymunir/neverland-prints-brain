@@ -168,12 +168,23 @@ class FinerWorksService {
         product_order_po: `${orderPo}-${idx}`,
         product_qty: it.product_qty || 1,
         product_sku: it.product_sku,
-        product_image: null,
+        // FW requires a non-null product_image object even for rate quoting.
+        // We pass minimal placeholder values (the dims/URL don't affect the
+        // shipping price — only weight/box/destination do).
+        product_image: {
+          pixel_width: it.pixel_width || 2400,
+          pixel_height: it.pixel_height || 3000,
+          product_url_file: it.product_url_file || "https://via.placeholder.com/2400x3000.jpg",
+          product_url_thumbnail: it.product_url_thumbnail || "https://via.placeholder.com/400x500.jpg",
+          library_file: null,
+        },
         product_title: it.product_title || "Print",
         template: null,
         product_guid: "00000000-0000-0000-0000-000000000000",
       })),
-      shipping_code: null,
+      // FW currently requires shipping_code on this endpoint even though it
+      // returns multiple options. Pass the configured default (e.g. "SD").
+      shipping_code: this.defaultShippingCode || "SD",
       ship_by_date: null,
       customs_tax_info: null,
       gift_message: null,

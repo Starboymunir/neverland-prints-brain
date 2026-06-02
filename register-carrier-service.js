@@ -19,7 +19,7 @@ if (!TOKEN) {
   process.exit(1);
 }
 const NAME   = process.env.CS_NAME        || "FinerWorks Live Rates";
-const URL    = process.env.CS_CALLBACK_URL || "https://neverland-prints-brain.onrender.com/api/carrier-service/rates";
+const URL    = process.env.CS_CALLBACK_URL || "https://neverland-prints-brain-xvuy.onrender.com/api/carrier-service/rates";
 
 const BASE = `https://${SHOP}/admin/api/${API}`;
 const HEADERS = {

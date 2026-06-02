@@ -2796,24 +2796,40 @@ function shopifyItemToFwSku(item) {
 }
 
 function normalizeFwShippingOptions(fwResp) {
-  // FW response shape is documented loosely; cover common variants.
-  // Expected: { orders: [{ shipping_options: [...] }] }  or  top-level array.
-  let opts = [];
-  const orders = fwResp?.orders || fwResp?.order_shipping_options || (Array.isArray(fwResp) ? fwResp : []);
+  // FW returns: { status, orders: [{ order_po, options: [{id, rate,
+  //   shipping_method, shipping_code, shipping_class_code, transit_time,
+  //   carrier, calculated_total}], order_size, preferred_option }] }
+  const orders = fwResp?.orders || (Array.isArray(fwResp) ? fwResp : []);
+  const opts = [];
   for (const o of orders) {
-    const list = o?.shipping_options || o?.options || [];
+    const list = o?.options || o?.shipping_options || [];
     for (const s of list) opts.push(s);
   }
-  // De-dup by code, keep cheapest
+  // De-dup by shipping_code, keep cheapest
   const byCode = {};
   for (const s of opts) {
-    const code = s.shipping_code || s.service_code || s.code || s.shipping_name || s.name || "STD";
-    const cost = parseFloat(s.shipping_cost ?? s.total_cost ?? s.cost ?? s.rate ?? 0);
+    const code = s.shipping_code || s.code || `OPT${s.id || ""}`;
+    const cost = parseFloat(s.rate ?? s.shipping_cost ?? s.cost ?? 0);
+    if (!Number.isFinite(cost)) continue;
     if (byCode[code] == null || cost < byCode[code]._cost) {
       byCode[code] = { ...s, _cost: cost, _code: code };
     }
   }
-  return Object.values(byCode);
+  return Object.values(byCode).sort((a, b) => a._cost - b._cost);
+}
+
+// Strip HTML and parse "1-5 biz days" → {min:1, max:5}
+function parseTransitDays(transit) {
+  if (!transit) return { min: null, max: null };
+  const text = String(transit).replace(/<[^>]+>/g, "").trim();
+  const m = text.match(/(\d+)\s*(?:-|to|–)\s*(\d+)/i);
+  if (m) return { min: parseInt(m[1], 10), max: parseInt(m[2], 10) };
+  const single = text.match(/(\d+)/);
+  if (single) {
+    const n = parseInt(single[1], 10);
+    return { min: n, max: n };
+  }
+  return { min: null, max: null };
 }
 
 router.post("/carrier-service/rates", async (req, res) => {
@@ -2861,17 +2877,18 @@ router.post("/carrier-service/rates", async (req, res) => {
     const shopifyRates = opts
       .filter((o) => o._cost >= 0)
       .map((o) => {
-        const days = parseInt(o.expected_delivery_days || o.delivery_days || o.estimated_days || 0, 10);
-        const name = o.shipping_name || o.service_name || o.name || "Standard Shipping";
-        const code = o._code || o.shipping_code || o.service_code || "FW_STD";
+        const days = parseTransitDays(o.transit_time);
+        const carrier = o.carrier ? `${o.carrier} — ` : "";
+        const name = `${carrier}${o.shipping_method || o.shipping_name || o.name || "Shipping"}`;
+        const code = `FW_${o._code || o.shipping_code || "STD"}`;
         return {
           service_name: name,
-          service_code: String(code),
-          total_price:  Math.round(o._cost * 100).toString(), // Shopify wants cents as string
-          currency:     o.currency || currency,
-          min_delivery_date: days ? new Date(Date.now() + Math.max(1, days - 1) * 86400000).toISOString() : null,
-          max_delivery_date: days ? new Date(Date.now() + (days + 2) * 86400000).toISOString() : null,
-          description: o.description || null,
+          service_code: code,
+          total_price:  Math.round(o._cost * 100).toString(),
+          currency,
+          min_delivery_date: days.min ? new Date(Date.now() + days.min * 86400000).toISOString() : null,
+          max_delivery_date: days.max ? new Date(Date.now() + days.max * 86400000).toISOString() : null,
+          description: o.transit_time ? String(o.transit_time).replace(/<[^>]+>/g, "").trim() : null,
         };
       });
 
