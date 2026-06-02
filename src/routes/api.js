@@ -2746,96 +2746,158 @@ router.get("/fulfillment-orders", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// CARRIER SERVICE — Real-time Printful shipping rates for Shopify checkout
+// CARRIER SERVICE — Real-time FinerWorks shipping rates for Shopify checkout
 // ═══════════════════════════════════════════════════════════
 
 /**
  * POST /api/carrier-service/rates
- * Shopify calls this at checkout to get shipping rates.
- * We proxy the request to Printful's /shipping/rates endpoint.
+ * Registered as a Shopify CarrierService callback. Shopify hits this at
+ * checkout with the cart + destination; we proxy to FinerWorks
+ * /v3/list_shipping_options_multiple and return Shopify-formatted rates.
  *
- * Shopify sends: { rate: { origin, destination, items, currency, locale } }
- * We return:     { rates: [{ service_name, service_code, total_price, currency, ... }] }
+ * Shopify request:  { rate: { origin, destination, items, currency, locale } }
+ * Shopify response: { rates: [{ service_name, service_code, total_price (cents string), currency, ... }] }
  */
 
-// Map skeleton SKU prefixes → Printful variant IDs (Enhanced Matte Paper Poster)
-const SKU_TO_VARIANT = {
-  "NP-SMALL":  8947,   // 21×30 cm
-  "NP-MEDIUM": 8948,   // 30×40 cm
-  "NP-LARGE":  8952,   // 50×70 cm
-  "NP-XL":     8953,   // 61×91 cm
+// Skeleton SKU prefixes → conservative default FW product codes (archival
+// matte) when a cart line item has no _finerworks_product_code property.
+// Real orders always carry the explicit code from add-to-cart; this is only
+// a fallback for rate quoting if properties are missing.
+const SKU_TO_FW_CODE = {
+  "NP-SMALL":  "5M6M9S8X10",
+  "NP-MEDIUM": "5M6M9S12X16",
+  "NP-LARGE":  "5M6M9S18X24",
+  "NP-XL":     "5M6M9S24X36",
 };
 
-function skuToVariantId(sku) {
-  if (!sku) return 8948; // default medium
-  const upper = sku.toUpperCase();
-  for (const [prefix, variantId] of Object.entries(SKU_TO_VARIANT)) {
-    if (upper.startsWith(prefix)) return variantId;
+function shopifyItemToFwSku(item) {
+  // Shopify CarrierService delivers line-item properties in `item.properties`
+  // as an object — these are the props we set at add-to-cart in the theme.
+  const props = item.properties || {};
+  const explicit =
+    props._finerworks_product_code ||
+    props.finerworks_product_code ||
+    props.FinerWorksProductCode;
+  if (explicit) return String(explicit);
+
+  // Derive from Size if available, e.g. "40 × 28.57 cm"
+  const sizeStr = props.Size || props.size || "";
+  const dims = FinerWorksService.parseSizeCm(sizeStr);
+  if (dims) {
+    return FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
   }
-  return 8948;
+
+  // Last resort: SKU prefix
+  const upper = (item.sku || "").toUpperCase();
+  for (const [prefix, code] of Object.entries(SKU_TO_FW_CODE)) {
+    if (upper.startsWith(prefix)) return code;
+  }
+  return SKU_TO_FW_CODE["NP-MEDIUM"];
+}
+
+function normalizeFwShippingOptions(fwResp) {
+  // FW response shape is documented loosely; cover common variants.
+  // Expected: { orders: [{ shipping_options: [...] }] }  or  top-level array.
+  let opts = [];
+  const orders = fwResp?.orders || fwResp?.order_shipping_options || (Array.isArray(fwResp) ? fwResp : []);
+  for (const o of orders) {
+    const list = o?.shipping_options || o?.options || [];
+    for (const s of list) opts.push(s);
+  }
+  // De-dup by code, keep cheapest
+  const byCode = {};
+  for (const s of opts) {
+    const code = s.shipping_code || s.service_code || s.code || s.shipping_name || s.name || "STD";
+    const cost = parseFloat(s.shipping_cost ?? s.total_cost ?? s.cost ?? s.rate ?? 0);
+    if (byCode[code] == null || cost < byCode[code]._cost) {
+      byCode[code] = { ...s, _cost: cost, _code: code };
+    }
+  }
+  return Object.values(byCode);
 }
 
 router.post("/carrier-service/rates", async (req, res) => {
   try {
     const rateRequest = req.body.rate;
-    if (!rateRequest) {
-      return res.status(400).json({ rates: [] });
-    }
+    if (!rateRequest) return res.status(400).json({ rates: [] });
 
-    const dest = rateRequest.destination;
+    const dest  = rateRequest.destination;
     const items = rateRequest.items || [];
+    if (!dest || !dest.country) return res.status(200).json({ rates: [] });
+    if (items.length === 0)      return res.status(200).json({ rates: [] });
 
-    if (!dest || !dest.country) {
-      return res.status(200).json({ rates: [] });
-    }
-
-    // Build recipient from Shopify destination
+    // Build FW recipient (only fields used for rate quoting)
     const recipient = {
-      address1: dest.address1 || dest.postal_code || "N/A",
-      city: dest.city || "N/A",
+      first_name:   dest.first_name || "Customer",
+      last_name:    dest.last_name  || "Estimate",
+      address1:     dest.address1   || "N/A",
+      address2:     dest.address2   || null,
+      city:         dest.city       || "N/A",
+      state_code:   dest.province   || "",
+      zip:          dest.postal_code || "",
       country_code: dest.country,
-      state_code: dest.province || "",
-      zip: dest.postal_code || "",
     };
 
-    // Collect unique Printful variant IDs from cart items
-    const variantCounts = {};
-    for (const item of items) {
-      const vid = skuToVariantId(item.sku);
-      variantCounts[vid] = (variantCounts[vid] || 0) + (item.quantity || 1);
+    // Map every Shopify cart line to a FW order_item (one per quantity row;
+    // FW handles per-line quantities natively so we keep the original qty).
+    const fwItems = items.map((it) => ({
+      product_sku:   shopifyItemToFwSku(it),
+      product_qty:   it.quantity || 1,
+      product_title: it.name || it.title || "Print",
+    }));
+
+    let fwResp;
+    try {
+      fwResp = await finerworks.listShippingOptions({ recipient, items: fwItems });
+    } catch (e) {
+      console.error("[CarrierService] FinerWorks rate quote failed:", e.message);
+      // Fall through to fallback rates so checkout isn't blocked.
+      fwResp = null;
     }
 
-    // Build Printful shipping rate request items
-    const pfItems = Object.entries(variantCounts).map(([vid, qty]) => ({
-      variant_id: parseInt(vid, 10),
-      quantity: qty,
-    }));
+    const opts = fwResp ? normalizeFwShippingOptions(fwResp) : [];
 
-    // Call Printful shipping rates API
-    const pfRates = await printful.request("POST", "/shipping/rates", {
-      recipient,
-      items: pfItems,
-    });
+    const currency = rateRequest.currency || "USD";
+    const shopifyRates = opts
+      .filter((o) => o._cost >= 0)
+      .map((o) => {
+        const days = parseInt(o.expected_delivery_days || o.delivery_days || o.estimated_days || 0, 10);
+        const name = o.shipping_name || o.service_name || o.name || "Standard Shipping";
+        const code = o._code || o.shipping_code || o.service_code || "FW_STD";
+        return {
+          service_name: name,
+          service_code: String(code),
+          total_price:  Math.round(o._cost * 100).toString(), // Shopify wants cents as string
+          currency:     o.currency || currency,
+          min_delivery_date: days ? new Date(Date.now() + Math.max(1, days - 1) * 86400000).toISOString() : null,
+          max_delivery_date: days ? new Date(Date.now() + (days + 2) * 86400000).toISOString() : null,
+          description: o.description || null,
+        };
+      });
 
-    // Convert Printful rates → Shopify format
-    // Printful returns: { result: [{ id, name, rate, currency, minDeliveryDays, maxDeliveryDays }] }
-    const shopifyRates = (pfRates.result || []).map((r) => ({
-      service_name: r.name || "Standard Shipping",
-      service_code: r.id || "printful_standard",
-      total_price: Math.round(parseFloat(r.rate) * 100).toString(), // Shopify wants cents as string
-      currency: r.currency || rateRequest.currency || "USD",
-      min_delivery_date: r.minDeliveryDays
-        ? new Date(Date.now() + r.minDeliveryDays * 86400000).toISOString()
-        : null,
-      max_delivery_date: r.maxDeliveryDays
-        ? new Date(Date.now() + r.maxDeliveryDays * 86400000).toISOString()
-        : null,
-    }));
+    // Safety net: if FW returned nothing usable, ship a sane flat default so
+    // the checkout still completes. Better a working order than a dead cart.
+    if (shopifyRates.length === 0) {
+      const country = String(dest.country || "").toUpperCase();
+      const isUS = country === "US";
+      const isNZAU = country === "NZ" || country === "AU";
+      const flat = isUS ? 8.99 : isNZAU ? 14.99 : 22.99;
+      shopifyRates.push({
+        service_name: "Standard Shipping",
+        service_code: "FW_FALLBACK_STD",
+        total_price:  Math.round(flat * 100).toString(),
+        currency,
+        min_delivery_date: new Date(Date.now() + 5 * 86400000).toISOString(),
+        max_delivery_date: new Date(Date.now() + 12 * 86400000).toISOString(),
+        description: "Estimated rate — live carrier quote unavailable",
+      });
+      console.warn("[CarrierService] Returning fallback flat rate for country=", country);
+    }
 
     res.json({ rates: shopifyRates });
   } catch (err) {
     console.error("[CarrierService] Error fetching rates:", err.message);
-    // Return empty rates on error so checkout isn't blocked
+    // Never block checkout — return empty rates on hard failure.
     res.status(200).json({ rates: [] });
   }
 });

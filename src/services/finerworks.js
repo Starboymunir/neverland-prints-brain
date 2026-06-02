@@ -126,6 +126,71 @@ class FinerWorksService {
   }
 
   /**
+   * Get live shipping options + costs from FinerWorks for a preview order.
+   * Used by the Shopify CarrierService callback at checkout.
+   *
+   * recipient: { first_name?, last_name?, address1, city, state_code?, zip, country_code }
+   * items:     [{ product_sku, product_qty, product_title? }]   ← FW product codes
+   *
+   * Returns the raw FinerWorks response. The shape we care about per order is
+   * an array of shipping options: { shipping_code, shipping_name|service_name,
+   * shipping_cost|total_cost, currency?, expected_delivery_days? }.
+   */
+  async listShippingOptions({ recipient, items }) {
+    if (!recipient || !recipient.country_code) {
+      throw new Error("recipient.country_code is required");
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error("items[] is required");
+    }
+
+    const orderPo = `RATE-${Date.now()}`;
+    const order = {
+      order_po: orderPo,
+      order_key: null,
+      recipient: {
+        first_name: recipient.first_name || "Customer",
+        last_name: recipient.last_name || "Estimate",
+        company_name: null,
+        address_1: recipient.address1 || "N/A",
+        address_2: recipient.address2 || null,
+        address_3: null,
+        city: recipient.city || "N/A",
+        state_code: recipient.state_code || null,
+        province: null,
+        zip_postal_code: recipient.zip || "",
+        country_code: (recipient.country_code || "US").toLowerCase(),
+        phone: null,
+        email: null,
+        address_order_po: orderPo,
+      },
+      order_items: items.map((it, idx) => ({
+        product_order_po: `${orderPo}-${idx}`,
+        product_qty: it.product_qty || 1,
+        product_sku: it.product_sku,
+        product_image: null,
+        product_title: it.product_title || "Print",
+        template: null,
+        product_guid: "00000000-0000-0000-0000-000000000000",
+      })),
+      shipping_code: null,
+      ship_by_date: null,
+      customs_tax_info: null,
+      gift_message: null,
+      test_mode: this.testMode,
+      source: "neverland-prints-rates",
+    };
+
+    const body = {
+      orders: [order],
+      payment_token: this.paymentToken,
+      account_key: null,
+    };
+
+    return this._request("POST", "/v3/list_shipping_options_multiple", body);
+  }
+
+  /**
    * Create a FinerWorks order.
    * productCode can be either a FinerWorks product code or a virtual inventory SKU.
    */
