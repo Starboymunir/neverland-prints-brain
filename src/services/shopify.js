@@ -260,6 +260,103 @@ class ShopifyService {
   _sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
   }
+
+  // ─────────────────────────────────────────────────────────────────
+  // Fulfillment (GraphQL) — used to mark Shopify orders as shipped
+  // and trigger the "Your order has shipped" notification email.
+  // ─────────────────────────────────────────────────────────────────
+
+  async _graphql(query, variables = {}) {
+    const token = await this._getToken();
+    const res = await fetch(`${SHOPIFY_BASE}/graphql.json`, {
+      method: "POST",
+      headers: {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.errors) {
+      throw new Error(
+        `Shopify GraphQL ${res.status}: ${JSON.stringify(json.errors || json).slice(0, 400)}`
+      );
+    }
+    return json.data;
+  }
+
+  async getOpenFulfillmentOrders(shopifyOrderId) {
+    const gid = String(shopifyOrderId).startsWith("gid://")
+      ? shopifyOrderId
+      : `gid://shopify/Order/${shopifyOrderId}`;
+
+    const query = `
+      query($id: ID!) {
+        order(id: $id) {
+          id name
+          fulfillmentOrders(first: 25) {
+            edges { node {
+              id status
+              lineItems(first: 50) {
+                edges { node {
+                  id remainingQuantity
+                  lineItem { id sku title }
+                } }
+              }
+            } }
+          }
+        }
+      }`;
+    const data = await this._graphql(query, { id: gid });
+    if (!data.order) throw new Error(`Order ${shopifyOrderId} not found`);
+    return data.order.fulfillmentOrders.edges
+      .map((e) => e.node)
+      .filter((fo) => fo.status === "OPEN" || fo.status === "IN_PROGRESS");
+  }
+
+  /**
+   * Mark a Shopify order as shipped with tracking info.
+   * Triggers "Your order has shipped" email when notifyCustomer=true.
+   */
+  async createShipmentFulfillment({
+    shopifyOrderId,
+    trackingNumber,
+    trackingUrl,
+    carrier = "Other",
+    notifyCustomer = true,
+  }) {
+    const openFOs = await this.getOpenFulfillmentOrders(shopifyOrderId);
+    if (!openFOs.length) {
+      return { skipped: true, reason: "no_open_fulfillment_orders" };
+    }
+    const mutation = `
+      mutation($fulfillment: FulfillmentV2Input!) {
+        fulfillmentCreateV2(fulfillment: $fulfillment) {
+          fulfillment { id status trackingInfo { number url company } }
+          userErrors { field message }
+        }
+      }`;
+    const fulfillment = {
+      notifyCustomer,
+      trackingInfo: {
+        number: trackingNumber,
+        url: trackingUrl || undefined,
+        company: carrier || "Other",
+      },
+      lineItemsByFulfillmentOrder: openFOs.map((fo) => ({
+        fulfillmentOrderId: fo.id,
+      })),
+    };
+    const data = await this._graphql(mutation, { fulfillment });
+    const errs = data.fulfillmentCreateV2?.userErrors || [];
+    if (errs.length) {
+      throw new Error(`fulfillmentCreateV2: ${JSON.stringify(errs)}`);
+    }
+    return {
+      fulfillment: data.fulfillmentCreateV2?.fulfillment,
+      fulfillmentOrderIds: openFOs.map((fo) => fo.id),
+    };
+  }
 }
 
 module.exports = ShopifyService;

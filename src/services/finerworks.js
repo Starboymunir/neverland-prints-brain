@@ -297,6 +297,83 @@ class FinerWorksService {
       response,
     };
   }
+
+  /**
+   * Fetch the latest status of one or more FinerWorks orders.
+   * @param {string|string[]} ids - FW order numbers or order_po strings.
+   * Returns the raw FW response so callers can read whichever fields exist.
+   */
+  async getOrderStatus(ids) {
+    const list = Array.isArray(ids) ? ids : [ids];
+    return this._request("POST", "/v3/get_order_status", {
+      orders: list.map((id) => ({ order_number: id })),
+    });
+  }
+
+  /**
+   * Normalize a raw FW webhook / status payload into a canonical shape:
+   *   { externalId, fwOrderNumber, status, shipped, tracking, carrier, trackingUrl, shippedAt, raw }
+   *
+   * FW v3 uses different field names across endpoints and webhooks. This is
+   * intentionally lenient and inspects the most common variants.
+   */
+  static normalizeStatus(payload) {
+    if (!payload || typeof payload !== "object") return null;
+
+    // FW sometimes wraps in { orders: [...] }
+    const root = payload.orders?.[0] || payload.order || payload;
+
+    const status = String(
+      root.order_status || root.status || root.OrderStatus || ""
+    ).toLowerCase();
+
+    const tracking =
+      root.tracking_number ||
+      root.tracking_no ||
+      root.TrackingNumber ||
+      root.tracking ||
+      null;
+
+    const carrier =
+      root.carrier ||
+      root.ship_carrier ||
+      root.shipping_carrier ||
+      root.Carrier ||
+      null;
+
+    const trackingUrl =
+      root.tracking_url ||
+      root.tracking_link ||
+      root.TrackingURL ||
+      null;
+
+    const shippedAt =
+      root.ship_date ||
+      root.shipped_at ||
+      root.ShipDate ||
+      null;
+
+    const shipped =
+      !!tracking ||
+      status.includes("ship") ||
+      status === "shipped" ||
+      status === "complete" ||
+      status === "completed";
+
+    return {
+      externalId:
+        root.order_po || root.OrderPO || root.external_id || null,
+      fwOrderNumber:
+        root.order_number || root.order_id || root.OrderNumber || null,
+      status,
+      shipped,
+      tracking,
+      carrier,
+      trackingUrl,
+      shippedAt,
+      raw: root,
+    };
+  }
 }
 
 module.exports = FinerWorksService;

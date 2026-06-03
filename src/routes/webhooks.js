@@ -12,11 +12,13 @@ const express = require("express");
 const crypto = require("crypto");
 const supabase = require("../db/supabase");
 const FinerWorksService = require("../services/finerworks");
+const ShopifyService = require("../services/shopify");
 
 const router = express.Router();
 
 const SHOPIFY_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const finerworks = new FinerWorksService();
+const shopify = new ShopifyService();
 
 /**
  * Verify Shopify webhook signature (HMAC-SHA256)
@@ -289,6 +291,152 @@ router.post("/order-paid", async (req, res) => {
   } catch (err) {
     console.error("Webhook error:", err);
     res.status(200).json({ received: true });
+  }
+});
+
+/**
+ * Process a single FW status payload — looks up the matching
+ * fulfillment_orders row, calls Shopify fulfillmentCreateV2 if shipped,
+ * persists tracking. Returns a small summary suitable for logging.
+ */
+async function processFinerWorksStatus(payload) {
+  const norm = FinerWorksService.normalizeStatus(payload);
+  if (!norm) return { ok: false, reason: "empty_payload" };
+
+  // Find the Supabase row this FW order maps to.
+  let row = null;
+  if (norm.fwOrderNumber) {
+    const { data } = await supabase
+      .from("fulfillment_orders")
+      .select("*")
+      .eq("finerworks_order_id", String(norm.fwOrderNumber))
+      .maybeSingle();
+    row = data;
+  }
+  if (!row && norm.externalId) {
+    const { data } = await supabase
+      .from("fulfillment_orders")
+      .select("*")
+      .eq("external_id", norm.externalId)
+      .maybeSingle();
+    row = data;
+  }
+  if (!row) {
+    return { ok: false, reason: "no_local_row", normalized: norm };
+  }
+
+  if (row.status === "shipped") {
+    return { ok: true, alreadyShipped: true, row: row.id };
+  }
+
+  if (!norm.shipped) {
+    // Just record the latest FW status without creating a fulfillment.
+    await supabase
+      .from("fulfillment_orders")
+      .update({ status: `fw_${norm.status || "unknown"}` })
+      .eq("id", row.id);
+    return { ok: true, status: norm.status, fulfilled: false };
+  }
+
+  if (!norm.tracking) {
+    return { ok: false, reason: "shipped_but_no_tracking", normalized: norm };
+  }
+
+  // Create the Shopify fulfillment + send the shipped email.
+  let fulfillmentResult;
+  try {
+    fulfillmentResult = await shopify.createShipmentFulfillment({
+      shopifyOrderId: row.shopify_order_id,
+      trackingNumber: norm.tracking,
+      trackingUrl: norm.trackingUrl,
+      carrier: norm.carrier || "Other",
+      notifyCustomer: true,
+    });
+  } catch (err) {
+    await supabase
+      .from("fulfillment_orders")
+      .update({ status: "fulfillment_failed", notes: err.message?.slice(0, 500) })
+      .eq("id", row.id);
+    throw err;
+  }
+
+  await supabase
+    .from("fulfillment_orders")
+    .update({
+      status: "shipped",
+      tracking_number: norm.tracking,
+      tracking_url: norm.trackingUrl || null,
+      carrier: norm.carrier || null,
+      shipped_at: norm.shippedAt || new Date().toISOString(),
+    })
+    .eq("id", row.id);
+
+  return { ok: true, fulfilled: true, fulfillmentResult, row: row.id };
+}
+
+/**
+ * POST /webhooks/finerworks-status
+ * Endpoint we register with FW (`webhook_order_status_url` on submit_orders_v2).
+ * FW will POST status changes here. We accept the call, look up the local
+ * fulfillment row, and create a Shopify fulfillment when status indicates shipped.
+ *
+ * Auth: optional shared secret via `?key=` query string matched against
+ * FINERWORKS_WEBHOOK_KEY env var. Safe to omit during initial testing.
+ */
+router.post("/finerworks-status", async (req, res) => {
+  const secret = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (secret && req.query.key !== secret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    console.log("📦 FW status webhook:", JSON.stringify(req.body).slice(0, 600));
+    const result = await processFinerWorksStatus(req.body);
+    res.status(200).json({ received: true, ...result });
+  } catch (err) {
+    console.error("FW status webhook error:", err);
+    res.status(200).json({ received: true, error: err.message });
+  }
+});
+
+/**
+ * POST /webhooks/poll-finerworks
+ * Manual / cron-triggered poll: scan fulfillment_orders that are
+ * sent_to_finerworks (and not yet shipped) and call FW for the latest status.
+ *
+ * Auth: optional `?key=` query string against FINERWORKS_WEBHOOK_KEY.
+ */
+router.post("/poll-finerworks", async (req, res) => {
+  const secret = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (secret && req.query.key !== secret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    const { data: rows, error } = await supabase
+      .from("fulfillment_orders")
+      .select("*")
+      .in("status", ["sent_to_finerworks", "paid"])
+      .not("finerworks_order_id", "is", null)
+      .limit(200);
+
+    if (error) throw error;
+
+    const results = [];
+    for (const row of rows || []) {
+      try {
+        const statusResp = await finerworks.getOrderStatus(row.finerworks_order_id);
+        const payload = statusResp?.orders?.[0] || statusResp;
+        const result = await processFinerWorksStatus(payload);
+        results.push({ id: row.id, fw: row.finerworks_order_id, ...result });
+      } catch (e) {
+        results.push({ id: row.id, fw: row.finerworks_order_id, error: e.message });
+      }
+    }
+    res.status(200).json({ checked: results.length, results });
+  } catch (err) {
+    console.error("poll-finerworks error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
