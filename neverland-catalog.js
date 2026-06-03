@@ -9,7 +9,7 @@
 
   // ─── CONFIG ───────────────────────────────────────────
   const WATERMARK_URL = (document.querySelector('link[href*="neverland.css"]')?.href || '').replace('neverland.css', 'watermark-1.png') || 'https://cdn.shopify.com/s/files/1/0675/4300/7316/t/3/assets/watermark-1.png';
-  const WATERMARK_HTML = `<img src="${WATERMARK_URL}" alt="" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:22%;max-width:80px;opacity:0.04;pointer-events:none;user-select:none;z-index:2;" aria-hidden="true">`;
+  const WATERMARK_HTML = `<img src="${WATERMARK_URL}" alt="" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28%;max-width:120px;opacity:0.18;pointer-events:none;user-select:none;z-index:2;mix-blend-mode:overlay;" aria-hidden="true">`;
   const PRICE_TIERS = {
     small:       { unframed: "33.99",       framed: "44.99",       label: "Small" },
     medium:      { unframed: "69.99",      framed: "90.99",      label: "Medium" },
@@ -109,7 +109,7 @@
 
   function getPrice(tier, framed) {
     const tierData = PRICE_TIERS[tier];
-    if (!tierData) return '29.99';
+    if (!tierData) return '33.99';
     return framed ? tierData.framed : tierData.unframed;
   }
 
@@ -1698,7 +1698,7 @@
     const img = item.imageSrcset ? item.imageSrcset.s600 : item.image;
     const title = (item.title || 'Untitled').replace(/"/g, '&quot;');
     const artist = item.artist || 'Unknown Artist';
-    const price = item.price || '29.99';
+    const price = item.price || '33.99';
     return `<div class="swiper-slide">
       <div class="product-card">
         <a href="/pages/art?id=${item.id}" class="product-card__link">

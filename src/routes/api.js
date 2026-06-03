@@ -106,7 +106,7 @@ async function storefrontCatalogFromShopify(req) {
 
   const items = filtered.map((p) => {
     const firstVariant = Array.isArray(p.variants) && p.variants.length ? p.variants[0] : null;
-    const price = firstVariant?.price || "29.99";
+    const price = firstVariant?.price || "33.99";
     const comparePrice = firstVariant?.compare_at_price || null;
     const src = p.image?.src || "";
     return {
@@ -209,7 +209,7 @@ async function storefrontAssetFromShopify(assetId) {
 
   const src = product.image?.src || (product.images && product.images[0] && product.images[0].src) || "";
   const firstVariant = Array.isArray(product.variants) && product.variants.length ? product.variants[0] : null;
-  const basePrice = firstVariant?.price || "29.99";
+  const basePrice = firstVariant?.price || "33.99";
   const comparePrice = firstVariant?.compare_at_price || null;
 
   const variants = (product.variants || []).map((v) => {
@@ -286,10 +286,10 @@ async function storefrontFiltersFromShopify() {
     continents: [],
     artists,
     priceTiers: [
-      { tier: "small", label: "Small", price: "$29.99", framedPrice: "$39.99" },
-      { tier: "medium", label: "Medium", price: "$49.99", framedPrice: "$64.99" },
-      { tier: "large", label: "Large", price: "$79.99", framedPrice: "$99.99" },
-      { tier: "extra_large", label: "Extra Large", price: "$119.99", framedPrice: "$149.99" },
+      { tier: "small", label: "Small", price: "$33.99", framedPrice: "$44.99" },
+      { tier: "medium", label: "Medium", price: "$69.99", framedPrice: "$90.99" },
+      { tier: "large", label: "Large", price: "$159.99", framedPrice: "$209.99" },
+      { tier: "extra_large", label: "Extra Large", price: "$319.99", framedPrice: "$419.99" },
     ],
     fallback: "shopify",
   };
@@ -971,10 +971,10 @@ router.get("/storefront/filters", async (req, res) => {
     res.json({
       ...cached,
       priceTiers: [
-        { tier: "small", label: "Small (≤24×17cm)", price: "$29.99", framedPrice: "$39.99" },
-        { tier: "medium", label: "Medium (≤42×30cm)", price: "$49.99", framedPrice: "$64.99" },
-        { tier: "large", label: "Large (≤63×45cm)", price: "$79.99", framedPrice: "$99.99" },
-        { tier: "extra_large", label: "Extra Large (>63×45cm)", price: "$119.99", framedPrice: "$149.99" },
+        { tier: "small", label: "Small (≤24×17cm)", price: "$33.99", framedPrice: "$44.99" },
+        { tier: "medium", label: "Medium (≤42×30cm)", price: "$69.99", framedPrice: "$90.99" },
+        { tier: "large", label: "Large (≤63×45cm)", price: "$159.99", framedPrice: "$209.99" },
+        { tier: "extra_large", label: "Extra Large (>63×45cm)", price: "$319.99", framedPrice: "$419.99" },
       ],
     });
   } catch (err) {
@@ -2422,7 +2422,7 @@ router.post("/prices/apply-shopify", async (req, res) => {
     function getPrice(asset) {
       // For now, all products use the small_unframed tier price
       // since we create single-variant products
-      return priceMap.small_unframed?.price || "29.99";
+      return priceMap.small_unframed?.price || "33.99";
     }
 
     let updated = 0;
