@@ -393,13 +393,9 @@
     document.getElementById('cart-price').textContent = '$' + price.toFixed(2);
     document.getElementById('variant-id').value = variantId;
 
+    // No fake strike-through — show only the real price for the selected size + frame.
     var compareEl = document.getElementById('product-compare-price');
-    if (!isFramed) {
-      compareEl.textContent = '$' + tier.compare.toFixed(2);
-      compareEl.style.display = '';
-    } else {
-      compareEl.style.display = 'none';
-    }
+    if (compareEl) compareEl.style.display = 'none';
 
     // Update line item properties
     document.getElementById('prop-size').value = tier.label;

@@ -139,9 +139,7 @@
   // ─── PRODUCT CARD RENDERING ───────────────────────────
 
   function renderCatalogCard(item) {
-    // Prefer the API's per-artwork cheapest price; derive a higher strike-through.
     const price = item.price || getPrice(item.priceTier, false);
-    const comparePrice = (parseFloat(price) * 1.3).toFixed(2);
     const artUrl = `/pages/art?id=${item.id}`;
     const flag = item.country ? getFlag(item.country) : '';
 
@@ -180,7 +178,6 @@
             ${metaHtml}
             <div class="catalog-card__price">
               <span class="catalog-card__price-current">From ${formatPrice(price)}</span>
-              <span class="catalog-card__price-compare">${formatPrice(comparePrice)}</span>
             </div>
           </div>
         </a>
@@ -1289,19 +1286,14 @@
     const tier = currentVariantSize?.priceTier || currentAsset.priceTier;
     const framed = currentFrame === 'framed';
     const price = getPrice(tier, framed);
-    console.log('[NP-DEBUG] updateArtPrice:', { tier, framed, price, variantSize: currentVariantSize?.priceTier, assetTier: currentAsset.priceTier });
-    const comparePrice = framed ? null : getPrice(tier, true);
 
     document.getElementById('art-price').textContent = formatPrice(price);
     document.getElementById('art-cart-price').textContent = formatPrice(price);
 
+    // No fake strike-through — the shown price is exactly what is charged for the
+    // selected size + frame (was previously showing the framed price as a fake "was").
     const compareEl = document.getElementById('art-compare-price');
-    if (!framed && comparePrice) {
-      compareEl.textContent = formatPrice(comparePrice);
-      compareEl.style.display = '';
-    } else {
-      compareEl.style.display = 'none';
-    }
+    if (compareEl) compareEl.style.display = 'none';
   }
 
   function showArtNotFound() {
