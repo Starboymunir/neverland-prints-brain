@@ -1215,12 +1215,10 @@
   }
 
   function updateRoomView() {
-    // If a Printful mockup is showing, re-fetch for the new size/frame combo
-    if (mockupGenerated && currentAsset) {
-      fetchAndShowMockup(currentAsset);
-      return;
-    }
-
+    // (Removed dead Printful-mockup branch that referenced undeclared
+    //  `mockupGenerated`/`fetchAndShowMockup` — under "use strict" that threw a
+    //  ReferenceError before the artwork was ever sized, leaving it at natural
+    //  size and filling the wall.)
     const frame = document.getElementById('room-art-frame');
     if (!frame) return;
 
