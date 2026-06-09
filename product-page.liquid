@@ -1,509 +1,263 @@
-{%- comment -%}
-  PRODUCT PAGE — Redirects to art-detail page for full experience.
-  Searches the catalog API by title, matches by drive_file_id, then redirects.
-  Shows instant loading overlay so the user never sees the old product page.
-{%- endcomment -%}
-
-{%- if product.metafields.neverland.drive_file_id != blank -%}
-<div id="nv-redirect-overlay" style="position:fixed;inset:0;z-index:99999;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;">
-  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#1a1a2e" stroke-width="2" style="animation:spin .8s linear infinite"><circle cx="12" cy="12" r="10" stroke-opacity=".25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/></svg>
-  <span style="font-family:system-ui;color:#1a1a2e;font-size:14px;">Loading artwork…</span>
-  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
-</div>
-<script>
-(function() {
-  var driveId = {{ product.metafields.neverland.drive_file_id | json }};
-  var title = {{ product.title | json }};
-  var apiBase = 'https://neverland-prints-brain-xvuy.onrender.com';
-
-  fetch(apiBase + '/api/storefront/catalog?search=' + encodeURIComponent(title) + '&limit=20')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.items && data.items.length > 0) {
-        var match = data.items.find(function(item) { return item.driveFileId === driveId; });
-        if (!match) match = data.items[0];
-        window.location.replace('/pages/art?id=' + match.id);
-        return;
-      }
-      // No match — remove overlay and show native page
-      document.getElementById('nv-redirect-overlay').remove();
-    })
-    .catch(function() {
-      // API failed — remove overlay and show native page as fallback
-      var el = document.getElementById('nv-redirect-overlay');
-      if (el) el.remove();
-    });
-})();
-</script>
-{%- endif -%}
-
+{%- comment -%}v4-catalog-match-{{ "now" | date: "%s" }}{%- endcomment -%}
 {%- assign current_variant = product.selected_or_first_available_variant -%}
-{%- assign img_src = '' -%}
-{%- assign img_srcset = '' -%}
-{%- if product.featured_image -%}
-  {%- assign img_src = product.featured_image | image_url: width: 1200 -%}
-  {%- capture img_srcset -%}{{ product.featured_image | image_url: width: 600 }} 600w, {{ product.featured_image | image_url: width: 900 }} 900w, {{ product.featured_image | image_url: width: 1200 }} 1200w, {{ product.featured_image | image_url: width: 1600 }} 1600w{%- endcapture -%}
-{%- elsif product.metafields.neverland.drive_file_id != blank -%}
-  {%- assign did = product.metafields.neverland.drive_file_id -%}
-  {%- assign img_src = 'https://lh3.googleusercontent.com/d/' | append: did | append: '=s1200' -%}
-  {%- capture img_srcset -%}https://lh3.googleusercontent.com/d/{{ did }}=s600 600w, https://lh3.googleusercontent.com/d/{{ did }}=s900 900w, https://lh3.googleusercontent.com/d/{{ did }}=s1200 1200w, https://lh3.googleusercontent.com/d/{{ did }}=s1600 1600w{%- endcapture -%}
-{%- endif -%}
 
-<section class="pp" itemscope itemtype="https://schema.org/Product">
+<section class="product-page">
   <div class="container">
-
-    {%- comment -%} ── Breadcrumbs ── {%- endcomment -%}
-    <nav class="pp-breadcrumbs" aria-label="Breadcrumb">
-      <ol>
-        <li><a href="/">Home</a></li>
-        {%- if product.collections.size > 0 -%}
-          <li><a href="{{ product.collections.first.url }}">{{ product.collections.first.title }}</a></li>
-        {%- else -%}
-          <li><a href="/collections/all">Shop</a></li>
-        {%- endif -%}
-        <li aria-current="page">{{ product.title | truncate: 50 }}</li>
-      </ol>
-    </nav>
-
-    <div class="pp-layout">
-
-      {%- comment -%} ═══ LEFT: Gallery ═══ {%- endcomment -%}
-      <div class="pp-gallery">
-
-        {%- comment -%} Main image with frame preview {%- endcomment -%}
-        <div class="pp-gallery__main">
-          <div class="pp-frame" id="pp-frame" data-frame="none">
-            <div class="pp-frame__mat">
-              {%- if img_src != '' -%}
-                <img
-                  id="pp-main-img"
-                  src="{{ img_src }}"
-                  srcset="{{ img_srcset }}"
-                  sizes="(max-width: 768px) 92vw, (max-width: 1200px) 50vw, 600px"
-                  alt="{{ product.featured_image.alt | default: product.title | escape }}"
-                  loading="eager"
-                  fetchpriority="high"
-                  itemprop="image"
-                >
-              {%- else -%}
-                <div class="pp-frame__placeholder">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-                  <span>No image available</span>
-                </div>
-              {%- endif -%}
+    <div class="product-layout">
+      <!-- Gallery with Frame Preview -->
+      <div class="product-gallery">
+        <div class="product-gallery__main">
+          <div class="frame-preview" id="frame-preview" data-frame="none">
+            <div class="frame-preview__mat" id="frame-mat">
+              <div class="frame-preview__img-wrap">
+                {%- if product.featured_image -%}
+                  <img
+                    id="product-main-img"
+                    src="{{ product.featured_image | image_url: width: 1200 }}"
+                    srcset="{{ product.featured_image | image_url: width: 800 }} 800w,
+                            {{ product.featured_image | image_url: width: 1200 }} 1200w,
+                            {{ product.featured_image | image_url: width: 1600 }} 1600w"
+                    sizes="(max-width: 768px) 95vw, 50vw"
+                    alt="{{ product.featured_image.alt | default: product.title | escape }}"
+                    loading="eager"
+                    fetchpriority="high"
+                  >
+                {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                  {%- assign drive_id = product.metafields.neverland.drive_file_id -%}
+                  <img
+                    id="product-main-img"
+                    src="https://lh3.googleusercontent.com/d/{{ drive_id }}=s1200"
+                    srcset="https://lh3.googleusercontent.com/d/{{ drive_id }}=s800 800w,
+                            https://lh3.googleusercontent.com/d/{{ drive_id }}=s1200 1200w,
+                            https://lh3.googleusercontent.com/d/{{ drive_id }}=s1600 1600w,
+                            https://lh3.googleusercontent.com/d/{{ drive_id }}=s2000 2000w"
+                    sizes="(max-width: 768px) 95vw, 50vw"
+                    alt="{{ product.title | escape }}"
+                    loading="eager"
+                    fetchpriority="high"
+                  >
+                {%- else -%}
+                  <div style="padding:120px;text-align:center;color:var(--text-muted);">No image available</div>
+                {%- endif -%}
+              </div>
             </div>
           </div>
-
-          {%- comment -%} Zoom button {%- endcomment -%}
-          {%- if img_src != '' -%}
-            <button class="pp-gallery__zoom" id="pp-zoom-btn" type="button" aria-label="Zoom image">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
-            </button>
-          {%- endif -%}
         </div>
 
-        {%- comment -%} Frame style selector {%- endcomment -%}
-        <div class="pp-frames" id="pp-frames">
-          <span class="pp-frames__label">Preview Frame Style</span>
-          <div class="pp-frames__options">
-            <button type="button" class="pp-frames__btn is-active" data-frame="none" title="Unframed">
-              <span class="pp-frames__swatch pp-frames__swatch--none">
-                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="Unframed" loading="lazy">{%- endif -%}
-              </span>
-              <span class="pp-frames__name">Unframed</span>
+        <!-- Frame Style Selector (hidden when Unframed) -->
+        <div class="frame-selector" id="frame-selector" style="display:none">
+          <span class="frame-selector__label">Preview Frame Style</span>
+          <div class="frame-selector__options">
+            <button type="button" class="frame-option is-active" data-frame="black" title="Black Frame">
+              <span class="frame-option__swatch frame-option__swatch--black"></span>
+              <span class="frame-option__name">Black</span>
             </button>
-            <button type="button" class="pp-frames__btn" data-frame="black" title="Black Frame">
-              <span class="pp-frames__swatch pp-frames__swatch--black">
-                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="Black frame" loading="lazy">{%- endif -%}
-              </span>
-              <span class="pp-frames__name">Black</span>
+            <button type="button" class="frame-option" data-frame="white" title="White Frame">
+              <span class="frame-option__swatch frame-option__swatch--white"></span>
+              <span class="frame-option__name">White</span>
             </button>
-            <button type="button" class="pp-frames__btn" data-frame="white" title="White Frame">
-              <span class="pp-frames__swatch pp-frames__swatch--white">
-                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="White frame" loading="lazy">{%- endif -%}
-              </span>
-              <span class="pp-frames__name">White</span>
+            <button type="button" class="frame-option" data-frame="natural" title="Natural Wood Frame">
+              <span class="frame-option__swatch frame-option__swatch--natural"></span>
+              <span class="frame-option__name">Natural</span>
             </button>
-            <button type="button" class="pp-frames__btn" data-frame="natural" title="Natural Wood">
-              <span class="pp-frames__swatch pp-frames__swatch--natural">
-                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="Natural frame" loading="lazy">{%- endif -%}
-              </span>
-              <span class="pp-frames__name">Natural</span>
-            </button>
-            <button type="button" class="pp-frames__btn" data-frame="walnut" title="Walnut">
-              <span class="pp-frames__swatch pp-frames__swatch--walnut">
-                {%- if img_src != '' -%}<img src="{{ img_src }}" alt="Walnut frame" loading="lazy">{%- endif -%}
-              </span>
-              <span class="pp-frames__name">Walnut</span>
+            <button type="button" class="frame-option" data-frame="walnut" title="Walnut Frame">
+              <span class="frame-option__swatch frame-option__swatch--walnut"></span>
+              <span class="frame-option__name">Walnut</span>
             </button>
           </div>
         </div>
       </div>
 
-      {%- comment -%} ═══ RIGHT: Product Details ═══ {%- endcomment -%}
-      <div class="pp-details">
+      <!-- Details -->
+      <div class="product-details">
+        <div class="product-details__artist">{{ product.vendor }}</div>
+        <h1 class="product-details__title" id="product-title">{{ product.title }}</h1>
 
-        {%- comment -%} Artist {%- endcomment -%}
-        <p class="pp-artist" itemprop="brand">{{ product.vendor }}</p>
-
-        {%- comment -%} Title {%- endcomment -%}
-        <h1 class="pp-title" itemprop="name">{{ product.title }}</h1>
-
-        {%- comment -%} Price {%- endcomment -%}
-        <div class="pp-price" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
-          <meta itemprop="priceCurrency" content="{{ shop.currency }}">
-          <span class="pp-price__current" id="pp-price" itemprop="price" content="{{ current_variant.price | divided_by: 100.0 }}">{{ current_variant.price | money }}</span>
-          {%- if current_variant.compare_at_price > current_variant.price -%}
-            <span class="pp-price__was" id="pp-compare-price">{{ current_variant.compare_at_price | money }}</span>
-            <span class="pp-price__badge">Sale</span>
-          {%- else -%}
-            <span class="pp-price__was" id="pp-compare-price" style="display:none;"></span>
-          {%- endif -%}
-          <link itemprop="availability" href="https://schema.org/{% if current_variant.available %}InStock{% else %}OutOfStock{% endif %}">
+        <div class="product-details__price">
+          <span class="product-details__price-current" id="product-price">$33.99</span>
+          <span class="product-details__price-compare" id="product-compare-price">$44.99</span>
         </div>
 
-        {%- comment -%} Divider {%- endcomment -%}
-        <hr class="pp-divider">
-
-        {%- comment -%} Size selector with size guide {%- endcomment -%}
-        {%- if product.variants.size > 1 -%}
-          <div class="pp-option">
-            <div class="pp-option__head">
-              <span class="pp-option__label">Print Size</span>
-              <button type="button" class="pp-option__guide" id="pp-size-guide-trigger">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                Size Guide
-              </button>
-            </div>
-            <div class="pp-option__pills" id="pp-variants">
-              {%- for variant in product.variants -%}
-                <button
-                  type="button"
-                  class="pp-pill{% if variant == current_variant %} is-selected{% endif %}"
-                  data-variant-id="{{ variant.id }}"
-                  data-price="{{ variant.price | money }}"
-                  data-compare-price="{% if variant.compare_at_price > variant.price %}{{ variant.compare_at_price | money }}{% endif %}"
-                  data-available="{{ variant.available }}"
-                >
-                  {{ variant.title }}
-                </button>
-              {%- endfor -%}
-            </div>
+        <!-- Size Selector (skeleton pricing) -->
+        <div class="variant-selector" id="size-selector">
+          <div class="variant-selector__label">Size</div>
+          <div class="variant-selector__options" id="size-options">
+            <button type="button" class="variant-option is-selected" data-tier="small" data-variant-id="42927017099348" data-price="33.99" data-compare="44.99">Small — $33.99</button>
+            <button type="button" class="variant-option" data-tier="medium" data-variant-id="42927018377300" data-price="69.99" data-compare="90.99">Medium — $69.99</button>
+            <button type="button" class="variant-option" data-tier="large" data-variant-id="42927019360340" data-price="159.99" data-compare="209.99">Large — $159.99</button>
+            <button type="button" class="variant-option" data-tier="extra_large" data-variant-id="42927020802132" data-price="319.99" data-compare="419.99">Extra Large — $319.99</button>
           </div>
-        {%- endif -%}
+        </div>
 
-        {%- comment -%} Add to Cart {%- endcomment -%}
-        <form method="post" action="/cart/add" class="pp-cart-form" id="pp-cart-form">
-          <input type="hidden" name="id" id="pp-variant-id" value="{{ current_variant.id }}">
+        <!-- Frame Selector -->
+        <div class="variant-selector" id="frame-type-selector">
+          <div class="variant-selector__label">Frame</div>
+          <div class="variant-selector__options" id="frame-type-options">
+            <button type="button" class="variant-option is-selected" data-frame="unframed">Unframed</button>
+            <button type="button" class="variant-option" data-frame="framed">Framed</button>
+          </div>
+        </div>
+
+        <!-- Add to Cart -->
+        <form method="post" action="/cart/add" id="product-cart-form">
+          <input type="hidden" name="id" id="variant-id" value="42927017099348">
           <input type="hidden" name="quantity" value="1">
-          <button type="submit" class="pp-add-to-cart" id="pp-atc"{% unless current_variant.available %} disabled{% endunless %}>
-            {%- if current_variant.available -%}
-              <span class="pp-atc__text">Add to Cart</span>
-              <span class="pp-atc__sep">—</span>
-              <span class="pp-atc__price" id="pp-atc-price">{{ current_variant.price | money }}</span>
-            {%- else -%}
-              <span class="pp-atc__text">Sold Out</span>
-            {%- endif -%}
+          <input type="hidden" name="properties[_product_handle]" value="{{ product.handle }}">
+          <input type="hidden" name="properties[Artwork]" value="{{ product.title | escape }}">
+          <input type="hidden" name="properties[Artist]" value="{{ product.vendor | escape }}">
+          <input type="hidden" name="properties[Size]" id="prop-size" value="Small">
+          <input type="hidden" name="properties[Frame]" id="prop-frame" value="Unframed">
+          {%- if product.metafields.neverland.drive_file_id != blank -%}
+            <input type="hidden" name="properties[_drive_file_id]" value="{{ product.metafields.neverland.drive_file_id }}">
+          {%- endif -%}
+          <button type="submit" class="add-to-cart" id="add-to-cart-btn">
+            Add to Cart — <span id="cart-price">$33.99</span>
           </button>
         </form>
 
-        {%- comment -%} Trust badges {%- endcomment -%}
-        <div class="pp-trust">
-          <div class="pp-trust__item">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        <!-- Trust Badges -->
+        <div class="product-trust">
+          <div class="product-trust__item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
             <span>Satisfaction Guaranteed</span>
           </div>
-          <div class="pp-trust__item">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          <div class="product-trust__item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
             <span>Worldwide Shipping</span>
           </div>
-          <div class="pp-trust__item">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            <span>Ships in 3–5 Days</span>
+          <div class="product-trust__item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Ships in 1–3 days</span>
           </div>
         </div>
 
-        {%- comment -%} Product meta specs {%- endcomment -%}
-        <div class="pp-specs">
+        <!-- Adding feedback (matches art-detail page) -->
+        <div class="art-detail__feedback" id="product-feedback" style="display:none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>Added to cart!</span>
+          <a href="/cart">View Cart</a>
+        </div>
+
+        <!-- Room View (matches art-detail layout — in details column, with dimension annotations) -->
+        <div id="room-preview-container">
+          <div class="room-preview" id="room-preview">
+            <div class="room-preview__heading">See It On Your Wall</div>
+            <div class="room-preview__scene" id="room-scene" style="background-image:url({{ 'mockup-wall.jpg' | asset_url }})">
+              <div class="room-preview__art-mount" id="room-art-mount">
+                <div class="room-preview__frame" id="room-art-frame" data-frame="none">
+                  {%- if product.featured_image -%}
+                    <img src="{{ product.featured_image | image_url: width: 600 }}" alt="{{ product.title | escape }}" loading="lazy" draggable="false">
+                  {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                    {%- assign drive_id_room = product.metafields.neverland.drive_file_id -%}
+                    <img src="https://lh3.googleusercontent.com/d/{{ drive_id_room }}=s600" alt="{{ product.title | escape }}" loading="lazy" draggable="false">
+                  {%- endif -%}
+                </div>
+                <div class="room-preview__dim-w" id="room-dim-w">
+                  <span class="room-preview__dim-end"></span>
+                  <span class="room-preview__dim-line"></span>
+                  <span class="room-preview__dim-val" id="room-dim-w-val"></span>
+                  <span class="room-preview__dim-line"></span>
+                  <span class="room-preview__dim-end"></span>
+                </div>
+                <div class="room-preview__dim-h" id="room-dim-h">
+                  <span class="room-preview__dim-end"></span>
+                  <span class="room-preview__dim-line"></span>
+                  <span class="room-preview__dim-val" id="room-dim-h-val"></span>
+                  <span class="room-preview__dim-line"></span>
+                  <span class="room-preview__dim-end"></span>
+                </div>
+              </div>
+            </div>
+            <span class="room-preview__caption">Proportional room preview — dimensions update with size selection</span>
+          </div>
+        </div>
+
+        <!-- Print Specs Meta -->
+        <div class="product-meta">
           {%- if product.metafields.neverland.ratio_class != blank -%}
-            <div class="pp-specs__row">
-              <span class="pp-specs__label">Orientation</span>
-              <span class="pp-specs__value">{{ product.metafields.neverland.ratio_class | replace: '_', ' ' | capitalize }}</span>
+            <div class="product-meta__item">
+              <span class="product-meta__label">Orientation</span>
+              <span class="product-meta__value" id="spec-orientation">{{ product.metafields.neverland.ratio_class }}</span>
             </div>
           {%- endif -%}
           {%- if product.metafields.neverland.max_print_cm != blank -%}
-            <div class="pp-specs__row">
-              <span class="pp-specs__label">Max Print Size</span>
-              <span class="pp-specs__value">{{ product.metafields.neverland.max_print_cm }}</span>
+            <div class="product-meta__item">
+              <span class="product-meta__label">Max Print Size</span>
+              <span class="product-meta__value" id="spec-maxprint">{{ product.metafields.neverland.max_print_cm }}</span>
             </div>
           {%- endif -%}
           {%- if product.metafields.neverland.quality_tier != blank -%}
-            <div class="pp-specs__row">
-              <span class="pp-specs__label">Print Quality</span>
-              <span class="pp-specs__value">{{ product.metafields.neverland.quality_tier | capitalize }} Grade</span>
+            <div class="product-meta__item">
+              <span class="product-meta__label">Quality</span>
+              <span class="product-meta__value">{{ product.metafields.neverland.quality_tier | capitalize }} Grade</span>
             </div>
           {%- endif -%}
-          <div class="pp-specs__row">
-            <span class="pp-specs__label">Artist</span>
-            <span class="pp-specs__value">{{ product.vendor }}</span>
+          <div class="product-meta__item">
+            <span class="product-meta__label">Artist</span>
+            <span class="product-meta__value">{{ product.vendor }}</span>
           </div>
+          {%- if product.metafields.neverland.style != blank -%}
+            <div class="product-meta__item">
+              <span class="product-meta__label">Style</span>
+              <span class="product-meta__value">{{ product.metafields.neverland.style }}</span>
+            </div>
+          {%- endif -%}
+          {%- if product.metafields.neverland.mood != blank -%}
+            <div class="product-meta__item">
+              <span class="product-meta__label">Mood</span>
+              <span class="product-meta__value">{{ product.metafields.neverland.mood }}</span>
+            </div>
+          {%- endif -%}
         </div>
 
-        {%- comment -%} Accordion {%- endcomment -%}
-        <div class="pp-accordion" id="pp-accordion">
-          <div class="pp-accordion__item">
-            <button class="pp-accordion__trigger is-open" type="button">
-              <span>About This Print</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <!-- Accordion Details -->
+        <div class="product-accordion">
+          <div class="product-accordion__item">
+            <button class="product-accordion__trigger is-open" type="button">
+              About This Print
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
             </button>
-            <div class="pp-accordion__body is-open">
-              <div class="pp-accordion__text">{{ product.description }}</div>
+            <div class="product-accordion__content is-open">
+              <div class="product-accordion__body">
+                {{ product.description }}
+              </div>
             </div>
           </div>
 
-          <div class="pp-accordion__item">
-            <button class="pp-accordion__trigger" type="button">
-              <span>Materials &amp; Quality</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          <div class="product-accordion__item">
+            <button class="product-accordion__trigger" type="button">
+              Materials & Quality
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
             </button>
-            <div class="pp-accordion__body">
-              <div class="pp-accordion__text">
+            <div class="product-accordion__content">
+              <div class="product-accordion__body">
                 <ul>
                   <li>Premium 310gsm cotton-rag archival paper</li>
                   <li>Giclée printing with pigment-based inks</li>
                   <li>Rated 200+ years lightfastness</li>
-                  <li>Vibrant, accurate colour reproduction</li>
+                  <li>Vibrant, accurate color reproduction</li>
                   <li>Textured matte finish</li>
                 </ul>
               </div>
             </div>
           </div>
 
-          <div class="pp-accordion__item">
-            <button class="pp-accordion__trigger" type="button">
-              <span>Shipping &amp; Returns</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          <div class="product-accordion__item">
+            <button class="product-accordion__trigger" type="button">
+              Shipping & Returns
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
             </button>
-            <div class="pp-accordion__body">
-              <div class="pp-accordion__text">
-                <ul>
-                  <li>Worldwide shipping — rates calculated at checkout</li>
-                  <li>Ships flat in rigid protective packaging</li>
-                  <li>Printed on demand — 3–5 business days production</li>
-                  <li>30-day satisfaction guarantee</li>
-                </ul>
+            <div class="product-accordion__content">
+              <div class="product-accordion__body">
+                <p><strong>Production</strong> — 1–3 business days for paper prints; up to 5 days for framed pieces.</p>
+                <p><strong>Shipping (US)</strong> — $11.95 flat. Most orders arrive in <strong>1–2 weeks</strong> via UPS, FedEx, or USPS. Faster Express &amp; Overnight options available at checkout.</p>
+                <p><strong>International shipping</strong> — $26.95 flat to all other countries. Allow <strong>3–5 weeks</strong> total. Customs duties or VAT (if any) are the recipient's responsibility.</p>
+                <p><strong>30-day satisfaction guarantee</strong> — if you're not happy with your unframed print, contact us within 30 days for a replacement or refund. Framed items may incur a 20% production fee on return. Damaged or lost items are replaced free of charge — just send a photo within 30 days.</p>
+                <p>Full details: <a href="/pages/shipping">Shipping</a> · <a href="/pages/returns">Returns &amp; Refunds</a></p>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-
-  {%- comment -%} ═══ Below-fold: Lifestyle Sections ═══ {%- endcomment -%}
-  <div class="pp-lifestyle">
-
-    {%- comment -%} Section 1: Gallery Quality Paper {%- endcomment -%}
-    <div class="pp-lsec pp-lsec--alt">
-      <div class="container">
-        <div class="pp-lsec__row">
-          <div class="pp-lsec__media">
-            <div class="pp-lsec__img-wrap">
-              {%- if img_src != '' -%}
-                <img src="{{ img_src }}" alt="Gallery quality art paper" loading="lazy">
-              {%- endif -%}
-            </div>
-          </div>
-          <div class="pp-lsec__text">
-            <span class="pp-lsec__eyebrow">Premium Materials</span>
-            <h2 class="pp-lsec__title">Gallery Quality Art Paper</h2>
-            <p class="pp-lsec__desc">Every print is produced on premium 310gsm cotton-rag archival paper using 12-colour giclée technology — the same process used by the world's leading galleries and museums.</p>
-            <div class="pp-lsec__features">
-              <div class="pp-lsec__feat">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-                <div>
-                  <strong>Textured Paper</strong>
-                  <span>310gsm cotton-rag</span>
-                </div>
-              </div>
-              <div class="pp-lsec__feat">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                <div>
-                  <strong>Fade Resistant</strong>
-                  <span>200+ year lightfastness</span>
-                </div>
-              </div>
-              <div class="pp-lsec__feat">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-                <div>
-                  <strong>Vivid Detail</strong>
-                  <span>12-colour giclée process</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {%- comment -%} Section 2: Custom Framing {%- endcomment -%}
-    <div class="pp-lsec">
-      <div class="container">
-        <div class="pp-lsec__row pp-lsec__row--reverse">
-          <div class="pp-lsec__media">
-            <div class="pp-lsec__img-wrap pp-lsec__img-wrap--framed">
-              {%- if img_src != '' -%}
-                <div class="pp-lsec__framed-art" data-frame="black">
-                  <div class="pp-lsec__framed-mat">
-                    <img src="{{ img_src }}" alt="Custom framed art print" loading="lazy">
-                  </div>
-                </div>
-              {%- endif -%}
-            </div>
-          </div>
-          <div class="pp-lsec__text">
-            <span class="pp-lsec__eyebrow">Bespoke Framing</span>
-            <h2 class="pp-lsec__title">Custom Framed To Order</h2>
-            <p class="pp-lsec__desc">Choose from premium timber frame finishes — black, white, natural oak, or walnut. Each frame is handcrafted with precision and fitted with crystal-clear acrylic glazing for enduring protection.</p>
-            <div class="pp-lsec__features">
-              <div class="pp-lsec__feat">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10"/></svg>
-                <div>
-                  <strong>Handcrafted Frames</strong>
-                  <span>Premium timber finishes</span>
-                </div>
-              </div>
-              <div class="pp-lsec__feat">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-                <div>
-                  <strong>Acrylic Glazing</strong>
-                  <span>Crystal-clear protection</span>
-                </div>
-              </div>
-              <div class="pp-lsec__feat">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                <div>
-                  <strong>Ready to Hang</strong>
-                  <span>Arrives wall-ready</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {%- comment -%} Section 3: Happiness Guaranteed {%- endcomment -%}
-    <div class="pp-lsec pp-lsec--dark">
-      <div class="container">
-        <div class="pp-lsec__row">
-          <div class="pp-lsec__text pp-lsec__text--centered">
-            <span class="pp-lsec__eyebrow">Our Promise</span>
-            <h2 class="pp-lsec__title">Happiness Guaranteed</h2>
-            <p class="pp-lsec__desc">We believe great art should be accessible to everyone. If you're not completely in love with your print, we'll make it right — no questions asked.</p>
-            <div class="pp-lsec__badges">
-              <div class="pp-lsec__badge">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                <span>Quality Warranty</span>
-              </div>
-              <div class="pp-lsec__badge">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                <span>30-Day Returns</span>
-              </div>
-              <div class="pp-lsec__badge">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-                <span>Worldwide Delivery</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {%- comment -%} ═══ You May Also Like ═══ {%- endcomment -%}
-  {%- assign rec_coll = product.collections.first -%}
-  {%- unless rec_coll -%}{%- assign rec_coll = collections['all-art-prints'] -%}{%- endunless -%}
-  {%- if rec_coll -%}
-    <div class="pp-related">
-      <div class="container">
-        <div class="pp-related__head">
-          <h2 class="pp-related__title">You May Also Like</h2>
-          <a href="{{ rec_coll.url }}" class="pp-related__link">
-            View All
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-          </a>
-        </div>
-        <div class="pp-related__grid" id="pp-related-grid">
-          {%- assign rec_count = 0 -%}
-          {%- for rec_product in rec_coll.products limit: 12 -%}
-            {%- if rec_product.id == product.id -%}{%- continue -%}{%- endif -%}
-            {%- if rec_count >= 8 -%}{%- break -%}{%- endif -%}
-            {%- assign rec_count = rec_count | plus: 1 -%}
-
-            {%- assign rec_img = '' -%}
-            {%- if rec_product.featured_image -%}
-              {%- assign rec_img = rec_product.featured_image | image_url: width: 500 -%}
-            {%- elsif rec_product.metafields.neverland.drive_file_id != blank -%}
-              {%- assign rec_img = 'https://lh3.googleusercontent.com/d/' | append: rec_product.metafields.neverland.drive_file_id | append: '=s500' -%}
-            {%- endif -%}
-
-            <a href="{{ rec_product.url }}" class="pp-rcard">
-              <div class="pp-rcard__img">
-                {%- if rec_img != '' -%}
-                  <img src="{{ rec_img }}" alt="{{ rec_product.title | escape }}" loading="lazy" width="500" height="500">
-                {%- else -%}
-                  <div class="pp-rcard__placeholder"></div>
-                {%- endif -%}
-              </div>
-              <div class="pp-rcard__info">
-                <span class="pp-rcard__artist">{{ rec_product.vendor }}</span>
-                <span class="pp-rcard__title">{{ rec_product.title | truncate: 40 }}</span>
-                <span class="pp-rcard__price">{{ rec_product.price_min | money }}</span>
-              </div>
-            </a>
-          {%- endfor -%}
-        </div>
-      </div>
-    </div>
-  {%- endif -%}
-
-  {%- comment -%} ═══ Image Zoom Lightbox ═══ {%- endcomment -%}
-  <div class="pp-lightbox" id="pp-lightbox" aria-hidden="true">
-    <div class="pp-lightbox__overlay"></div>
-    <div class="pp-lightbox__content">
-      <img id="pp-lightbox-img" src="" alt="">
-      <button class="pp-lightbox__close" id="pp-lightbox-close" type="button" aria-label="Close">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-  </div>
-
-  {%- comment -%} ═══ Size Guide Modal ═══ {%- endcomment -%}
-  <div class="pp-modal" id="pp-size-guide" aria-hidden="true">
-    <div class="pp-modal__overlay"></div>
-    <div class="pp-modal__dialog">
-      <div class="pp-modal__header">
-        <h3 class="pp-modal__title">Size Guide</h3>
-        <button class="pp-modal__close" id="pp-size-guide-close" type="button" aria-label="Close">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="pp-modal__body">
-        <div class="pp-size-table">
-          <table>
-            <thead>
-              <tr><th>Size</th><th>Dimensions (cm)</th><th>Dimensions (in)</th><th>Best For</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>Small</td><td>21 × 30 cm</td><td>8.3 × 11.7 in</td><td>Shelves, desks, small walls</td></tr>
-              <tr><td>Medium</td><td>30 × 42 cm</td><td>11.7 × 16.5 in</td><td>Gallery walls, bedrooms</td></tr>
-              <tr><td>Large</td><td>42 × 59 cm</td><td>16.5 × 23.4 in</td><td>Living rooms, feature walls</td></tr>
-              <tr><td>Extra Large</td><td>59 × 84 cm</td><td>23.4 × 33.1 in</td><td>Statement pieces, large walls</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="pp-size-note">Actual dimensions may vary slightly based on the artwork's aspect ratio. All sizes include a small white border for framing.</p>
       </div>
     </div>
   </div>
@@ -511,145 +265,242 @@
 
 <script>
 (function() {
-  'use strict';
+  // ── Skeleton variant IDs (unframed / framed) ──
+  var VARIANTS = {
+    small:       { unframed: '42927017099348', framed: '42927017132116', price: 33.99, compare: 44.99, label: 'Small' },
+    medium:      { unframed: '42927018377300', framed: '42927018410068', price: 69.99, compare: 90.99, label: 'Medium' },
+    large:       { unframed: '42927019360340', framed: '42927019393108', price: 159.99, compare: 209.99, label: 'Large' },
+    extra_large: { unframed: '42927020802132', framed: '42927020834900', price: 319.99, compare: 419.99, label: 'Extra Large' }
+  };
 
-  /* ── Frame Preview ── */
-  var ppFrame = document.getElementById('pp-frame');
-  var frameBtns = document.querySelectorAll('.pp-frames__btn');
-  frameBtns.forEach(function(btn) {
+  var TIER_SCALE = { small: 0.35, medium: 0.55, large: 0.75, extra_large: 1.0 };
+  var currentTier = 'small';
+  var currentFrame = 'unframed'; // 'unframed' or 'framed'
+  var currentFrameColor = 'none';
+  var maxPrintRaw = '{{ product.metafields.neverland.max_print_cm | default: "" }}';
+
+  // ── Clean title: strip trailing 4-digit year ──
+  var titleEl = document.getElementById('product-title');
+  if (titleEl) {
+    titleEl.textContent = titleEl.textContent.replace(/\s+\d{4}\s*$/, '');
+  }
+
+  // ── Format orientation: "panoramic_wide" → "Panoramic Wide" ──
+  var orientEl = document.getElementById('spec-orientation');
+  if (orientEl) {
+    var raw = orientEl.textContent.trim();
+    var parts = raw.split('_');
+    var name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    if (parts.length >= 3) {
+      orientEl.textContent = name + ' ' + parts[1] + ':' + parts[2];
+    } else if (parts.length === 2) {
+      orientEl.textContent = name + ' ' + parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+    } else {
+      orientEl.textContent = name;
+    }
+  }
+
+  // ── Format max print: round decimals, add " cm" if missing ──
+  var maxPrintEl = document.getElementById('spec-maxprint');
+  if (maxPrintEl) {
+    var mp = maxPrintEl.textContent.trim();
+    mp = mp.replace(/(\d+)\.\d+/g, function(m) { return Math.round(parseFloat(m)).toString(); });
+    if (mp.indexOf('cm') === -1 && mp.indexOf('in') === -1) mp += ' cm';
+    maxPrintEl.textContent = mp;
+  }
+
+  // ── Dimension calculation (matches catalog page) ──
+  function getArtDimsCm() {
+    var m = maxPrintRaw.match(/(\d+(?:\.\d+)?)\s*[×x]\s*(\d+(?:\.\d+)?)/i);
+    if (!m) return null;
+    var maxW = parseFloat(m[1]);
+    var maxH = parseFloat(m[2]);
+    var scale = TIER_SCALE[currentTier] || 0.35;
+    return { w: Math.round(maxW * scale), h: Math.round(maxH * scale) };
+  }
+
+  // ── Update room view dimensions and frame ──
+  function updateRoomView() {
+    var frame = document.getElementById('room-art-frame');
+    if (!frame) return;
+
+    // Update frame style
+    if (currentFrame === 'framed' && currentFrameColor && currentFrameColor !== 'none') {
+      frame.setAttribute('data-frame', currentFrameColor);
+    } else if (currentFrame === 'framed') {
+      frame.setAttribute('data-frame', 'black');
+    } else {
+      frame.setAttribute('data-frame', 'none');
+    }
+
+    var img = frame.querySelector('img');
+    var dimWVal = document.getElementById('room-dim-w-val');
+    var dimHVal = document.getElementById('room-dim-h-val');
+    var dimW = document.getElementById('room-dim-w');
+    var dimH = document.getElementById('room-dim-h');
+
+    var dims = getArtDimsCm();
+    if (dims && img) {
+      var wCm = dims.w;
+      var hCm = dims.h;
+
+      // Wall-height-based scaling: average wall = 250cm
+      var scene = document.getElementById('room-scene');
+      var sceneH = scene ? scene.offsetHeight : 420;
+      var isMobile = window.innerWidth <= 768;
+      var WALL_HEIGHT_CM = isMobile ? 350 : 250;
+      // 250cm wall spans ~80% of the mockup-wall.jpg scene (floor at ~84%).
+      var WALL_RATIO = 0.80;
+      var wallPx = sceneH * WALL_RATIO;
+      var pxPerCm = wallPx / WALL_HEIGHT_CM;
+
+      var imgW = Math.round(wCm * pxPerCm);
+      var imgH = Math.round(hCm * pxPerCm);
+
+      // Clamp to reasonable limits relative to scene
+      var maxPxW = Math.round(sceneH * 0.7);
+      var maxPxH = Math.round(wallPx * 0.85);
+      if (imgW > maxPxW) { imgH = Math.round(imgH * (maxPxW / imgW)); imgW = maxPxW; }
+      if (imgH > maxPxH) { imgW = Math.round(imgW * (maxPxH / imgH)); imgH = maxPxH; }
+
+      img.style.width = imgW + 'px';
+      img.style.height = imgH + 'px';
+      img.style.maxWidth = imgW + 'px';
+      img.style.maxHeight = imgH + 'px';
+
+      if (dimWVal) dimWVal.textContent = wCm + ' cm';
+      if (dimHVal) dimHVal.textContent = hCm + ' cm';
+      if (dimW) dimW.style.display = '';
+      if (dimH) dimH.style.display = '';
+    } else if (img) {
+      img.style.width = '120px';
+      img.style.height = '90px';
+      img.style.maxWidth = '120px';
+      img.style.maxHeight = '90px';
+      if (dimW) dimW.style.display = 'none';
+      if (dimH) dimH.style.display = 'none';
+    }
+  }
+
+  // ── Price update ──
+  function updatePrice() {
+    var tier = VARIANTS[currentTier];
+    var isFramed = currentFrame === 'framed';
+    var price = isFramed ? tier.compare : tier.price;
+    var variantId = isFramed ? tier.framed : tier.unframed;
+
+    document.getElementById('product-price').textContent = '$' + price.toFixed(2);
+    document.getElementById('cart-price').textContent = '$' + price.toFixed(2);
+    document.getElementById('variant-id').value = variantId;
+
+    var compareEl = document.getElementById('product-compare-price');
+    if (!isFramed) {
+      compareEl.textContent = '$' + tier.compare.toFixed(2);
+      compareEl.style.display = '';
+    } else {
+      compareEl.style.display = 'none';
+    }
+
+    // Update line item properties
+    document.getElementById('prop-size').value = tier.label;
+    document.getElementById('prop-frame').value = isFramed ? 'Framed' : 'Unframed';
+  }
+
+  // ── Size selector ──
+  document.querySelectorAll('#size-options .variant-option').forEach(function(btn) {
     btn.addEventListener('click', function() {
-      var frame = this.getAttribute('data-frame');
-      frameBtns.forEach(function(b) { b.classList.remove('is-active'); });
-      this.classList.add('is-active');
-      if (ppFrame) ppFrame.setAttribute('data-frame', frame);
+      document.querySelector('#size-options .is-selected')?.classList.remove('is-selected');
+      btn.classList.add('is-selected');
+      currentTier = btn.getAttribute('data-tier');
+      updatePrice();
+      updateRoomView();
     });
   });
 
-  /* ── Variant Selector ── */
-  var variantPills = document.querySelectorAll('.pp-pill');
-  var priceEl = document.getElementById('pp-price');
-  var comparePriceEl = document.getElementById('pp-compare-price');
-  var variantInput = document.getElementById('pp-variant-id');
-  var atcBtn = document.getElementById('pp-atc');
-  var atcPrice = document.getElementById('pp-atc-price');
+  // ── Frame type selector (Unframed / Framed) ──
+  var frameSelectorPanel = document.getElementById('frame-selector');
+  document.querySelectorAll('#frame-type-options .variant-option').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelector('#frame-type-options .is-selected')?.classList.remove('is-selected');
+      btn.classList.add('is-selected');
+      currentFrame = btn.getAttribute('data-frame');
+      updatePrice();
 
-  variantPills.forEach(function(pill) {
-    pill.addEventListener('click', function() {
-      if (this.getAttribute('data-available') === 'false') return;
-      variantPills.forEach(function(p) { p.classList.remove('is-selected'); });
-      this.classList.add('is-selected');
-
-      var vid = this.getAttribute('data-variant-id');
-      var price = this.getAttribute('data-price');
-      var comparePrice = this.getAttribute('data-compare-price');
-
-      if (variantInput) variantInput.value = vid;
-      if (priceEl) priceEl.textContent = price;
-      if (atcPrice) atcPrice.textContent = price;
-
-      if (comparePriceEl) {
-        if (comparePrice) {
-          comparePriceEl.textContent = comparePrice;
-          comparePriceEl.style.display = '';
-        } else {
-          comparePriceEl.style.display = 'none';
+      if (currentFrame === 'unframed') {
+        if (frameSelectorPanel) frameSelectorPanel.style.display = 'none';
+        frameButtons.forEach(function(b) { b.classList.remove('is-active'); });
+        if (framePreview) framePreview.setAttribute('data-frame', 'none');
+        currentFrameColor = 'none';
+      } else {
+        if (frameSelectorPanel) frameSelectorPanel.style.display = '';
+        // Auto-select black if no frame color chosen yet
+        if (!currentFrameColor || currentFrameColor === 'none') {
+          var blackBtn = document.querySelector('.frame-option[data-frame="black"]');
+          if (blackBtn) {
+            frameButtons.forEach(function(b) { b.classList.remove('is-active'); });
+            blackBtn.classList.add('is-active');
+            currentFrameColor = 'black';
+            if (framePreview) framePreview.setAttribute('data-frame', 'black');
+          }
         }
       }
-
-      // Update URL without reload
-      if (window.history && window.history.replaceState) {
-        var url = new URL(window.location);
-        url.searchParams.set('variant', vid);
-        window.history.replaceState({}, '', url);
-      }
+      updateRoomView();
     });
   });
 
-  /* ── Accordion ── */
-  document.querySelectorAll('.pp-accordion__trigger').forEach(function(trigger) {
+  // ── Frame Preview Interaction ──
+  var framePreview = document.getElementById('frame-preview');
+  var frameButtons = document.querySelectorAll('.frame-option');
+
+  frameButtons.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var frame = this.getAttribute('data-frame');
+      frameButtons.forEach(function(b) { b.classList.remove('is-active'); });
+      this.classList.add('is-active');
+      if (framePreview) framePreview.setAttribute('data-frame', frame);
+      currentFrameColor = frame;
+
+      // Auto-select "Framed" if a frame color is picked
+      if (frame !== 'none' && currentFrame !== 'framed') {
+        document.querySelector('#frame-type-options .is-selected')?.classList.remove('is-selected');
+        var framedBtn = document.querySelector('#frame-type-options [data-frame="framed"]');
+        if (framedBtn) { framedBtn.classList.add('is-selected'); currentFrame = 'framed'; updatePrice(); }
+      }
+      updateRoomView();
+    });
+  });
+
+  // ── Accordion ──
+  document.querySelectorAll('.product-accordion__trigger').forEach(function(trigger) {
     trigger.addEventListener('click', function() {
-      var body = this.nextElementSibling;
-      var isOpen = this.classList.contains('is-open');
-
-      // Close all in this accordion
-      this.closest('.pp-accordion').querySelectorAll('.pp-accordion__trigger').forEach(function(t) {
-        t.classList.remove('is-open');
-        if (t.nextElementSibling) t.nextElementSibling.classList.remove('is-open');
-      });
-
-      if (!isOpen) {
-        this.classList.add('is-open');
-        if (body) body.classList.add('is-open');
-      }
+      var content = this.nextElementSibling;
+      var isOpen = this.classList.toggle('is-open');
+      if (content) content.classList.toggle('is-open', isOpen);
     });
   });
 
-  /* ── Image Lightbox ── */
-  var lightbox = document.getElementById('pp-lightbox');
-  var lightboxImg = document.getElementById('pp-lightbox-img');
-  var lightboxClose = document.getElementById('pp-lightbox-close');
-  var zoomBtn = document.getElementById('pp-zoom-btn');
-  var mainImg = document.getElementById('pp-main-img');
+  // ── Add to cart feedback ──
+  var cartForm = document.getElementById('product-cart-form');
+  var feedbackEl = document.getElementById('product-feedback');
+  if (cartForm && feedbackEl) {
+    cartForm.addEventListener('submit', function() {
+      feedbackEl.style.display = '';
+      setTimeout(function() { feedbackEl.style.display = 'none'; }, 4000);
+    });
+  }
 
-  function openLightbox() {
-    if (!lightbox || !mainImg) return;
-    // Use higher resolution for zoom
-    var src = mainImg.src;
-    if (src.includes('cdn.shopify.com')) {
-      src = src.replace(/width=\d+/, 'width=2400');
-    } else if (src.includes('googleusercontent.com')) {
-      src = src.replace(/=s\d+/, '=s2400');
+  // Initial price + room dimensions
+  updatePrice();
+  updateRoomView();
+
+  // ── Image Protection ──
+  document.addEventListener('contextmenu', function(e) {
+    if (e.target.closest('.product-gallery, .frame-preview, .room-preview')) {
+      e.preventDefault();
     }
-    lightboxImg.src = src;
-    lightboxImg.alt = mainImg.alt;
-    lightbox.classList.add('is-open');
-    lightbox.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeLightbox() {
-    if (!lightbox) return;
-    lightbox.classList.remove('is-open');
-    lightbox.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-  }
-
-  if (zoomBtn) zoomBtn.addEventListener('click', openLightbox);
-  if (mainImg) mainImg.addEventListener('click', openLightbox);
-  if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
-  if (lightbox) {
-    lightbox.querySelector('.pp-lightbox__overlay')?.addEventListener('click', closeLightbox);
-  }
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeLightbox();
   });
-
-  /* ── Size Guide Modal ── */
-  var sizeModal = document.getElementById('pp-size-guide');
-  var sizeGuideTrigger = document.getElementById('pp-size-guide-trigger');
-  var sizeGuideClose = document.getElementById('pp-size-guide-close');
-
-  function openSizeGuide() {
-    if (!sizeModal) return;
-    sizeModal.classList.add('is-open');
-    sizeModal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-  }
-
-  function closeSizeGuide() {
-    if (!sizeModal) return;
-    sizeModal.classList.remove('is-open');
-    sizeModal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-  }
-
-  if (sizeGuideTrigger) sizeGuideTrigger.addEventListener('click', openSizeGuide);
-  if (sizeGuideClose) sizeGuideClose.addEventListener('click', closeSizeGuide);
-  if (sizeModal) {
-    sizeModal.querySelector('.pp-modal__overlay')?.addEventListener('click', closeSizeGuide);
-  }
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeSizeGuide();
+  document.addEventListener('dragstart', function(e) {
+    if (e.target.tagName === 'IMG') e.preventDefault();
   });
 })();
 </script>

@@ -1248,7 +1248,9 @@
       var sceneH = scene ? scene.offsetHeight : 420;
       var isMobile = window.innerWidth <= 768;
       var WALL_HEIGHT_CM = isMobile ? 350 : 250;
-      var WALL_RATIO = 0.65;
+      // mockup-wall.jpg: the 250cm wall spans from the ceiling down to the
+      // floor line at ~84% of the image, i.e. ~80% of the scene height.
+      var WALL_RATIO = 0.80;
       var wallPx = sceneH * WALL_RATIO;
       var pxPerCm = wallPx / WALL_HEIGHT_CM;
 
