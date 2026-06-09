@@ -977,9 +977,9 @@
         if (section && options) {
           section.style.display = '';
 
-          // Default to the asset's own priceTier, or first available
-          const defaultTier = asset.priceTier || sizeList[0].tier;
-          const defaultIdx = Math.max(0, sizeList.findIndex(s => s.tier === defaultTier));
+          // Default to the smallest tier (matches the product page) so the
+          // room mockup opens at a realistic size, not the artwork's max.
+          const defaultIdx = 0;
 
           options.innerHTML = sizeList.map((s, i) => {
             const isSelected = i === defaultIdx ? ' is-selected' : '';
