@@ -180,37 +180,58 @@ router.post("/order-created", async (req, res) => {
               continue;
             }
 
-            // Parse the exact print dimensions from the Size property
-            // Format: "40 × 28.57 cm" → widthCm=40, heightCm=28.57
-            const dims = FinerWorksService.parseSizeCm(item.size);
+            // Look up the artwork in Supabase (by asset_id or drive_file_id) for
+            // pixel dimensions and the max print size.
+            let asset = null;
+            try {
+              let q = supabase
+                .from("assets")
+                .select("width_px,height_px,max_print_width_cm,max_print_height_cm");
+              q = item.assetId
+                ? q.eq("id", item.assetId)
+                : q.eq("drive_file_id", item.driveFileId);
+              const { data } = await q.single();
+              asset = data || null;
+            } catch (e) { /* ignore */ }
+
+            // Determine the exact print dimensions. Prefer the Size property when it
+            // carries real "W × H cm"; otherwise compute from the artwork's max print
+            // size × the tier scale (orders from /products/ pages send a tier label
+            // like "Extra Large" instead of dimensions).
+            let dims = FinerWorksService.parseSizeCm(item.size);
+            if (!dims && asset && asset.max_print_width_cm && asset.max_print_height_cm) {
+              const TIER_SCALE = { small: 0.35, medium: 0.55, large: 0.75, extra_large: 1.0 };
+              const tierKey = (item.priceTier || item.size || "")
+                .toString().trim().toLowerCase().replace(/\s+/g, "_");
+              const scale = TIER_SCALE[tierKey] || 0.55;
+              dims = {
+                widthCm:  asset.max_print_width_cm  * scale,
+                heightCm: asset.max_print_height_cm * scale,
+              };
+              console.log(`   ℹ️  Size "${item.size}" → ${Math.round(dims.widthCm)}×${Math.round(dims.heightCm)}cm (max × ${tierKey} ${scale})`);
+            }
             if (!dims) {
-              console.error(`   ⚠️  Cannot parse size "${item.size}" for "${item.artworkTitle}" — skip FinerWorks`);
+              console.error(`   ⚠️  Cannot determine print size for "${item.artworkTitle}" (size="${item.size}") — skip FinerWorks`);
               continue;
+            }
+
+            // Clamp to FinerWorks' max printable size (longest side 48 in), keeping
+            // aspect — the catalog can advertise larger "max print" sizes than
+            // FinerWorks can actually produce.
+            const MAX_PRINT_IN = 48;
+            const longestIn = Math.max(dims.widthCm, dims.heightCm) / 2.54;
+            if (longestIn > MAX_PRINT_IN) {
+              const f = MAX_PRINT_IN / longestIn;
+              dims = { widthCm: dims.widthCm * f, heightCm: dims.heightCm * f };
             }
 
             const productCode = item.finerworksProductCode || FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
 
             // FinerWorks requires pixel dimensions in product_image_file.
-            // Look them up from Supabase by asset_id.
-            let pixelWidth = 0;
-            let pixelHeight = 0;
-            if (item.assetId) {
-              try {
-                const { data: asset } = await supabase
-                  .from("assets")
-                  .select("width_px,height_px")
-                  .eq("id", item.assetId)
-                  .single();
-                if (asset) {
-                  pixelWidth  = asset.width_px  || 0;
-                  pixelHeight = asset.height_px || 0;
-                }
-              } catch (e) { /* fall through to default */ }
-            }
-            // Fallback so FW doesn't reject with "missing or invalid info"
+            let pixelWidth  = asset ? (asset.width_px  || 0) : 0;
+            let pixelHeight = asset ? (asset.height_px || 0) : 0;
             if (!pixelWidth || !pixelHeight) {
-              // Assume the image is at least large enough for the requested print
-              // at 300dpi. 1cm = 0.393700787 inches.
+              // Fallback: assume enough pixels for the print at 300dpi.
               pixelWidth  = Math.round(dims.widthCm  * 0.393700787 * 300);
               pixelHeight = Math.round(dims.heightCm * 0.393700787 * 300);
             }
