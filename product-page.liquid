@@ -14,7 +14,7 @@
 (function() {
   var driveId = {{ product.metafields.neverland.drive_file_id | json }};
   var title = {{ product.title | json }};
-  var apiBase = 'https://neverland-prints-brain.onrender.com';
+  var apiBase = 'https://neverland-prints-brain-xvuy.onrender.com';
 
   fetch(apiBase + '/api/storefront/catalog?search=' + encodeURIComponent(title) + '&limit=20')
     .then(function(r) { return r.json(); })

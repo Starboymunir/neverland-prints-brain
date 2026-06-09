@@ -28,7 +28,7 @@
 
   function getApiBase() {
     const el = document.querySelector('[data-api-base]');
-    return el ? el.dataset.apiBase : 'https://neverland-prints-brain.onrender.com';
+    return el ? el.dataset.apiBase : 'https://neverland-prints-brain-xvuy.onrender.com';
   }
 
   async function apiFetch(endpoint, retries = 2) {
@@ -108,6 +108,11 @@
   }
 
   function getPrice(tier, framed) {
+    // Prefer the per-artwork dynamic price (matches the ladder variant that
+    // will actually be charged). Fall back to the flat tier table.
+    const key = `${tier}_${framed ? 'framed' : 'unframed'}`;
+    const dyn = currentAsset?.priceMap?.[key]?.price;
+    if (dyn != null) return dyn;
     const tierData = PRICE_TIERS[tier];
     if (!tierData) return '33.99';
     return framed ? tierData.framed : tierData.unframed;
@@ -134,8 +139,9 @@
   // ─── PRODUCT CARD RENDERING ───────────────────────────
 
   function renderCatalogCard(item) {
-    const price = getPrice(item.priceTier, false);
-    const comparePrice = getPrice(item.priceTier, true);
+    // Prefer the API's per-artwork cheapest price; derive a higher strike-through.
+    const price = item.price || getPrice(item.priceTier, false);
+    const comparePrice = (parseFloat(price) * 1.3).toFixed(2);
     const artUrl = `/pages/art?id=${item.id}`;
     const flag = item.country ? getFlag(item.country) : '';
 
@@ -1323,7 +1329,7 @@
 
       grid.innerHTML = data.similar.map(item => {
         const artUrl = `/pages/art?id=${item.id}`;
-        const price = getPrice(item.priceTier, false);
+        const price = item.price || getPrice(item.priceTier, false);
         return `
           <div class="catalog-card" data-animate="fade-up">
             <a href="${artUrl}" class="catalog-card__link">
@@ -1376,15 +1382,26 @@
       ? frameColorMap[currentFrameColor] || 'Black'
       : (framed ? 'Black' : 'None');
 
+    // Per-artwork pricing data for this exact tier/frame, from the API price map.
+    const priceInfo = currentAsset.priceMap?.[`${tier}_${framed ? 'framed' : 'unframed'}`];
+
+    // Real print dimensions for the selected tier (e.g. "47 × 83 cm"). Prefer
+    // the priced map's size so the FinerWorks product code the webhook submits
+    // matches the code this price was computed from (no rounding drift).
+    const artDims = getArtDimsCm();
+    const sizeProp = priceInfo?.size
+      || (artDims ? `${artDims.w} × ${artDims.h} cm` : (currentVariantSize?.size || currentAsset.maxPrint));
+
     const lineItemProperties = {
       '_asset_id': currentAsset.id,
       'Artwork': currentAsset.title,
       'Artist': currentAsset.artist || 'Unknown',
-      'Size': currentVariantSize?.size || currentAsset.maxPrint,
+      'Size': sizeProp,
       'Frame': framed ? 'Framed' : 'Unframed',
       'Frame Color': frameDesc,
       '_drive_file_id': currentAsset.driveFileId,
       '_price_tier': tier,
+      '_finerworks_product_code': priceInfo?.productCode || '',
       '_frame_color': currentFrameColor,
       '_preview': currentAsset.images.s400,
     };

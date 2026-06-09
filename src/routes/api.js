@@ -24,6 +24,48 @@ const printful = new PrintfulService();
 const printfulCache = require("../services/printful-cache");
 const FinerWorksService = require("../services/finerworks");
 const finerworks = new FinerWorksService();
+const pricing = require("../services/pricing");
+
+// Price-ladder variant map (price string -> { variantId, ... }), written by
+// create-price-anchors.js. Loaded once at boot.
+let PRICE_LADDER_MAP = {};
+try {
+  PRICE_LADDER_MAP = require("../config/price-ladder-map.json").ladder || {};
+} catch (e) {
+  console.warn("⚠️  price-ladder-map.json not found — dynamic pricing disabled");
+}
+
+/**
+ * Per-artwork price map keyed by `${tier}_${frame}`, each entry carrying the
+ * matching price-ladder variant. Returns {} if the artwork can't be priced or
+ * the ladder isn't loaded (callers then fall back to the flat skeleton map).
+ */
+function buildDynamicPriceMap(maxWidthCm, maxHeightCm) {
+  if (!maxWidthCm || !maxHeightCm || !Object.keys(PRICE_LADDER_MAP).length) return {};
+  const raw = pricing.computePriceMap(maxWidthCm, maxHeightCm);
+  const out = {};
+  for (const [key, info] of Object.entries(raw)) {
+    if (!info) continue;
+    const ladder = PRICE_LADDER_MAP[info.price.toFixed(2)];
+    if (!ladder) continue; // computed price outside ladder range — skip, don't mis-charge
+    out[key] = {
+      variantId: ladder.variantId,
+      variantGid: ladder.variantGid,
+      price: info.price.toFixed(2),
+      tier: key.replace(/_(framed|unframed)$/, ""),
+      framed: key.endsWith("_framed"),
+      size: `${info.dims.widthCm} × ${info.dims.heightCm} cm`,
+      productCode: info.productCode,
+    };
+  }
+  return out;
+}
+
+/** Cheapest purchasable price (small unframed) for "From $X" cards. */
+function cheapestPrice(maxWidthCm, maxHeightCm) {
+  const p = pricing.computePrice(maxWidthCm, maxHeightCm, "small", false);
+  return p ? p.price.toFixed(2) : null;
+}
 
 const router = express.Router();
 
@@ -659,7 +701,7 @@ router.get("/storefront/catalog", async (req, res) => {
         },
         driveFileId: a.drive_file_id,
         priceTier: tier.tier,
-        price: tier.price,
+        price: cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || tier.price,
         comparePrice: tier.comparePrice,
         maxPrint: `${Math.round(a.max_print_width_cm || 0)} × ${Math.round(a.max_print_height_cm || 0)} cm`,
       };
@@ -755,12 +797,16 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
       };
     });
 
-    // Load the price map
-    let priceMap = {};
-    try {
-      const mapPath = path.join(__dirname, "..", "config", "skeleton-price-map.json");
-      priceMap = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
-    } catch (e) {}
+    // Per-artwork dynamic price map (variant per ladder price point). Falls
+    // back to the flat skeleton map only if the artwork can't be priced.
+    let priceMap = buildDynamicPriceMap(asset.max_print_width_cm, asset.max_print_height_cm);
+    let dynamicPricing = Object.keys(priceMap).length > 0;
+    if (!dynamicPricing) {
+      try {
+        const mapPath = path.join(__dirname, "..", "config", "skeleton-price-map.json");
+        priceMap = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
+      } catch (e) {}
+    }
 
     // Use stored description, or generate one from AI metadata
     const description = asset.description || generateDescriptionFromMeta(asset);
@@ -790,10 +836,13 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
       },
       mockup_url: asset.mockup_url || null,
       priceTier: tier.tier,
-      basePrice: tier.price,
+      basePrice: dynamicPricing ? (priceMap[`${tier.tier}_unframed`]?.price || tier.price) : tier.price,
       comparePrice: tier.comparePrice,
-      variants,
+      // When dynamic pricing is active, drive the size list from priceMap (all
+      // priced tiers) rather than the DPI-filtered asset_variants.
+      variants: dynamicPricing ? [] : variants,
       priceMap,
+      dynamicPricing,
       shopifyProductId: asset.shopify_product_id || null,
       tags: asset.tags || [],
     });
@@ -1136,7 +1185,7 @@ router.get("/storefront/similar-asset/:assetId", async (req, res) => {
               image: `https://lh3.googleusercontent.com/d/${r.drive_file_id}=s400`,
               style: r.style,
               priceTier: t.tier,
-              price: t.price,
+              price: cheapestPrice(r.max_print_width_cm, r.max_print_height_cm) || t.price,
               similarity: r.similarity,
             };
           });
@@ -1191,7 +1240,7 @@ router.get("/storefront/similar-asset/:assetId", async (req, res) => {
         image: `https://lh3.googleusercontent.com/d/${s.drive_file_id}=s400`,
         style: s.style,
         priceTier: t.tier,
-        price: t.price,
+        price: cheapestPrice(s.max_print_width_cm, s.max_print_height_cm) || t.price,
       };
     });
 
@@ -1691,7 +1740,7 @@ router.get("/storefront/search", async (req, res) => {
                 image: `https://lh3.googleusercontent.com/d/${r.drive_file_id}=s400`,
                 similarity: r.similarity,
                 priceTier: t.tier,
-                price: t.price,
+                price: cheapestPrice(r.max_print_width_cm, r.max_print_height_cm) || t.price,
               };
             }),
             method: "vector",
@@ -1736,7 +1785,7 @@ router.get("/storefront/search", async (req, res) => {
           style: r.style,
           image: `https://lh3.googleusercontent.com/d/${r.drive_file_id}=s400`,
           priceTier: t.tier,
-          price: t.price,
+          price: cheapestPrice(r.max_print_width_cm, r.max_print_height_cm) || t.price,
         };
       }),
       method: "text",

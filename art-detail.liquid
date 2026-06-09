@@ -5,7 +5,7 @@
   Uses pp- class prefix to share CSS with product-page.liquid.
 {% endcomment %}
 
-{%- assign api_base = section.settings.api_base | default: 'https://neverland-prints-brain.onrender.com' -%}
+{%- assign api_base = section.settings.api_base | default: 'https://neverland-prints-brain-xvuy.onrender.com' -%}
 
 <section class="pp art-detail-page" data-api-base="{{ api_base }}" id="art-detail">
   <div class="container">
@@ -122,7 +122,7 @@
           <button type="button" class="pp-add-to-cart" id="art-add-to-cart">
             <span class="pp-atc__text">Add to Cart</span>
             <span class="pp-atc__sep">—</span>
-            <span class="pp-atc__price" id="art-cart-price">$29.99</span>
+            <span class="pp-atc__price" id="art-cart-price">$33.99</span>
           </button>
 
           {%- comment -%} Adding feedback {%- endcomment -%}
@@ -144,7 +144,7 @@
             </div>
             <div class="pp-trust__item">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-              <span>Ships in 3–5 Days</span>
+              <span>Delivered in 5–10 days</span>
             </div>
           </div>
 
@@ -193,7 +193,7 @@
                   <ul>
                     <li>Worldwide shipping available — rates calculated at checkout</li>
                     <li>Ships flat in rigid protective packaging</li>
-                    <li>Printed on demand — 3–5 business days production</li>
+                    <li>Printed on demand — 1–3 business days production</li>
                     <li>30-day satisfaction guarantee</li>
                   </ul>
                 </div>
@@ -364,7 +364,7 @@
       "type": "text",
       "id": "api_base",
       "label": "API Base URL",
-      "default": "https://neverland-prints-brain.onrender.com"
+      "default": "https://neverland-prints-brain-xvuy.onrender.com"
     }
   ],
   "presets": [{ "name": "Art Detail" }]
