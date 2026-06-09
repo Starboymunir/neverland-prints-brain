@@ -1,16 +1,20 @@
 {% comment %}
-  ART DETAIL — API-driven product page
-  Fetches artwork data from Supabase via our API using ?id= query param.
-  Cart adds skeleton product variant + line item properties.
-  Uses pp- class prefix to share CSS with product-page.liquid.
+  ART DETAIL — API-driven product page.
+  Mirrors product-page.liquid's design/classes (styled by neverland.css) so the
+  catalog (/pages/art) looks identical to the /products/ pages: frame preview,
+  size tiers, room mockup, specs, accordion. Data + dynamic pricing are filled
+  in by neverland-catalog.js (assets/neverland-catalog.js), which targets the
+  art-* element IDs and injects the room mockup into #art-room-view.
 {% endcomment %}
 
 {%- assign api_base = section.settings.api_base | default: 'https://neverland-prints-brain-xvuy.onrender.com' -%}
 
-<section class="pp art-detail-page" data-api-base="{{ api_base }}" id="art-detail">
+<meta name="mockup-bg-url" content="{{ 'mockup-wall.jpg' | asset_url }}">
+
+<section class="product-page art-detail-page" data-api-base="{{ api_base }}" id="art-detail">
   <div class="container">
 
-    {%- comment -%} Loading State {%- endcomment -%}
+    {%- comment -%} Loading {%- endcomment -%}
     <div class="art-detail__loading" id="art-loading">
       <div class="catalog-loading__spinner" style="width:40px;height:40px;border-width:4px;margin:80px auto;"></div>
     </div>
@@ -18,7 +22,6 @@
     {%- comment -%} Content (hidden until loaded) {%- endcomment -%}
     <div id="art-content" style="display:none;">
 
-      {%- comment -%} Breadcrumbs {%- endcomment -%}
       <nav class="pp-breadcrumbs" aria-label="Breadcrumb">
         <ol>
           <li><a href="/">Home</a></li>
@@ -27,105 +30,78 @@
         </ol>
       </nav>
 
-      <div class="pp-layout">
+      <div class="product-layout">
 
-        {%- comment -%} ═══ LEFT: Gallery ═══ {%- endcomment -%}
-        <div class="pp-gallery">
-          <div class="pp-gallery__main">
-            <div class="pp-frame" id="pp-frame" data-frame="none">
-              <div class="pp-frame__mat">
-                <img id="art-image" src="" srcset="" sizes="(max-width: 768px) 92vw, (max-width: 1200px) 50vw, 600px" alt="" loading="eager" fetchpriority="high">
-                <img src="{{ 'watermark-1.png' | asset_url }}" alt="" class="pp-watermark" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40%;max-width:220px;opacity:0.13;pointer-events:none;user-select:none;-webkit-user-drag:none;">
+        {%- comment -%} ═══ Gallery ═══ {%- endcomment -%}
+        <div class="product-gallery">
+          <div class="product-gallery__main">
+            <div class="frame-preview" id="frame-preview" data-frame="none">
+              <div class="frame-preview__mat" id="frame-mat">
+                <div class="frame-preview__img-wrap">
+                  <img id="art-image" src="" srcset="" sizes="(max-width: 768px) 95vw, 50vw" alt="" loading="eager" fetchpriority="high">
+                  <img src="{{ 'watermark-1.png' | asset_url }}" alt="" class="pp-watermark" aria-hidden="true">
+                </div>
               </div>
             </div>
-            <button class="pp-gallery__zoom" id="pp-zoom-btn" type="button" aria-label="Zoom image">
+            <button class="pp-zoom-btn" id="pp-zoom-btn" type="button" aria-label="Zoom image">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>
             </button>
           </div>
 
-          {%- comment -%} Frame style selector — hidden until Framed is selected {%- endcomment -%}
-          <div class="pp-frames" id="pp-frames" style="display:none;">
-            <span class="pp-frames__label">Preview Frame Style</span>
-            <div class="pp-frames__options">
-              <button type="button" class="pp-frames__btn is-active" data-frame="none" title="Unframed">
-                <span class="pp-frames__swatch pp-frames__swatch--none">
-                  <img id="art-swatch-none" src="" alt="Unframed" loading="lazy">
-                </span>
-                <span class="pp-frames__name">Unframed</span>
+          {%- comment -%} Frame style selector — shown when Framed {%- endcomment -%}
+          <div class="frame-selector" id="frame-selector" style="display:none">
+            <span class="frame-selector__label">Preview Frame Style</span>
+            <div class="frame-selector__options">
+              <button type="button" class="frame-option is-active" data-frame="black" title="Black Frame">
+                <span class="frame-option__swatch frame-option__swatch--black"></span>
+                <span class="frame-option__name">Black</span>
               </button>
-              <button type="button" class="pp-frames__btn" data-frame="black" title="Black Frame">
-                <span class="pp-frames__swatch pp-frames__swatch--black">
-                  <img id="art-swatch-black" src="" alt="Black frame" loading="lazy">
-                </span>
-                <span class="pp-frames__name">Black</span>
+              <button type="button" class="frame-option" data-frame="white" title="White Frame">
+                <span class="frame-option__swatch frame-option__swatch--white"></span>
+                <span class="frame-option__name">White</span>
               </button>
-              <button type="button" class="pp-frames__btn" data-frame="white" title="White Frame">
-                <span class="pp-frames__swatch pp-frames__swatch--white">
-                  <img id="art-swatch-white" src="" alt="White frame" loading="lazy">
-                </span>
-                <span class="pp-frames__name">White</span>
+              <button type="button" class="frame-option" data-frame="natural" title="Natural Wood Frame">
+                <span class="frame-option__swatch frame-option__swatch--natural"></span>
+                <span class="frame-option__name">Natural</span>
               </button>
-              <button type="button" class="pp-frames__btn" data-frame="natural" title="Natural Wood">
-                <span class="pp-frames__swatch pp-frames__swatch--natural">
-                  <img id="art-swatch-natural" src="" alt="Natural frame" loading="lazy">
-                </span>
-                <span class="pp-frames__name">Natural</span>
-              </button>
-              <button type="button" class="pp-frames__btn" data-frame="walnut" title="Walnut">
-                <span class="pp-frames__swatch pp-frames__swatch--walnut">
-                  <img id="art-swatch-walnut" src="" alt="Walnut frame" loading="lazy">
-                </span>
-                <span class="pp-frames__name">Walnut</span>
+              <button type="button" class="frame-option" data-frame="walnut" title="Walnut Frame">
+                <span class="frame-option__swatch frame-option__swatch--walnut"></span>
+                <span class="frame-option__name">Walnut</span>
               </button>
             </div>
           </div>
         </div>
 
-        {%- comment -%} ═══ RIGHT: Details ═══ {%- endcomment -%}
-        <div class="pp-details">
+        {%- comment -%} ═══ Details ═══ {%- endcomment -%}
+        <div class="product-details">
+          <div class="product-details__artist" id="art-artist"></div>
+          <h1 class="product-details__title" id="art-title"></h1>
 
-          <p class="pp-artist" id="art-artist"></p>
-          <h1 class="pp-title" id="art-title"></h1>
-
-          {%- comment -%} Price {%- endcomment -%}
-          <div class="pp-price">
-            <span class="pp-price__current" id="art-price"></span>
-            <span class="pp-price__was" id="art-compare-price"></span>
+          <div class="product-details__price">
+            <span class="product-details__price-current" id="art-price"></span>
+            <span class="product-details__price-compare" id="art-compare-price"></span>
           </div>
 
-          <hr class="pp-divider">
-
-          {%- comment -%} Size selector (populated by JS from API variants) {%- endcomment -%}
-          <div class="pp-option" id="art-size-section" style="display:none;">
-            <div class="pp-option__head">
-              <span class="pp-option__label">Size</span>
-              <span class="pp-option__value" id="art-size-display"></span>
-            </div>
-            <div class="pp-option__pills" id="art-size-options">
-              {%- comment -%} Rendered by JS {%- endcomment -%}
-            </div>
+          {%- comment -%} Size selector (populated by JS) {%- endcomment -%}
+          <div class="variant-selector" id="art-variants-section" style="display:none">
+            <div class="variant-selector__label">Size <span id="art-size-display" style="color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0;"></span></div>
+            <div class="variant-selector__options" id="art-variant-options"></div>
           </div>
 
-          {%- comment -%} Frame selector (Unframed / Framed) {%- endcomment -%}
-          <div class="pp-option" id="art-frame-section">
-            <div class="pp-option__head">
-              <span class="pp-option__label">Frame</span>
-              <span class="pp-option__value" id="art-frame-display">Unframed</span>
-            </div>
-            <div class="pp-option__pills" id="art-frame-options">
-              <button type="button" class="pp-pill is-selected" data-frame="unframed">Unframed</button>
-              <button type="button" class="pp-pill" data-frame="framed">Framed</button>
+          {%- comment -%} Frame selector {%- endcomment -%}
+          <div class="variant-selector" id="art-frame-section">
+            <div class="variant-selector__label">Frame <span id="art-frame-display" style="color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0;">Unframed</span></div>
+            <div class="variant-selector__options" id="art-frame-options">
+              <button type="button" class="variant-option is-selected" data-frame="unframed">Unframed</button>
+              <button type="button" class="variant-option" data-frame="framed">Framed</button>
             </div>
           </div>
 
           {%- comment -%} Add to Cart {%- endcomment -%}
-          <button type="button" class="pp-add-to-cart" id="art-add-to-cart">
-            <span class="pp-atc__text">Add to Cart</span>
-            <span class="pp-atc__sep">—</span>
-            <span class="pp-atc__price" id="art-cart-price">$33.99</span>
+          <button type="button" class="add-to-cart" id="art-add-to-cart">
+            Add to Cart — <span id="art-cart-price">$33.99</span>
           </button>
 
-          {%- comment -%} Adding feedback {%- endcomment -%}
           <div class="art-detail__feedback" id="art-feedback" style="display:none;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
             <span>Added to cart!</span>
@@ -133,42 +109,42 @@
           </div>
 
           {%- comment -%} Trust badges {%- endcomment -%}
-          <div class="pp-trust">
-            <div class="pp-trust__item">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+          <div class="product-trust">
+            <div class="product-trust__item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
               <span>Satisfaction Guaranteed</span>
             </div>
-            <div class="pp-trust__item">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            <div class="product-trust__item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
               <span>Worldwide Shipping</span>
             </div>
-            <div class="pp-trust__item">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <div class="product-trust__item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               <span>Ships in 1–3 days</span>
             </div>
           </div>
 
-          {%- comment -%} Print Specs {%- endcomment -%}
-          <div class="pp-specs" id="art-meta">
-            {%- comment -%} Rendered by JS {%- endcomment -%}
-          </div>
+          {%- comment -%} Room mockup — injected by JS into #art-room-view {%- endcomment -%}
+          <div id="art-room-view"></div>
+
+          {%- comment -%} Print Specs — injected by JS {%- endcomment -%}
+          <div class="product-meta" id="art-meta"></div>
 
           {%- comment -%} Accordion {%- endcomment -%}
           <div class="pp-accordion" id="pp-accordion">
             <div class="pp-accordion__item">
               <button class="pp-accordion__trigger is-open" type="button">
                 <span>About This Print</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
               </button>
               <div class="pp-accordion__body is-open">
                 <div class="pp-accordion__text" id="art-description"></div>
               </div>
             </div>
-
             <div class="pp-accordion__item">
               <button class="pp-accordion__trigger" type="button">
                 <span>Materials &amp; Quality</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
               </button>
               <div class="pp-accordion__body">
                 <div class="pp-accordion__text">
@@ -182,144 +158,38 @@
                 </div>
               </div>
             </div>
-
             <div class="pp-accordion__item">
               <button class="pp-accordion__trigger" type="button">
                 <span>Shipping &amp; Returns</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
               </button>
               <div class="pp-accordion__body">
                 <div class="pp-accordion__text">
                   <p><strong>Production</strong> — 1–3 business days for paper prints; up to 5 days for framed pieces.</p>
-                  <p><strong>Shipping (US)</strong> — $11.95 flat. Most orders arrive in <strong>1–2 weeks</strong>. Faster Express &amp; Overnight options available at checkout.</p>
-                  <p><strong>International</strong> — $26.95 flat to all other countries. Allow <strong>3–5 weeks</strong>. Customs duties or VAT are the recipient's responsibility.</p>
-                  <p><strong>30-day satisfaction guarantee</strong> on unframed prints. Framed items may incur a 20% production fee on return. Damaged or lost items replaced free of charge.</p>
-                  <p><a href="/pages/shipping">Full shipping policy</a> · <a href="/pages/returns">Returns &amp; refunds</a></p>
+                  <p><strong>Shipping</strong> — Rates calculated at checkout. Ships flat in rigid protective packaging.</p>
+                  <p><strong>30-day satisfaction guarantee</strong> — not happy? Contact us within 30 days for a replacement or refund.</p>
+                  <p>Full details: <a href="/pages/shipping">Shipping</a> · <a href="/pages/returns">Returns &amp; Refunds</a></p>
                 </div>
               </div>
             </div>
           </div>
         </div>
+      </div>
+
+      {%- comment -%} Similar Artworks {%- endcomment -%}
+      <div class="pp-related" id="art-similar" style="display:none;">
+        <div class="pp-related__head">
+          <h2 class="pp-related__title">You May Also Like</h2>
+          <a href="/pages/catalog" class="pp-related__link" id="art-similar-link">
+            View All
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </a>
+        </div>
+        <div class="pp-related__grid" id="art-similar-grid"></div>
       </div>
     </div>
 
-    {%- comment -%} Lifestyle Sections (below the fold) {%- endcomment -%}
-    <div class="pp-lifestyle" id="art-lifestyle" style="display:none;">
-      {%- comment -%} Gallery Quality Art Paper {%- endcomment -%}
-      <div class="pp-lsec pp-lsec--alt">
-        <div class="container">
-          <div class="pp-lsec__row">
-            <div class="pp-lsec__media">
-              <div class="pp-lsec__img-wrap pp-lsec__img-wrap--framed">
-                <div class="pp-lsec__framed-art" data-frame="black">
-                  <div class="pp-lsec__framed-mat">
-                    <img id="art-lifestyle-img" src="" alt="Gallery quality print" loading="lazy">
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="pp-lsec__text">
-              <span class="pp-lsec__eyebrow">Premium Materials</span>
-              <h2 class="pp-lsec__title">Gallery Quality Art Paper</h2>
-              <p class="pp-lsec__desc">Every print is produced on premium 310gsm cotton-rag archival paper using 12-colour giclée technology — the same process used by the world's leading galleries and museums.</p>
-              <div class="pp-lsec__features">
-                <div class="pp-lsec__feat">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
-                  <div><strong>Textured Paper</strong><span>310gsm cotton-rag</span></div>
-                </div>
-                <div class="pp-lsec__feat">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                  <div><strong>Fade Resistant</strong><span>200+ year lightfastness</span></div>
-                </div>
-                <div class="pp-lsec__feat">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                  <div><strong>Vivid Detail</strong><span>12-colour giclée process</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {%- comment -%} Custom Framed {%- endcomment -%}
-      <div class="pp-lsec">
-        <div class="container">
-          <div class="pp-lsec__row pp-lsec__row--reverse">
-            <div class="pp-lsec__media">
-              <div class="pp-lsec__img-wrap pp-lsec__img-wrap--framed">
-                <div class="pp-lsec__framed-art" data-frame="black">
-                  <div class="pp-lsec__framed-mat">
-                    <img id="art-lifestyle-img2" src="" alt="Custom framed art print" loading="lazy">
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="pp-lsec__text">
-              <span class="pp-lsec__eyebrow">Bespoke Framing</span>
-              <h2 class="pp-lsec__title">Custom Framed To Order</h2>
-              <p class="pp-lsec__desc">Choose from premium timber frame finishes — black, white, natural oak, or walnut. Each frame is handcrafted with precision and fitted with crystal-clear acrylic glazing for enduring protection.</p>
-              <div class="pp-lsec__features">
-                <div class="pp-lsec__feat">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-                  <div><strong>Handcrafted Frames</strong><span>Premium timber finishes</span></div>
-                </div>
-                <div class="pp-lsec__feat">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  <div><strong>Acrylic Glazing</strong><span>Crystal-clear protection</span></div>
-                </div>
-                <div class="pp-lsec__feat">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                  <div><strong>Ready to Hang</strong><span>Arrives wall-ready</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {%- comment -%} Happiness Guaranteed {%- endcomment -%}
-      <div class="pp-lsec pp-lsec--dark">
-        <div class="container">
-          <div class="pp-lsec__row">
-            <div class="pp-lsec__text pp-lsec__text--centered">
-              <span class="pp-lsec__eyebrow">Our Promise</span>
-              <h2 class="pp-lsec__title">Happiness Guaranteed</h2>
-              <p class="pp-lsec__desc">We believe great art should be accessible to everyone. If you're not completely in love with your print, we'll make it right — no questions asked.</p>
-              <div class="pp-lsec__badges">
-                <div class="pp-lsec__badge">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                  <span>Quality Warranty</span>
-                </div>
-                <div class="pp-lsec__badge">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="22 2 12 12 9 9"/></svg>
-                  <span>30-Day Returns</span>
-                </div>
-                <div class="pp-lsec__badge">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-                  <span>Worldwide Delivery</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {%- comment -%} Similar Artworks {%- endcomment -%}
-    <div class="pp-related" id="art-similar" style="display:none;">
-      <div class="pp-related__head">
-        <h2 class="pp-related__title" data-animate="fade-up">You May Also Like</h2>
-        <a href="/pages/catalog" class="pp-related__link" id="art-similar-link">
-          View All
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </a>
-      </div>
-      <div class="pp-related__grid" id="art-similar-grid" data-stagger>
-        {%- comment -%} Rendered by JS {%- endcomment -%}
-      </div>
-    </div>
-
-    {%- comment -%} Not Found State {%- endcomment -%}
+    {%- comment -%} Not Found {%- endcomment -%}
     <div class="empty-state" id="art-not-found" style="display:none;">
       <h2>Artwork Not Found</h2>
       <p>This artwork may have been removed or the link is invalid.</p>
@@ -341,134 +211,47 @@
 </section>
 
 <style>
-  /* ── Art Detail / Product Page (pp-*) — reconstructed ──────────── */
-  .art-detail-page { --pp-text:#111; --pp-sec:#555; --pp-muted:#999; --pp-border:#e8e8e8; --pp-border-lt:#ededed; --pp-bg-alt:#f5f5f5; --pp-radius:6px; padding: 32px 0 0; }
+  /* Layout/gallery/tiers/mockup/specs/trust are styled by neverland.css
+     (product-layout, frame-preview, variant-selector, room-preview, product-meta,
+     product-trust, add-to-cart). These rules cover the few extras not in it. */
   .art-detail__loading { min-height: 400px; display: flex; align-items: center; justify-content: center; }
-  .catalog-loading__spinner { border: 4px solid var(--pp-border); border-top-color: var(--pp-text); border-radius: 50%; animation: pp-spin 0.8s linear infinite; }
+  .catalog-loading__spinner { border: 4px solid var(--border, #e8e8e8); border-top-color: var(--text, #111); border-radius: 50%; animation: pp-spin 0.8s linear infinite; }
   @keyframes pp-spin { to { transform: rotate(360deg); } }
 
   .art-detail__feedback { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; color: #166534; margin-top: 16px; font-size: 0.9rem; }
   .art-detail__feedback a { margin-left: auto; font-weight: 600; color: #166534; text-decoration: underline; }
 
-  /* Breadcrumbs */
-  .pp-breadcrumbs ol { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 24px; font-size: 0.78rem; color: var(--pp-muted); }
+  .pp-breadcrumbs ol { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 24px; font-size: 0.78rem; color: var(--text-muted, #999); }
   .pp-breadcrumbs li { display: flex; align-items: center; gap: 8px; }
-  .pp-breadcrumbs li + li::before { content: "/"; color: var(--pp-border); }
-  .pp-breadcrumbs a { color: var(--pp-sec); text-decoration: none; }
-  .pp-breadcrumbs a:hover { color: var(--pp-text); }
+  .pp-breadcrumbs li + li::before { content: "/"; color: var(--border, #ddd); }
+  .pp-breadcrumbs a { color: var(--text-sec, #555); text-decoration: none; }
+  .pp-breadcrumbs a:hover { color: var(--text, #111); }
 
-  /* Layout */
-  .pp-layout { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: start; }
+  .product-gallery__main { position: relative; }
+  .pp-watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40%; max-width: 220px; opacity: 0.13; pointer-events: none; user-select: none; z-index: 2; }
+  .pp-zoom-btn { position: absolute; bottom: 16px; right: 16px; width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.92); border: 1px solid var(--border, #e8e8e8); color: var(--text, #111); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12); transition: transform 0.2s; z-index: 3; }
+  .pp-zoom-btn:hover { transform: scale(1.08); }
 
-  /* Gallery + frame preview */
-  .pp-gallery__main { position: relative; }
-  .pp-frame { background: var(--pp-bg-alt); padding: 28px; border-radius: var(--pp-radius); display: flex; box-shadow: 0 10px 40px rgba(0,0,0,0.06); transition: background 0.3s, padding 0.3s, box-shadow 0.3s; }
-  .pp-frame__mat { background: #fff; padding: 0; position: relative; width: 100%; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-  .pp-frame[data-frame="none"] { background: var(--pp-bg-alt); padding: 24px; }
-  .pp-frame[data-frame="none"] .pp-frame__mat { padding: 0; box-shadow: none; }
-  .pp-frame[data-frame="black"]  { background: #1a1a1a; padding: 18px; }
-  .pp-frame[data-frame="white"]  { background: #fff; padding: 18px; border: 1px solid var(--pp-border); }
-  .pp-frame[data-frame="natural"]{ background: #c9a36a; padding: 18px; }
-  .pp-frame[data-frame="walnut"] { background: #5b3a29; padding: 18px; }
-  .pp-frame[data-frame="black"] .pp-frame__mat,
-  .pp-frame[data-frame="white"] .pp-frame__mat,
-  .pp-frame[data-frame="natural"] .pp-frame__mat,
-  .pp-frame[data-frame="walnut"] .pp-frame__mat { padding: 22px; }
-  .pp-frame__mat img#art-image { width: 100%; height: auto; display: block; }
-  .pp-watermark { z-index: 2; }
-  .pp-gallery__zoom { position: absolute; bottom: 16px; right: 16px; width: 42px; height: 42px; border-radius: 50%; background: rgba(255,255,255,0.92); border: 1px solid var(--pp-border); color: var(--pp-text); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1); transition: transform 0.2s; }
-  .pp-gallery__zoom:hover { transform: scale(1.08); }
-
-  /* Frame style thumbnails */
-  .pp-frames { margin-top: 20px; }
-  .pp-frames__label { display: block; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-muted); margin-bottom: 10px; }
-  .pp-frames__options { display: flex; gap: 12px; flex-wrap: wrap; }
-  .pp-frames__btn, .frame-option { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; cursor: pointer; padding: 4px; }
-  .pp-frames__swatch { width: 48px; height: 48px; border-radius: 6px; border: 2px solid var(--pp-border); overflow: hidden; display: block; transition: border-color 0.2s; background: var(--pp-bg-alt); }
-  .pp-frames__swatch img { width: 100%; height: 100%; object-fit: cover; }
-  .pp-frames__btn.is-active .pp-frames__swatch, .frame-option.is-active .pp-frames__swatch { border-color: var(--pp-text); }
-  .pp-frames__name { font-size: 0.72rem; color: var(--pp-sec); }
-
-  /* Details column */
-  .pp-artist { font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-muted); margin: 0 0 8px; }
-  .pp-title { font-family: var(--font-display, 'Inter', sans-serif); font-size: clamp(1.6rem, 3vw, 2.2rem); line-height: 1.15; font-weight: 600; margin: 0 0 16px; color: var(--pp-text); }
-  .pp-price { display: flex; align-items: baseline; gap: 12px; }
-  .pp-price__current { font-size: 1.5rem; font-weight: 600; color: var(--pp-text); }
-  .pp-price__was { font-size: 1rem; color: var(--pp-muted); text-decoration: line-through; }
-  .pp-divider { border: 0; border-top: 1px solid var(--pp-border); margin: 24px 0; }
-
-  /* Options (size / frame) */
-  .pp-option { margin-bottom: 22px; }
-  .pp-option__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-  .pp-option__label { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text); font-weight: 600; }
-  .pp-option__value { font-size: 0.85rem; color: var(--pp-muted); }
-  .pp-option__pills { display: flex; flex-wrap: wrap; gap: 8px; }
-  .pp-pill, .variant-option { padding: 10px 18px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius); background: #fff; color: var(--pp-text); cursor: pointer; font-size: 0.85rem; font-family: inherit; transition: border-color 0.2s, background 0.2s, color 0.2s; }
-  .pp-pill:hover, .variant-option:hover { border-color: var(--pp-text); }
-  .pp-pill.is-selected, .variant-option.is-selected { background: var(--pp-text); border-color: var(--pp-text); color: #fff; }
-
-  /* Add to cart */
-  .pp-add-to-cart { width: 100%; margin-top: 8px; padding: 17px 24px; background: var(--pp-text); color: #fff; border: 2px solid var(--pp-text); border-radius: var(--pp-radius); font-size: 0.82rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: background 0.25s, color 0.25s; }
-  .pp-add-to-cart:hover { background: #fff; color: var(--pp-text); }
-  .pp-add-to-cart:disabled { opacity: 0.6; cursor: default; }
-  .pp-atc__sep { opacity: 0.5; }
-
-  /* Trust badges */
-  .pp-trust { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 22px; }
-  .pp-trust__item { display: flex; align-items: center; gap: 7px; font-size: 0.76rem; color: var(--pp-sec); }
-  .pp-trust__item svg { color: var(--pp-text); flex-shrink: 0; }
-
-  /* Specs */
-  .pp-specs { margin-top: 28px; border-top: 1px solid var(--pp-border); }
-  .pp-specs__row { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--pp-border-lt); font-size: 0.85rem; }
-  .pp-specs__label { color: var(--pp-muted); }
-  .pp-specs__value { color: var(--pp-text); font-weight: 500; text-align: right; }
-
-  /* Accordion */
+  /* Accordion (neverland-catalog.js toggles .is-open on trigger + body) */
   .pp-accordion { margin-top: 28px; }
-  .pp-accordion__item { border-bottom: 1px solid var(--pp-border); }
-  .pp-accordion__trigger { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 0; background: none; border: 0; cursor: pointer; font-family: inherit; font-size: 0.95rem; font-weight: 500; color: var(--pp-text); text-align: left; }
+  .pp-accordion__item { border-bottom: 1px solid var(--border, #e8e8e8); }
+  .pp-accordion__trigger { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 0; background: none; border: 0; cursor: pointer; font-family: inherit; font-size: 0.95rem; font-weight: 500; color: var(--text, #111); text-align: left; }
   .pp-accordion__trigger svg { transition: transform 0.3s; flex-shrink: 0; }
   .pp-accordion__trigger.is-open svg { transform: rotate(180deg); }
-  .pp-accordion__body { max-height: 0; overflow: hidden; transition: max-height 0.35s var(--ease-out, ease); }
-  .pp-accordion__body.is-open { max-height: 600px; }
-  .pp-accordion__text { padding: 0 0 18px; color: var(--pp-sec); font-size: 0.9rem; line-height: 1.7; }
+  .pp-accordion__body { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+  .pp-accordion__body.is-open { max-height: 900px; }
+  .pp-accordion__text { padding: 0 0 18px; color: var(--text-sec, #555); font-size: 0.9rem; line-height: 1.7; }
   .pp-accordion__text ul { margin: 0; padding-left: 18px; }
-  .pp-accordion__text li { margin-bottom: 6px; }
-
-  /* Lifestyle sections */
-  .pp-lifestyle { margin-top: 72px; }
-  .pp-lsec { padding: 64px 0; }
-  .pp-lsec--alt { background: var(--pp-bg-alt); }
-  .pp-lsec--dark { background: #111; color: #fff; }
-  .pp-lsec__row { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
-  .pp-lsec__row--reverse .pp-lsec__media { order: 2; }
-  .pp-lsec__img-wrap--framed { background: #1a1a1a; padding: 24px; border-radius: 8px; max-width: 420px; margin: 0 auto; box-shadow: 0 14px 50px rgba(0,0,0,0.18); }
-  .pp-lsec__framed-mat { background: #fff; padding: 20px; }
-  .pp-lsec__framed-art img { width: 100%; height: auto; display: block; }
-  .pp-lsec__eyebrow { display: block; font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-muted); margin-bottom: 12px; }
-  .pp-lsec--dark .pp-lsec__eyebrow { color: #bbb; }
-  .pp-lsec__title { font-family: var(--font-display, 'Inter', sans-serif); font-size: clamp(1.5rem, 2.4vw, 2rem); font-weight: 600; margin: 0 0 16px; }
-  .pp-lsec__desc { color: var(--pp-sec); line-height: 1.75; font-size: 0.95rem; margin: 0 0 24px; }
-  .pp-lsec--dark .pp-lsec__desc { color: #ccc; }
-  .pp-lsec__features { display: grid; gap: 18px; }
-  .pp-lsec__feat { display: flex; align-items: flex-start; gap: 14px; }
-  .pp-lsec__feat svg { flex-shrink: 0; margin-top: 2px; color: var(--pp-text); }
-  .pp-lsec--dark .pp-lsec__feat svg { color: #fff; }
-  .pp-lsec__feat strong { display: block; font-size: 0.92rem; margin-bottom: 2px; }
-  .pp-lsec__feat span { font-size: 0.82rem; color: var(--pp-muted); }
-  .pp-lsec__text--centered { text-align: center; max-width: 620px; margin: 0 auto; grid-column: 1 / -1; }
-  .pp-lsec__badges { display: flex; justify-content: center; flex-wrap: wrap; gap: 36px; margin-top: 28px; }
-  .pp-lsec__badge { display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 0.82rem; }
-  .pp-lsec--dark .pp-lsec__badge svg { color: #fff; }
+  .pp-accordion__text li, .pp-accordion__text p { margin: 0 0 8px; }
 
   /* Related */
-  .pp-related { margin-top: 72px; padding-bottom: 56px; }
-  .pp-related__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
-  .pp-related__title { font-family: var(--font-display, 'Inter', sans-serif); font-size: 1.5rem; font-weight: 600; margin: 0; }
-  .pp-related__link { display: inline-flex; align-items: center; gap: 6px; font-size: 0.76rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text); text-decoration: none; }
+  .pp-related { margin-top: 64px; padding-bottom: 48px; }
+  .pp-related__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .pp-related__title { font-family: var(--font-display, 'Inter', sans-serif); font-size: 1.4rem; font-weight: 600; margin: 0; }
+  .pp-related__link { display: inline-flex; align-items: center; gap: 6px; font-size: 0.76rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text, #111); text-decoration: none; }
   .pp-related__link:hover { gap: 10px; }
   .pp-related__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  @media (max-width: 900px) { .pp-related__grid { grid-template-columns: repeat(2, 1fr); } }
 
   /* Lightbox */
   .pp-lightbox { display: none; position: fixed; inset: 0; z-index: 9999; align-items: center; justify-content: center; }
@@ -477,18 +260,6 @@
   .pp-lightbox__content { position: relative; z-index: 1; }
   .pp-lightbox__content img { max-width: 90vw; max-height: 88vh; object-fit: contain; display: block; }
   .pp-lightbox__close { position: absolute; top: -44px; right: 0; background: none; border: 0; color: #fff; cursor: pointer; }
-
-  /* Responsive */
-  @media (max-width: 900px) {
-    .pp-layout { grid-template-columns: 1fr; gap: 32px; }
-    .pp-lsec__row { grid-template-columns: 1fr; gap: 32px; }
-    .pp-lsec__row--reverse .pp-lsec__media { order: 0; }
-    .pp-related__grid { grid-template-columns: repeat(2, 1fr); }
-  }
-  @media (max-width: 520px) {
-    .pp-related__grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
-    .pp-trust { gap: 12px; }
-  }
 </style>
 
 {% schema %}
