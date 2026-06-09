@@ -1116,11 +1116,9 @@
     loading.style.display = 'none';
     content.style.display = '';
 
-    // Re-init accordion
-    initAccordion();
-
-    // Render room view (see it on your wall)
-    renderRoomView(asset);
+    // Non-critical UI — isolate so a failure never blanks the loaded page.
+    try { initAccordion(); } catch (e) { console.warn('accordion init failed:', e); }
+    try { renderRoomView(asset); } catch (e) { console.warn('room view failed:', e); }
   }
 
   // ─── ROOM VIEW — Industry-Standard Mockup System ──────────
@@ -1307,6 +1305,10 @@
   }
 
   function showArtNotFound() {
+    // If the artwork already rendered, never flash the not-found state over it
+    // (a non-critical error in room view / similar should not blank the page).
+    const content = document.getElementById('art-content');
+    if (content && content.style.display !== 'none') return;
     const loading = document.getElementById('art-loading');
     const notFound = document.getElementById('art-not-found');
     if (loading) loading.style.display = 'none';
