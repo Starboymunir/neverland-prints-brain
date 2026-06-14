@@ -35,6 +35,13 @@ try {
   console.warn("⚠️  price-ladder-map.json not found — dynamic pricing disabled");
 }
 
+// Flat skeleton "From" price (small unframed). Used for card "From $X" labels
+// while dynamic pricing is off, so home / catalog / detail / cart all agree.
+let FLAT_FROM_PRICE = "33.99";
+try {
+  FLAT_FROM_PRICE = require("../config/skeleton-price-map.json").small_unframed.price || "33.99";
+} catch (e) {}
+
 /**
  * Per-artwork price map keyed by `${tier}_${frame}`, each entry carrying the
  * matching price-ladder variant. Returns {} if the artwork can't be priced or
@@ -61,8 +68,14 @@ function buildDynamicPriceMap(maxWidthCm, maxHeightCm) {
   return out;
 }
 
-/** Cheapest purchasable price (small unframed) for "From $X" cards. */
+/**
+ * "From $X" price for cards. With dynamic pricing OFF (empty ladder) every
+ * artwork's cheapest option is the flat skeleton small tier — return that so the
+ * home page, catalog cards, detail page, and cart all show the same number.
+ * With dynamic pricing ON, return the per-artwork small-tier price.
+ */
 function cheapestPrice(maxWidthCm, maxHeightCm) {
+  if (!Object.keys(PRICE_LADDER_MAP).length) return FLAT_FROM_PRICE;
   const p = pricing.computePrice(maxWidthCm, maxHeightCm, "small", false);
   return p ? p.price.toFixed(2) : null;
 }
