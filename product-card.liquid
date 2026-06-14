@@ -47,8 +47,6 @@
         <span class="product-card__badge" style="background:var(--accent);">Museum Grade</span>
       {%- endif -%}
 
-      <img src="{{ 'watermark-1.png' | asset_url }}" alt="" class="product-card__watermark" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:35%;max-width:120px;opacity:0.10;pointer-events:none;user-select:none;-webkit-user-drag:none;z-index:2;" aria-hidden="true">
-
       <div class="product-card__quick"><span>Quick View</span></div>
     </div>
   </a>
@@ -59,12 +57,7 @@
     </h3>
     <div class="product-card__artist">{{ product.vendor }}</div>
     <div class="product-card__price">
-      {%- if product.compare_at_price > product.price -%}
-        <span class="product-card__price-sale">{{ product.price | money }}</span>
-        <span class="product-card__price-compare">{{ product.compare_at_price | money }}</span>
-      {%- else -%}
-        <span>{{ product.price | money }}</span>
-      {%- endif -%}
+      <span class="js-from-price" data-drive-id="{{ product.metafields.neverland.drive_file_id }}">From $33.99</span>
     </div>
   </div>
 </div>

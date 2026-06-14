@@ -1828,6 +1828,22 @@
   // ─── INIT ─────────────────────────────────────────────
 
   console.log('[NP-DEBUG] neverland-catalog.js loaded, version: 2026-03-11-debug');
+  // Hydrate "From $X" on server-rendered product cards (homepage carousels) with
+  // the real per-artwork price, so they match the catalog/detail pages.
+  async function hydrateCardPrices() {
+    const els = Array.from(document.querySelectorAll('.js-from-price[data-drive-id]'))
+      .filter(el => el.dataset.driveId);
+    if (!els.length) return;
+    const ids = [...new Set(els.map(el => el.dataset.driveId))].slice(0, 50);
+    try {
+      const data = await apiFetch('/api/storefront/from-prices?drive_ids=' + encodeURIComponent(ids.join(',')));
+      els.forEach(el => {
+        const p = data && data[el.dataset.driveId];
+        if (p) el.textContent = 'From ' + formatPrice(p);
+      });
+    } catch (e) { /* keep fallback text */ }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     console.log('[NP-DEBUG] DOMContentLoaded fired');
     initCatalogBrowse();
@@ -1836,6 +1852,7 @@
     initArtistsMegaMenu();
     initHomepage();
     initNewsletter();
+    hydrateCardPrices();
   });
 
 })();

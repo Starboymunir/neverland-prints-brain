@@ -520,6 +520,33 @@ router.get("/storefront/price-map", (req, res) => {
 });
 
 /**
+ * GET /api/storefront/from-prices?drive_ids=a,b,c
+ * Returns the "From $X" (cheapest tier) price per Google Drive file id, so
+ * server-rendered product cards (homepage carousels) can show the same
+ * per-artwork price as the catalog/detail pages. -> { driveId: "54.99", ... }
+ */
+router.get("/storefront/from-prices", async (req, res) => {
+  try {
+    const ids = String(req.query.drive_ids || "")
+      .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 50);
+    if (!ids.length) return res.json({});
+    const { data } = await supabase
+      .from("assets")
+      .select("drive_file_id, max_print_width_cm, max_print_height_cm")
+      .in("drive_file_id", ids);
+    const out = {};
+    for (const a of data || []) {
+      const p = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm);
+      if (p) out[a.drive_file_id] = p;
+    }
+    res.set("Cache-Control", "public, max-age=300");
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/storefront/catalog
  * Paginated catalog browse with filtering.
  * This is the main endpoint that replaces Shopify collections.
