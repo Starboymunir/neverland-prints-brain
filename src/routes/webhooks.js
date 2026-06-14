@@ -275,6 +275,14 @@ router.post("/order-created", async (req, res) => {
 
           } catch (fwErr) {
             console.error(`   ❌ FinerWorks error for "${item.artworkTitle}": ${fwErr.message.slice(0, 200)}`);
+            // Persist the failure so it's visible (was silently leaving status "pending").
+            try {
+              await supabase
+                .from("fulfillment_orders")
+                .update({ status: "fulfillment_failed", error: fwErr.message.slice(0, 300) })
+                .eq("shopify_order_id", item.orderId)
+                .eq("line_item_id", item.lineItemId);
+            } catch (e) { /* ignore */ }
           }
         }
       }

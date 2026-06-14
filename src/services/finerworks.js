@@ -156,7 +156,8 @@ class FinerWorksService {
         address_2: recipient.address2 || null,
         address_3: null,
         city: recipient.city || "N/A",
-        state_code: recipient.state_code || null,
+        // FinerWorks requires a blank state_code for non-US destinations.
+        state_code: (recipient.country_code || "US").toLowerCase() === "us" ? (recipient.state_code || null) : null,
         province: null,
         zip_postal_code: recipient.zip || "",
         country_code: (recipient.country_code || "US").toLowerCase(),
@@ -234,6 +235,11 @@ class FinerWorksService {
       };
     }
 
+    const countryCode = (recipient.country_code || "US").toLowerCase();
+    // FinerWorks rejects orders that include a state_code for non-US countries
+    // ("Must be left blank when country_code does not equal 'us'").
+    const stateCode = countryCode === "us" ? (recipient.state_code || null) : null;
+
     const order = {
       order_po: externalId,
       order_key: null,
@@ -245,10 +251,10 @@ class FinerWorksService {
         address_2: recipient.address2 || null,
         address_3: null,
         city: recipient.city,
-        state_code: recipient.state_code || null,
+        state_code: stateCode,
         province: null,
         zip_postal_code: recipient.zip,
-        country_code: (recipient.country_code || "US").toLowerCase(),
+        country_code: countryCode,
         phone: recipient.phone || null,
         email: recipient.email || null,
         address_order_po: externalId,
