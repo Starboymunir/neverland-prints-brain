@@ -49,6 +49,21 @@ class FinerWorksService {
     return !["false", "0", "no", "off"].includes(raw);
   }
 
+  /**
+   * Resolve the payment token FRESH at call time.
+   *
+   * CRITICAL: FinerWorks SILENTLY DISCARDS orders submitted with an invalid
+   * non-null payment token (e.g. the "xxxx" placeholder) — it returns an
+   * order_id and "Payment failed" but the order never persists to the account.
+   * Submitting `null` instead creates a real, payable "Payment failed" order
+   * that DOES persist and can be paid manually. So treat empty / "xxxx" as null.
+   */
+  resolvePaymentToken() {
+    const t = (process.env.FINERWORKS_PAYMENT_TOKEN || "").trim();
+    if (!t || t.toLowerCase() === "xxxx") return null;
+    return t;
+  }
+
   async _request(method, endpoint, body = null) {
     if (!this.webApiKey || !this.appKey) {
       throw new Error("FinerWorks credentials not configured");
@@ -218,7 +233,7 @@ class FinerWorksService {
 
     const body = {
       orders: [order],
-      payment_token: this.paymentToken,
+      payment_token: this.resolvePaymentToken(),
       account_key: null,
     };
 
@@ -319,7 +334,7 @@ class FinerWorksService {
     const body = {
       orders: [order],
       validate_only: false,
-      payment_token: this.paymentToken,
+      payment_token: this.resolvePaymentToken(),
       account_key: null,
     };
 
