@@ -36,6 +36,19 @@ class FinerWorksService {
     }
   }
 
+  /**
+   * Resolve test mode FRESH from the environment at call time (not the value
+   * cached at construction). Render injects env vars before start, but if the
+   * service singleton is ever constructed before the var is present, a cached
+   * `this.testMode` would stay `true` forever and silently submit invisible
+   * test orders. Reading live here makes the submitted test_mode always match
+   * the current env.
+   */
+  resolveTestMode() {
+    const raw = (process.env.FINERWORKS_TEST_MODE || "").trim().toLowerCase();
+    return !["false", "0", "no", "off"].includes(raw);
+  }
+
   async _request(method, endpoint, body = null) {
     if (!this.webApiKey || !this.appKey) {
       throw new Error("FinerWorks credentials not configured");
@@ -107,7 +120,11 @@ class FinerWorksService {
       const result = await this._request("GET", "/v3/test_my_credentials");
       return {
         connected: true,
-        testMode: this.testMode,
+        // The value actually used on submit (fresh) + the value cached at
+        // startup, so a mismatch (the bug that hid orders) is visible.
+        testMode: this.resolveTestMode(),
+        cachedTestMode: this.testMode,
+        rawEnv: process.env.FINERWORKS_TEST_MODE,
         result,
       };
     } catch (error) {
@@ -195,7 +212,7 @@ class FinerWorksService {
       ship_by_date: null,
       customs_tax_info: null,
       gift_message: null,
-      test_mode: this.testMode,
+      test_mode: this.resolveTestMode(),
       source: "neverland-prints-rates",
     };
 
@@ -288,7 +305,7 @@ class FinerWorksService {
       ship_by_date: null,
       customs_tax_info: null,
       gift_message: null,
-      test_mode: this.testMode,
+      test_mode: this.resolveTestMode(),
       webhook_order_status_url: process.env.FINERWORKS_WEBHOOK_URL || null,
       document_url: null,
       acct_number_ups: null,
