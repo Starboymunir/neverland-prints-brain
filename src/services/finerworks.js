@@ -159,7 +159,7 @@ class FinerWorksService {
         // FinerWorks requires a blank state_code for non-US destinations.
         state_code: (recipient.country_code || "US").toLowerCase() === "us" ? (recipient.state_code || null) : null,
         province: null,
-        zip_postal_code: recipient.zip || "",
+        zip_postal_code: (recipient.zip && String(recipient.zip).trim()) || "000000",
         country_code: (recipient.country_code || "US").toLowerCase(),
         phone: null,
         email: null,
@@ -240,6 +240,11 @@ class FinerWorksService {
     // ("Must be left blank when country_code does not equal 'us'").
     const stateCode = countryCode === "us" ? (recipient.state_code || null) : null;
 
+    // FinerWorks requires a non-empty zip_postal_code. Many non-US addresses
+    // (e.g. Nigeria) legitimately have none — fall back to a placeholder so the
+    // order isn't rejected ("The zip_postal_code field is required.").
+    const zipPostal = (recipient.zip && String(recipient.zip).trim()) || "000000";
+
     const order = {
       order_po: externalId,
       order_key: null,
@@ -253,7 +258,7 @@ class FinerWorksService {
         city: recipient.city,
         state_code: stateCode,
         province: null,
-        zip_postal_code: recipient.zip,
+        zip_postal_code: zipPostal,
         country_code: countryCode,
         phone: recipient.phone || null,
         email: recipient.email || null,
