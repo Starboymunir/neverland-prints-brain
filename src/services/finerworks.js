@@ -297,8 +297,22 @@ class FinerWorksService {
 
     const response = await this._request("POST", "/v3/submit_orders_v2", body);
 
+    // FW returns { status:{success, message}, orders:[{ order_id, order_confirmation_id, ... }] }.
+    // CRITICAL: a 200 alone does NOT mean a visible order exists — in test_mode (or on a
+    // silent reject) `orders` comes back null. So pull the real FW order number and surface
+    // whether anything was actually created. "Payment failed" still creates a visible order
+    // (it just sits unpaid until paid manually).
+    const created = Array.isArray(response && response.orders) ? response.orders[0] : null;
+    const fwOrderId = (created && (created.order_id || created.order_confirmation_id)) || null;
+    const message = (response && response.status && response.status.message) || "";
+    const paymentFailed = /payment\s*failed/i.test(message);
+
     return {
       id: externalId,
+      fwOrderId,            // real FinerWorks order number (null if nothing was created)
+      created: !!fwOrderId,
+      paymentFailed,
+      message,
       productCode,
       response,
     };

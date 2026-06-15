@@ -258,20 +258,36 @@ router.post("/order-created", async (req, res) => {
               externalId: `${item.orderId}-${item.lineItemId}`,
             });
 
-            console.log(`   🖨️  FinerWorks order ${fwOrder.id} (${productCode}) submitted for "${item.artworkTitle}"`);
+            if (!fwOrder.created) {
+              // FW returned 200 but created NO order (test_mode discard or silent reject).
+              // This is exactly why earlier orders looked "sent" yet were invisible in FW.
+              console.warn(`   ⚠️  FinerWorks returned 200 but created NO order for "${item.artworkTitle}" — ${fwOrder.message || "(no order_id)"}`);
+              try {
+                await supabase
+                  .from("fulfillment_orders")
+                  .update({
+                    status: "fulfillment_failed",
+                    error: ("FinerWorks created no order (test_mode or reject): " + (fwOrder.message || "no order_id returned")).slice(0, 300),
+                  })
+                  .eq("shopify_order_id", item.orderId)
+                  .eq("line_item_id", item.lineItemId);
+              } catch (e) { /* ignore */ }
+            } else {
+              console.log(`   🖨️  FinerWorks order ${fwOrder.fwOrderId} (${productCode}) created for "${item.artworkTitle}"${fwOrder.paymentFailed ? " [UNPAID — pay manually in FinerWorks]" : ""}`);
 
-            // Persist FinerWorks order metadata
-            try {
-              await supabase
-                .from("fulfillment_orders")
-                .update({
-                  finerworks_order_id: fwOrder.id,
-                  finerworks_product_code: productCode,
-                  status: "sent_to_finerworks",
-                })
-                .eq("shopify_order_id", item.orderId)
-                .eq("line_item_id", item.lineItemId);
-            } catch (e) { /* table may not exist yet */ }
+              // Persist the REAL FinerWorks order number so it can be found in the FW dashboard.
+              try {
+                await supabase
+                  .from("fulfillment_orders")
+                  .update({
+                    finerworks_order_id: String(fwOrder.fwOrderId),
+                    finerworks_product_code: productCode,
+                    status: "sent_to_finerworks",
+                  })
+                  .eq("shopify_order_id", item.orderId)
+                  .eq("line_item_id", item.lineItemId);
+              } catch (e) { /* table may not exist yet */ }
+            }
 
           } catch (fwErr) {
             console.error(`   ❌ FinerWorks error for "${item.artworkTitle}": ${fwErr.message.slice(0, 200)}`);
