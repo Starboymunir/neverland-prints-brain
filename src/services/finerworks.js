@@ -21,12 +21,18 @@ class FinerWorksService {
     this.webApiKey = webApiKey || process.env.FINERWORKS_WEB_API_KEY;
     this.appKey = appKey || process.env.FINERWORKS_APP_KEY;
     this.baseUrl = process.env.FINERWORKS_BASE_URL || FINERWORKS_BASE;
-    this.testMode = process.env.FINERWORKS_TEST_MODE !== "false";
+    // Default to TEST mode (safe) unless explicitly disabled. Tolerate casing /
+    // whitespace ("False", "FALSE", " false ", "0", "no") so a stray character in
+    // the Render env var can't silently keep submitting invisible test orders.
+    const rawTestMode = (process.env.FINERWORKS_TEST_MODE || "").trim().toLowerCase();
+    this.testMode = !["false", "0", "no", "off"].includes(rawTestMode);
     this.defaultShippingCode = process.env.FINERWORKS_DEFAULT_SHIPPING_CODE || "SD";
     this.paymentToken = process.env.FINERWORKS_PAYMENT_TOKEN || "xxxx";
 
     if (!this.webApiKey || !this.appKey) {
       console.warn("⚠️  FINERWORKS credentials not set — FinerWorks fulfillment disabled");
+    } else {
+      console.log(`🖼️  FinerWorks service ready — testMode=${this.testMode} (raw FINERWORKS_TEST_MODE='${process.env.FINERWORKS_TEST_MODE}')`);
     }
   }
 
