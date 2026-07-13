@@ -161,7 +161,22 @@ router.post("/order-created", async (req, res) => {
       }
 
       // ── AUTO-FULFILL via FinerWorks ─────────────────────
-      if (process.env.FINERWORKS_WEB_API_KEY && process.env.FINERWORKS_APP_KEY && order.shipping_address) {
+      // OFF BY DEFAULT. Auto-submitting charges the card on file immediately with
+      // no chance to review the order, so orders are parked as "awaiting_approval"
+      // and only sent to FinerWorks when a human approves them
+      // (POST /webhooks/approve-order). Set FINERWORKS_AUTO_SUBMIT=true to re-enable.
+      const autoSubmit = String(process.env.FINERWORKS_AUTO_SUBMIT || "").trim().toLowerCase() === "true";
+      if (!autoSubmit && orderItems.length > 0) {
+        console.log("   ⏸️  Auto-fulfil OFF — order parked for manual approval (no charge).");
+        try {
+          await supabase
+            .from("fulfillment_orders")
+            .update({ status: "awaiting_approval" })
+            .eq("shopify_order_id", orderItems[0].orderId);
+        } catch (e) { /* ignore */ }
+      }
+
+      if (autoSubmit && process.env.FINERWORKS_WEB_API_KEY && process.env.FINERWORKS_APP_KEY && order.shipping_address) {
         console.log("   🖨️  Sending to FinerWorks for fulfillment...");
         for (const item of orderItems) {
           try {
