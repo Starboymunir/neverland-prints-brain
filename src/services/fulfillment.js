@@ -196,4 +196,37 @@ async function fulfillItem({ supabase, finerworks, item, address, email }) {
   };
 }
 
-module.exports = { fulfillItem, resolveDims, countryCodeFor, TIER_LONGEST_EDGE_IN };
+/**
+ * Work out what WOULD be printed for a stored order line, without submitting
+ * anything. Used by the approval queue so nothing is ever approved blind —
+ * the exact print size and the FinerWorks cost are shown up front.
+ *
+ * Returns { productCode, printSize, widthIn, heightIn } or { error }.
+ */
+async function previewItem({ supabase, row }) {
+  let asset = null;
+  try {
+    let q = supabase
+      .from("assets")
+      .select("width_px,height_px,max_print_width_cm,max_print_height_cm");
+    q = row.asset_id ? q.eq("id", row.asset_id) : q.eq("drive_file_id", row.drive_file_id);
+    const { data } = await q.single();
+    asset = data || null;
+  } catch (e) { /* ignore */ }
+
+  let dims = resolveDims({ size: row.size, priceTier: row.price_tier, asset });
+  if (!dims) return { error: `Cannot determine print size (size="${row.size}")` };
+  dims = clampToPrintable(dims);
+
+  const widthIn = Math.round(dims.widthCm / 2.54);
+  const heightIn = Math.round(dims.heightCm / 2.54);
+
+  return {
+    productCode: FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm),
+    printSize: `${Math.min(widthIn, heightIn)}" × ${Math.max(widthIn, heightIn)}"`,
+    widthIn,
+    heightIn,
+  };
+}
+
+module.exports = { fulfillItem, previewItem, resolveDims, countryCodeFor, TIER_LONGEST_EDGE_IN };

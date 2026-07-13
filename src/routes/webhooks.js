@@ -13,7 +13,7 @@ const crypto = require("crypto");
 const supabase = require("../db/supabase");
 const FinerWorksService = require("../services/finerworks");
 const ShopifyService = require("../services/shopify");
-const { fulfillItem } = require("../services/fulfillment");
+const { fulfillItem, previewItem } = require("../services/fulfillment");
 
 const router = express.Router();
 
@@ -389,12 +389,49 @@ router.get("/pending-orders", async (req, res) => {
   try {
     const { data: rows, error } = await supabase
       .from("fulfillment_orders")
-      .select("order_name,shopify_order_id,line_item_id,artwork_title,size,price_tier,quantity,price,customer_email,shipping_address,status,error,created_at")
+      .select("*")
       .in("status", ["awaiting_approval", "pending", "fulfillment_failed"])
       .order("created_at", { ascending: false })
       .limit(100);
     if (error) throw new Error(error.message);
-    res.json({ count: (rows || []).length, orders: rows || [] });
+
+    // Show exactly what will be printed and what FinerWorks will charge, so an
+    // order is never approved blind.
+    const orders = [];
+    for (const row of rows || []) {
+      const preview = await previewItem({ supabase, row });
+      orders.push({
+        order_name: row.order_name,
+        shopify_order_id: row.shopify_order_id,
+        line_item_id: row.line_item_id,
+        artwork_title: row.artwork_title,
+        artist: row.artist,
+        tier: row.price_tier || row.size,
+        quantity: row.quantity,
+        sold_for: row.price,
+        customer_email: row.customer_email,
+        shipping_address: row.shipping_address,
+        status: row.status,
+        error: row.error,
+        created_at: row.created_at,
+        print_size: preview.printSize || null,
+        product_code: preview.productCode || null,
+        preview_error: preview.error || null,
+      });
+    }
+
+    // Batch the FinerWorks cost lookup for everything we could price.
+    const codes = [...new Set(orders.map((o) => o.product_code).filter(Boolean))];
+    if (codes.length) {
+      try {
+        const priced = await finerworks.getPrices({ productCodes: codes });
+        const costByCode = {};
+        (priced.prices || []).forEach((p) => { costByCode[p.product_code] = p.total_price; });
+        orders.forEach((o) => { o.finerworks_cost = o.product_code ? costByCode[o.product_code] : null; });
+      } catch (e) { /* pricing is a nicety — never block the queue */ }
+    }
+
+    res.json({ count: orders.length, orders });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

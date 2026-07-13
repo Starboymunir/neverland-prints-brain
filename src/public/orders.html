@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neverland Prints — Order Approval</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --line:#252a34; --text:#e8eaed; --muted:#9aa3af;
+    --accent:#22c55e; --accent-dim:#16351f; --warn:#f59e0b; --danger:#ef4444; --info:#3b82f6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:24px}
+  header{max-width:1000px;margin:0 auto 20px}
+  h1{margin:0 0 4px;font-size:22px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:14px}
+  .wrap{max-width:1000px;margin:0 auto}
+
+  .banner{background:var(--accent-dim);border:1px solid #245c36;border-radius:10px;
+    padding:12px 14px;margin:16px 0;color:#b7f7cd;font-size:14px}
+
+  .gate{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin:16px 0}
+  .gate input{background:#0c0e12;border:1px solid var(--line);color:var(--text);
+    padding:10px 12px;border-radius:8px;width:260px;font-size:14px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;margin-bottom:14px}
+  .row{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .title{font-weight:650;font-size:16px;margin:0 0 2px}
+  .meta{color:var(--muted);font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px;margin:14px 0;padding:12px;background:#0c0e12;border-radius:8px}
+  .f-label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .f-val{font-size:14px;margin-top:2px}
+  .cost{color:var(--warn);font-weight:650}
+  .profit{color:var(--accent);font-weight:650}
+  .loss{color:var(--danger);font-weight:650}
+
+  .pill{display:inline-block;padding:3px 9px;border-radius:99px;font-size:11px;
+    font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .pill.wait{background:#3a2f12;color:#fbbf24}
+  .pill.fail{background:#3b1a1a;color:#fca5a5}
+
+  button{background:var(--accent);color:#06240f;border:0;padding:10px 18px;
+    border-radius:8px;font-weight:650;font-size:14px;cursor:pointer}
+  button:hover{filter:brightness(1.08)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}
+
+  .addr{white-space:pre-line;color:var(--muted);font-size:13px;margin-top:8px}
+  .empty{text-align:center;color:var(--muted);padding:48px 0}
+  .result{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:13px}
+  .result.ok{background:var(--accent-dim);color:#b7f7cd}
+  .result.err{background:#3b1a1a;color:#fca5a5}
+  .note{color:var(--muted);font-size:12px;margin-top:10px}
+  a{color:var(--info)}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <h1>Order Approval</h1>
+  <div class="sub">Nothing here has been sent to FinerWorks. Nothing has been charged.</div>
+</header>
+
+<div class="wrap">
+  <div class="banner">
+    <strong>How this works:</strong> Approving an order sends it to FinerWorks as an
+    <strong>UNPAID</strong> order. It still does <strong>not</strong> charge you — printing only
+    starts once you pay it inside FinerWorks. So there are two steps before any money moves.
+  </div>
+
+  <div class="gate" id="gate" style="display:none">
+    <div style="margin-bottom:10px">Enter your access key to view orders:</div>
+    <input id="key" type="password" placeholder="access key" autocomplete="off">
+    <button onclick="saveKey()">Unlock</button>
+  </div>
+
+  <div id="bar" class="row" style="align-items:center;margin-bottom:14px">
+    <div class="meta" id="count">Loading…</div>
+    <button class="ghost" onclick="load()">Refresh</button>
+  </div>
+
+  <div id="list"></div>
+</div>
+
+<script>
+const API = location.origin;
+let KEY = localStorage.getItem('np_key') || '';
+
+function saveKey(){
+  KEY = document.getElementById('key').value.trim();
+  localStorage.setItem('np_key', KEY);
+  document.getElementById('gate').style.display = 'none';
+  load();
+}
+function qs(){ return KEY ? ('?key=' + encodeURIComponent(KEY)) : ''; }
+function money(v){ return (v === null || v === undefined) ? '—' : '$' + Number(v).toFixed(2); }
+
+async function load(){
+  const list = document.getElementById('list');
+  const count = document.getElementById('count');
+  count.textContent = 'Loading…';
+  list.innerHTML = '';
+
+  let res;
+  try { res = await fetch(API + '/webhooks/pending-orders' + qs()); }
+  catch(e){ count.textContent = 'Network error'; return; }
+
+  if (res.status === 401){
+    count.textContent = '';
+    document.getElementById('gate').style.display = 'block';
+    return;
+  }
+
+  const data = await res.json();
+  const orders = data.orders || [];
+  count.textContent = orders.length + ' order' + (orders.length === 1 ? '' : 's') + ' waiting for approval';
+
+  if (!orders.length){
+    list.innerHTML = '<div class="empty">Nothing waiting. New orders will appear here.</div>';
+    return;
+  }
+
+  list.innerHTML = orders.map(render).join('');
+}
+
+function render(o){
+  const a = o.shipping_address || {};
+  const addr = [a.name, a.address1, a.address2, [a.city, a.province].filter(Boolean).join(', '),
+                [a.zip, a.country].filter(Boolean).join(' ')].filter(Boolean).join('\n');
+
+  const cost = o.finerworks_cost;
+  const sold = o.sold_for ? Number(o.sold_for) : null;
+  let margin = '<span class="f-val">—</span>';
+  if (cost != null && sold != null){
+    const diff = sold - cost;
+    margin = '<span class="' + (diff >= 0 ? 'profit' : 'loss') + '">' +
+             (diff >= 0 ? '+' : '') + '$' + diff.toFixed(2) + '</span>';
+  }
+
+  const badge = o.status === 'fulfillment_failed'
+    ? '<span class="pill fail">failed</span>'
+    : '<span class="pill wait">awaiting approval</span>';
+
+  const problem = o.preview_error || o.error;
+
+  return `
+  <div class="card" id="card-${o.line_item_id}">
+    <div class="row">
+      <div>
+        <div class="title">${esc(o.artwork_title || 'Untitled')}</div>
+        <div class="meta">${esc(o.order_name || '')} &middot; ${esc(o.artist || 'Unknown')} &middot; ${esc(o.customer_email || '')}</div>
+      </div>
+      <div>${badge}</div>
+    </div>
+
+    <div class="grid">
+      <div><div class="f-label">Tier</div><div class="f-val">${esc(o.tier || '—')}</div></div>
+      <div><div class="f-label">Will print</div><div class="f-val">${esc(o.print_size || '—')}</div></div>
+      <div><div class="f-label">Qty</div><div class="f-val">${o.quantity || 1}</div></div>
+      <div><div class="f-label">You pay FinerWorks</div><div class="f-val cost">${money(cost)}</div></div>
+      <div><div class="f-label">Customer paid</div><div class="f-val">${money(sold)}</div></div>
+      <div><div class="f-label">Margin</div><div class="f-val">${margin}</div></div>
+    </div>
+
+    <div class="addr">${esc(addr)}</div>
+    ${problem ? `<div class="result err">⚠️ ${esc(problem)}</div>` : ''}
+
+    <div style="margin-top:14px">
+      <button onclick="approve('${esc(o.order_name)}', ${o.line_item_id})"
+              ${o.preview_error ? 'disabled' : ''}>
+        Approve &amp; send to FinerWorks
+      </button>
+      <div class="note">Sends it to FinerWorks as unpaid. You still have to pay it there before it prints.</div>
+    </div>
+    <div id="res-${o.line_item_id}"></div>
+  </div>`;
+}
+
+async function approve(orderName, lineItemId){
+  const card = document.getElementById('card-' + lineItemId);
+  const btn = card.querySelector('button');
+  const out = document.getElementById('res-' + lineItemId);
+  btn.disabled = true; btn.textContent = 'Sending…';
+
+  try {
+    const res = await fetch(API + '/webhooks/approve-order' + qs(), {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ order_name: orderName, line_item_id: lineItemId })
+    });
+    const data = await res.json();
+    const r = (data.results || [])[0] || {};
+
+    if (r.ok){
+      out.innerHTML = '<div class="result ok">✅ Sent. FinerWorks order <strong>#' + r.fwOrderId +
+        '</strong> — it is <strong>UNPAID</strong>. Open FinerWorks and pay it to start printing.</div>';
+      btn.textContent = 'Sent ✓';
+    } else if (r.skipped){
+      out.innerHTML = '<div class="result ok">Already sent (FinerWorks #' + r.finerworks_order_id + ')</div>';
+      btn.textContent = 'Already sent';
+    } else {
+      out.innerHTML = '<div class="result err">❌ ' + esc(r.error || data.error || 'Failed') + '</div>';
+      btn.disabled = false; btn.textContent = 'Retry';
+    }
+  } catch(e){
+    out.innerHTML = '<div class="result err">❌ ' + esc(e.message) + '</div>';
+    btn.disabled = false; btn.textContent = 'Retry';
+  }
+}
+
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+load();
+</script>
+</body>
+</html>

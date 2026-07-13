@@ -57,6 +57,11 @@ app.use("/api", apiRoutes);
 // Webhook routes
 app.use("/webhooks", webhookRoutes);
 
+// Order approval dashboard — the only place orders get sent to FinerWorks.
+app.get("/orders", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "orders.html"));
+});
+
 // Printful dashboard — serve with cached data baked in so it loads instantly
 app.get("/printful", (req, res) => {
   const htmlPath = path.join(__dirname, "public", "printful.html");
