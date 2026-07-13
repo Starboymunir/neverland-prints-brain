@@ -214,16 +214,32 @@ router.post("/order-created", async (req, res) => {
             // size × the tier scale (orders from /products/ pages send a tier label
             // like "Extra Large" instead of dimensions).
             let dims = FinerWorksService.parseSizeCm(item.size);
-            if (!dims && asset && asset.max_print_width_cm && asset.max_print_height_cm) {
-              const TIER_SCALE = { small: 0.35, medium: 0.55, large: 0.75, extra_large: 1.0 };
+            if (!dims) {
+              // Tier => FIXED longest edge (inches), aspect ratio preserved.
+              //
+              // Previously each tier was a PERCENTAGE of the artwork's max print size
+              // (small = 35%), so "Small" grew with the source resolution — a 19x29"
+              // print costing $60 was sold at the flat $33.99 "Small" price, losing
+              // money on every order. A fixed longest edge keeps cost predictable and
+              // holds ~70% margin at the current prices.
+              const TIER_LONGEST_EDGE_IN = { small: 10, medium: 16, large: 24, extra_large: 36 };
               const tierKey = (item.priceTier || item.size || "")
                 .toString().trim().toLowerCase().replace(/\s+/g, "_");
-              const scale = TIER_SCALE[tierKey] || 0.55;
-              dims = {
-                widthCm:  asset.max_print_width_cm  * scale,
-                heightCm: asset.max_print_height_cm * scale,
-              };
-              console.log(`   ℹ️  Size "${item.size}" → ${Math.round(dims.widthCm)}×${Math.round(dims.heightCm)}cm (max × ${tierKey} ${scale})`);
+              const longestIn = TIER_LONGEST_EDGE_IN[tierKey] || TIER_LONGEST_EDGE_IN.medium;
+
+              // Aspect ratio from the artwork (print dims or pixel dims — same ratio).
+              const aspW = asset && (asset.max_print_width_cm  || asset.width_px);
+              const aspH = asset && (asset.max_print_height_cm || asset.height_px);
+              if (!aspW || !aspH) {
+                console.error(`   ⚠️  No aspect ratio for "${item.artworkTitle}" — skip FinerWorks`);
+                continue;
+              }
+
+              const ratio = aspW / aspH;                       // >1 landscape, <1 portrait
+              const wIn = ratio >= 1 ? longestIn : longestIn * ratio;
+              const hIn = ratio >= 1 ? longestIn / ratio : longestIn;
+              dims = { widthCm: wIn * 2.54, heightCm: hIn * 2.54 };
+              console.log(`   ℹ️  Tier "${tierKey}" → ${wIn.toFixed(1)}×${hIn.toFixed(1)}in (longest edge ${longestIn}in, aspect preserved)`);
             }
             if (!dims) {
               console.error(`   ⚠️  Cannot determine print size for "${item.artworkTitle}" (size="${item.size}") — skip FinerWorks`);
@@ -240,7 +256,14 @@ router.post("/order-created", async (req, res) => {
               dims = { widthCm: dims.widthCm * f, heightCm: dims.heightCm * f };
             }
 
-            const productCode = item.finerworksProductCode || FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
+            // Always derive the product code server-side. The theme used to pass
+            // _finerworks_product_code, but it carried the oversized tier AND a
+            // bordered mounting the customer never asked for — the backend is the
+            // single source of truth for what actually gets printed.
+            const productCode = FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
+            if (item.finerworksProductCode && item.finerworksProductCode !== productCode) {
+              console.log(`   ℹ️  Ignoring theme product code ${item.finerworksProductCode} → using ${productCode}`);
+            }
 
             // FinerWorks requires pixel dimensions in product_image_file.
             let pixelWidth  = asset ? (asset.width_px  || 0) : 0;

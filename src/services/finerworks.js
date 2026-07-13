@@ -110,16 +110,22 @@ class FinerWorksService {
   }
 
   /**
-   * Builds a default archival matte paper product code.
-   * Pattern source from FinerWorks docs examples:
-   *   5M6M9S16X20
+   * Builds an archival matte paper product code.
+   *
+   * Code layout: {TypeID}M{MediaID}M{MountingID}S{W}X{H}
+   *   5  = Giclee - Fine Art Paper Prints
+   *   M6 = Archival Matte Paper
+   *   M8 = BORDERLESS (image to the edge)
+   *
+   * NOTE: this used to be M9 = "1/2\" Extra Border Added", which silently added a
+   * border customers never asked for. M8 costs exactly the same as M9.
    */
   static buildDefaultProductCode(widthCm, heightCm) {
     const wIn = FinerWorksService.cmToInchesRounded(widthCm);
     const hIn = FinerWorksService.cmToInchesRounded(heightCm);
     const w = Math.min(wIn, hIn);
     const h = Math.max(wIn, hIn);
-    return `5M6M9S${w}X${h}`;
+    return `5M6M8S${w}X${h}`;
   }
 
   _splitName(fullName) {
