@@ -13,6 +13,7 @@ const crypto = require("crypto");
 const supabase = require("../db/supabase");
 const FinerWorksService = require("../services/finerworks");
 const ShopifyService = require("../services/shopify");
+const { fulfillItem } = require("../services/fulfillment");
 
 const router = express.Router();
 
@@ -91,8 +92,13 @@ router.post("/order-created", async (req, res) => {
                 address2: order.shipping_address.address2,
                 city: order.shipping_address.city,
                 province: order.shipping_address.province,
+                // Store the ISO codes too — manual approval submits from this
+                // record and FinerWorks needs country_code, not the country name.
+                province_code: order.shipping_address.province_code || null,
                 country: order.shipping_address.country,
+                country_code: order.shipping_address.country_code || null,
                 zip: order.shipping_address.zip,
+                phone: order.shipping_address.phone || order.phone || null,
               }
             : null,
         };
@@ -177,167 +183,15 @@ router.post("/order-created", async (req, res) => {
       }
 
       if (autoSubmit && process.env.FINERWORKS_WEB_API_KEY && process.env.FINERWORKS_APP_KEY && order.shipping_address) {
-        console.log("   🖨️  Sending to FinerWorks for fulfillment...");
+        console.log("   🖨️  Auto-fulfil ON — sending to FinerWorks...");
         for (const item of orderItems) {
-          try {
-            // Build high-res image URL from Drive file ID (s0 = max resolution)
-            const imageUrl = item.driveFileId
-              ? `https://lh3.googleusercontent.com/d/${item.driveFileId}=s0`
-              : item.previewUrl;
-
-            // Smaller thumbnail for FinerWorks invoice preview
-            const thumbnailUrl = item.driveFileId
-              ? `https://lh3.googleusercontent.com/d/${item.driveFileId}=s400`
-              : item.previewUrl;
-
-            if (!imageUrl) {
-              console.log(`   ⚠️  No image URL for "${item.artworkTitle}" — skip FinerWorks`);
-              continue;
-            }
-
-            // Look up the artwork in Supabase (by asset_id or drive_file_id) for
-            // pixel dimensions and the max print size.
-            let asset = null;
-            try {
-              let q = supabase
-                .from("assets")
-                .select("width_px,height_px,max_print_width_cm,max_print_height_cm");
-              q = item.assetId
-                ? q.eq("id", item.assetId)
-                : q.eq("drive_file_id", item.driveFileId);
-              const { data } = await q.single();
-              asset = data || null;
-            } catch (e) { /* ignore */ }
-
-            // Determine the exact print dimensions. Prefer the Size property when it
-            // carries real "W × H cm"; otherwise compute from the artwork's max print
-            // size × the tier scale (orders from /products/ pages send a tier label
-            // like "Extra Large" instead of dimensions).
-            let dims = FinerWorksService.parseSizeCm(item.size);
-            if (!dims) {
-              // Tier => FIXED longest edge (inches), aspect ratio preserved.
-              //
-              // Previously each tier was a PERCENTAGE of the artwork's max print size
-              // (small = 35%), so "Small" grew with the source resolution — a 19x29"
-              // print costing $60 was sold at the flat $33.99 "Small" price, losing
-              // money on every order. A fixed longest edge keeps cost predictable and
-              // holds ~70% margin at the current prices.
-              const TIER_LONGEST_EDGE_IN = { small: 10, medium: 16, large: 24, extra_large: 36 };
-              const tierKey = (item.priceTier || item.size || "")
-                .toString().trim().toLowerCase().replace(/\s+/g, "_");
-              const longestIn = TIER_LONGEST_EDGE_IN[tierKey] || TIER_LONGEST_EDGE_IN.medium;
-
-              // Aspect ratio from the artwork (print dims or pixel dims — same ratio).
-              const aspW = asset && (asset.max_print_width_cm  || asset.width_px);
-              const aspH = asset && (asset.max_print_height_cm || asset.height_px);
-              if (!aspW || !aspH) {
-                console.error(`   ⚠️  No aspect ratio for "${item.artworkTitle}" — skip FinerWorks`);
-                continue;
-              }
-
-              const ratio = aspW / aspH;                       // >1 landscape, <1 portrait
-              const wIn = ratio >= 1 ? longestIn : longestIn * ratio;
-              const hIn = ratio >= 1 ? longestIn / ratio : longestIn;
-              dims = { widthCm: wIn * 2.54, heightCm: hIn * 2.54 };
-              console.log(`   ℹ️  Tier "${tierKey}" → ${wIn.toFixed(1)}×${hIn.toFixed(1)}in (longest edge ${longestIn}in, aspect preserved)`);
-            }
-            if (!dims) {
-              console.error(`   ⚠️  Cannot determine print size for "${item.artworkTitle}" (size="${item.size}") — skip FinerWorks`);
-              continue;
-            }
-
-            // Clamp to FinerWorks' max printable size (longest side 48 in), keeping
-            // aspect — the catalog can advertise larger "max print" sizes than
-            // FinerWorks can actually produce.
-            const MAX_PRINT_IN = 48;
-            const longestIn = Math.max(dims.widthCm, dims.heightCm) / 2.54;
-            if (longestIn > MAX_PRINT_IN) {
-              const f = MAX_PRINT_IN / longestIn;
-              dims = { widthCm: dims.widthCm * f, heightCm: dims.heightCm * f };
-            }
-
-            // Always derive the product code server-side. The theme used to pass
-            // _finerworks_product_code, but it carried the oversized tier AND a
-            // bordered mounting the customer never asked for — the backend is the
-            // single source of truth for what actually gets printed.
-            const productCode = FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
-            if (item.finerworksProductCode && item.finerworksProductCode !== productCode) {
-              console.log(`   ℹ️  Ignoring theme product code ${item.finerworksProductCode} → using ${productCode}`);
-            }
-
-            // FinerWorks requires pixel dimensions in product_image_file.
-            let pixelWidth  = asset ? (asset.width_px  || 0) : 0;
-            let pixelHeight = asset ? (asset.height_px || 0) : 0;
-            if (!pixelWidth || !pixelHeight) {
-              // Fallback: assume enough pixels for the print at 300dpi.
-              pixelWidth  = Math.round(dims.widthCm  * 0.393700787 * 300);
-              pixelHeight = Math.round(dims.heightCm * 0.393700787 * 300);
-            }
-
-            const fwOrder = await finerworks.createOrder({
-              recipient: {
-                name:         order.shipping_address.first_name + " " + order.shipping_address.last_name,
-                email:        order.email,
-                address1:     order.shipping_address.address1,
-                address2:     order.shipping_address.address2 || "",
-                city:         order.shipping_address.city,
-                state_code:   order.shipping_address.province_code || "",
-                country_code: order.shipping_address.country_code,
-                zip:          order.shipping_address.zip,
-                phone:        order.shipping_address.phone || order.phone || null,
-              },
-              imageUrl,
-              thumbnailUrl,
-              pixelWidth,
-              pixelHeight,
-              productCode,
-              quantity: item.quantity || 1,
-              title:     item.artworkTitle,
-              externalId: `${item.orderId}-${item.lineItemId}`,
-            });
-
-            if (!fwOrder.created) {
-              // FW returned 200 but created NO order (test_mode discard or silent reject).
-              // This is exactly why earlier orders looked "sent" yet were invisible in FW.
-              console.warn(`   ⚠️  FinerWorks returned 200 but created NO order for "${item.artworkTitle}" — ${fwOrder.message || "(no order_id)"}`);
-              try {
-                await supabase
-                  .from("fulfillment_orders")
-                  .update({
-                    status: "fulfillment_failed",
-                    error: ("FinerWorks created no order (test_mode or reject): " + (fwOrder.message || "no order_id returned")).slice(0, 300),
-                  })
-                  .eq("shopify_order_id", item.orderId)
-                  .eq("line_item_id", item.lineItemId);
-              } catch (e) { /* ignore */ }
-            } else {
-              console.log(`   🖨️  FinerWorks order ${fwOrder.fwOrderId} (${productCode}) created for "${item.artworkTitle}"${fwOrder.paymentFailed ? " [UNPAID — pay manually in FinerWorks]" : ""}`);
-
-              // Persist the REAL FinerWorks order number so it can be found in the FW dashboard.
-              try {
-                await supabase
-                  .from("fulfillment_orders")
-                  .update({
-                    finerworks_order_id: String(fwOrder.fwOrderId),
-                    finerworks_product_code: productCode,
-                    status: "sent_to_finerworks",
-                  })
-                  .eq("shopify_order_id", item.orderId)
-                  .eq("line_item_id", item.lineItemId);
-              } catch (e) { /* table may not exist yet */ }
-            }
-
-          } catch (fwErr) {
-            console.error(`   ❌ FinerWorks error for "${item.artworkTitle}": ${fwErr.message.slice(0, 200)}`);
-            // Persist the failure so it's visible (was silently leaving status "pending").
-            try {
-              await supabase
-                .from("fulfillment_orders")
-                .update({ status: "fulfillment_failed", error: fwErr.message.slice(0, 300) })
-                .eq("shopify_order_id", item.orderId)
-                .eq("line_item_id", item.lineItemId);
-            } catch (e) { /* ignore */ }
-          }
+          await fulfillItem({
+            supabase,
+            finerworks,
+            item,
+            address: order.shipping_address,
+            email: order.email,
+          });
         }
       }
     }
@@ -519,6 +373,92 @@ router.post("/poll-finerworks", async (req, res) => {
     res.status(200).json({ checked: results.length, results });
   } catch (err) {
     console.error("poll-finerworks error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /webhooks/pending-orders?key=...
+ * Orders waiting for manual approval — nothing here has touched FinerWorks or
+ * cost a penny yet.
+ */
+router.get("/pending-orders", async (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+
+  try {
+    const { data: rows, error } = await supabase
+      .from("fulfillment_orders")
+      .select("order_name,shopify_order_id,line_item_id,artwork_title,size,price_tier,quantity,price,customer_email,shipping_address,status,error,created_at")
+      .in("status", ["awaiting_approval", "pending", "fulfillment_failed"])
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw new Error(error.message);
+    res.json({ count: (rows || []).length, orders: rows || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /webhooks/approve-order?key=...
+ * Body: { order_name: "#1010" } or { shopify_order_id, line_item_id? }
+ *
+ * The ONLY path that sends anything to FinerWorks. The order arrives there UNPAID —
+ * production starts only once it is paid in FinerWorks, so approving still costs
+ * nothing by itself.
+ */
+router.post("/approve-order", async (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+
+  const { order_name, shopify_order_id, line_item_id } = req.body || {};
+  if (!order_name && !shopify_order_id) {
+    return res.status(400).json({ error: "order_name or shopify_order_id is required" });
+  }
+
+  try {
+    let q = supabase.from("fulfillment_orders").select("*");
+    q = order_name ? q.eq("order_name", order_name) : q.eq("shopify_order_id", shopify_order_id);
+    if (line_item_id) q = q.eq("line_item_id", line_item_id);
+
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+    if (!rows || rows.length === 0) return res.status(404).json({ error: "Order not found" });
+
+    const results = [];
+    for (const row of rows) {
+      if (row.status === "sent_to_finerworks" && row.finerworks_order_id) {
+        results.push({
+          artwork: row.artwork_title,
+          skipped: "already sent to FinerWorks",
+          finerworks_order_id: row.finerworks_order_id,
+        });
+        continue;
+      }
+
+      const result = await fulfillItem({
+        supabase,
+        finerworks,
+        item: {
+          orderId: row.shopify_order_id,
+          lineItemId: row.line_item_id,
+          artworkTitle: row.artwork_title,
+          size: row.size,
+          priceTier: row.price_tier,
+          driveFileId: row.drive_file_id,
+          assetId: row.asset_id,
+          quantity: row.quantity,
+        },
+        address: row.shipping_address,
+        email: row.customer_email,
+      });
+
+      results.push({ artwork: row.artwork_title, ...result });
+    }
+
+    res.json({ approved: order_name || shopify_order_id, results });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
