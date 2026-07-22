@@ -555,6 +555,7 @@ const FEATURED_COLLECTION_HANDLE =
   process.env.FEATURED_COLLECTION_HANDLE || "iconic-art-prints";
 const FEATURED_TTL_MS = 10 * 60 * 1000;
 let _featuredCache = { ids: null, at: 0 };
+let _featuredLastError = null;
 
 async function getFeaturedAssetIds() {
   if (_featuredCache.ids && Date.now() - _featuredCache.at < FEATURED_TTL_MS) {
@@ -566,26 +567,50 @@ async function getFeaturedAssetIds() {
   const ver = process.env.SHOPIFY_API_VERSION || "2024-10";
   if (!shop || !token) return [];
 
+  const gql = async (query) => {
+    const resp = await fetch(`https://${shop}/admin/api/${ver}/graphql.json`, {
+      method: "POST",
+      headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    const json = await resp.json();
+    if (json && json.errors) {
+      throw new Error(`GraphQL ${resp.status}: ${JSON.stringify(json.errors).slice(0, 200)}`);
+    }
+    return json;
+  };
+
   try {
-    // Page through the collection's products (handle collections of any size).
+    // Resolve the collection id first. `collectionByHandle` is removed in newer
+    // API versions, so fall back to a handle query — keeps this working
+    // regardless of which SHOPIFY_API_VERSION the environment pins.
+    let collectionId = null;
+    try {
+      const j = await gql(`{ collectionByHandle(handle: ${JSON.stringify(FEATURED_COLLECTION_HANDLE)}) { id } }`);
+      collectionId = j && j.data && j.data.collectionByHandle && j.data.collectionByHandle.id;
+    } catch (e) {
+      _featuredLastError = `collectionByHandle: ${e.message}`;
+    }
+    if (!collectionId) {
+      const j = await gql(`{ collections(first:1, query:${JSON.stringify(`handle:${FEATURED_COLLECTION_HANDLE}`)}) { edges { node { id } } } }`);
+      const edge = j && j.data && j.data.collections && j.data.collections.edges[0];
+      collectionId = edge && edge.node.id;
+    }
+    if (!collectionId) throw new Error(`collection "${FEATURED_COLLECTION_HANDLE}" not found`);
+
+    // Page through the collection's products, preserving the collection's order.
     const productIds = [];
     let after = null;
     for (let i = 0; i < 20; i++) {
-      const query = `{
-        collectionByHandle(handle: ${JSON.stringify(FEATURED_COLLECTION_HANDLE)}) {
+      const j = await gql(`{
+        collection(id: ${JSON.stringify(collectionId)}) {
           products(first: 250${after ? `, after: ${JSON.stringify(after)}` : ""}) {
             pageInfo { hasNextPage endCursor }
             edges { node { legacyResourceId } }
           }
         }
-      }`;
-      const resp = await fetch(`https://${shop}/admin/api/${ver}/graphql.json`, {
-        method: "POST",
-        headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
-      const json = await resp.json();
-      const col = json && json.data && json.data.collectionByHandle;
+      }`);
+      const col = j && j.data && j.data.collection;
       if (!col) break;
       col.products.edges.forEach((e) => productIds.push(String(e.node.legacyResourceId)));
       if (!col.products.pageInfo.hasNextPage) break;
@@ -609,10 +634,12 @@ async function getFeaturedAssetIds() {
     }
 
     _featuredCache = { ids: assetIds, at: Date.now() };
+    _featuredLastError = assetIds.length ? null : `resolved ${productIds.length} products but 0 matched assets`;
     console.log(`⭐ Featured collection "${FEATURED_COLLECTION_HANDLE}": ${assetIds.length} artworks pinned to front of catalog`);
     return assetIds;
   } catch (e) {
     console.error("Featured collection lookup failed:", e.message);
+    _featuredLastError = e.message;
     _featuredCache = { ids: [], at: Date.now() }; // don't retry-storm
     return [];
   }
@@ -2267,7 +2294,10 @@ router.get("/health", async (req, res) => {
     drive: "unknown",
     // Featured-collection pinning needs Admin API access to read the collection.
     shopifyAdmin: process.env.SHOPIFY_STORE_DOMAIN && process.env.SHOPIFY_ADMIN_API_TOKEN ? "configured" : "MISSING",
+    shopifyApiVersion: process.env.SHOPIFY_API_VERSION || "2024-10",
     featuredCollection: process.env.FEATURED_COLLECTION_HANDLE || "iconic-art-prints",
+    featuredCount: _featuredCache.ids ? _featuredCache.ids.length : null,
+    featuredLastError: _featuredLastError,
   };
 
   try {
