@@ -562,10 +562,27 @@ async function getFeaturedAssetIds() {
     return _featuredCache.ids;
   }
 
+  // Precomputed snapshot (built by build-featured.js). Used when the Admin API
+  // isn't reachable — e.g. an expired token — so featuring still works instead
+  // of silently degrading to an unfeatured catalog.
+  const snapshot = () => {
+    try {
+      const f = require("../config/featured-assets.json");
+      return f && f.handle === FEATURED_COLLECTION_HANDLE && Array.isArray(f.assetIds) ? f.assetIds : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
   const shop = process.env.SHOPIFY_STORE_DOMAIN;
   const token = process.env.SHOPIFY_ADMIN_API_TOKEN;
   const ver = process.env.SHOPIFY_API_VERSION || "2024-10";
-  if (!shop || !token) return [];
+  if (!shop || !token) {
+    const ids = snapshot();
+    _featuredCache = { ids, at: Date.now() };
+    _featuredLastError = "Shopify Admin creds missing — using precomputed snapshot";
+    return ids;
+  }
 
   const gql = async (query) => {
     const resp = await fetch(`https://${shop}/admin/api/${ver}/graphql.json`, {
@@ -638,10 +655,13 @@ async function getFeaturedAssetIds() {
     console.log(`⭐ Featured collection "${FEATURED_COLLECTION_HANDLE}": ${assetIds.length} artworks pinned to front of catalog`);
     return assetIds;
   } catch (e) {
-    console.error("Featured collection lookup failed:", e.message);
-    _featuredLastError = e.message;
-    _featuredCache = { ids: [], at: Date.now() }; // don't retry-storm
-    return [];
+    // Live lookup failed (expired token, API change, network). Fall back to the
+    // precomputed snapshot so the catalog stays featured.
+    const ids = snapshot();
+    console.error(`Featured collection lookup failed (${e.message}) — using snapshot of ${ids.length}`);
+    _featuredLastError = `${e.message} | using snapshot (${ids.length})`;
+    _featuredCache = { ids, at: Date.now() }; // don't retry-storm
+    return ids;
   }
 }
 
