@@ -2260,7 +2260,15 @@ router.get("/size-catalog", (req, res) => {
  * Health check endpoint.
  */
 router.get("/health", async (req, res) => {
-  const checks = { server: "ok", version: "2026-03-12a-oom-fix", supabase: "unknown", drive: "unknown" };
+  const checks = {
+    server: "ok",
+    version: "2026-03-12a-oom-fix",
+    supabase: "unknown",
+    drive: "unknown",
+    // Featured-collection pinning needs Admin API access to read the collection.
+    shopifyAdmin: process.env.SHOPIFY_STORE_DOMAIN && process.env.SHOPIFY_ADMIN_API_TOKEN ? "configured" : "MISSING",
+    featuredCollection: process.env.FEATURED_COLLECTION_HANDLE || "iconic-art-prints",
+  };
 
   try {
     const { count, error } = await supabase.from("assets").select("*", { count: "exact", head: true });
