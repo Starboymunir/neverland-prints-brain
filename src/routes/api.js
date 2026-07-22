@@ -546,6 +546,78 @@ router.get("/storefront/from-prices", async (req, res) => {
   }
 });
 
+// ── FEATURED COLLECTION ────────────────────────────────────────────────
+// Artworks in this Shopify collection are shown FIRST on the catalog page.
+// The catalog reads from Supabase `assets` (not Shopify collections), so we
+// resolve the collection's products to asset ids and pin them to the front.
+// Cached because the collection changes rarely but the catalog is hit a lot.
+const FEATURED_COLLECTION_HANDLE =
+  process.env.FEATURED_COLLECTION_HANDLE || "iconic-art-prints";
+const FEATURED_TTL_MS = 10 * 60 * 1000;
+let _featuredCache = { ids: null, at: 0 };
+
+async function getFeaturedAssetIds() {
+  if (_featuredCache.ids && Date.now() - _featuredCache.at < FEATURED_TTL_MS) {
+    return _featuredCache.ids;
+  }
+
+  const shop = process.env.SHOPIFY_STORE_DOMAIN;
+  const token = process.env.SHOPIFY_ADMIN_API_TOKEN;
+  const ver = process.env.SHOPIFY_API_VERSION || "2024-10";
+  if (!shop || !token) return [];
+
+  try {
+    // Page through the collection's products (handle collections of any size).
+    const productIds = [];
+    let after = null;
+    for (let i = 0; i < 20; i++) {
+      const query = `{
+        collectionByHandle(handle: ${JSON.stringify(FEATURED_COLLECTION_HANDLE)}) {
+          products(first: 250${after ? `, after: ${JSON.stringify(after)}` : ""}) {
+            pageInfo { hasNextPage endCursor }
+            edges { node { legacyResourceId } }
+          }
+        }
+      }`;
+      const resp = await fetch(`https://${shop}/admin/api/${ver}/graphql.json`, {
+        method: "POST",
+        headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const json = await resp.json();
+      const col = json && json.data && json.data.collectionByHandle;
+      if (!col) break;
+      col.products.edges.forEach((e) => productIds.push(String(e.node.legacyResourceId)));
+      if (!col.products.pageInfo.hasNextPage) break;
+      after = col.products.pageInfo.endCursor;
+    }
+
+    if (!productIds.length) {
+      _featuredCache = { ids: [], at: Date.now() };
+      return [];
+    }
+
+    // Map Shopify product ids -> asset ids, in chunks (avoid huge IN clauses).
+    const assetIds = [];
+    for (let i = 0; i < productIds.length; i += 200) {
+      const chunk = productIds.slice(i, i + 200);
+      const { data } = await supabase
+        .from("assets")
+        .select("id, shopify_product_id")
+        .in("shopify_product_id", chunk);
+      (data || []).forEach((a) => assetIds.push(a.id));
+    }
+
+    _featuredCache = { ids: assetIds, at: Date.now() };
+    console.log(`⭐ Featured collection "${FEATURED_COLLECTION_HANDLE}": ${assetIds.length} artworks pinned to front of catalog`);
+    return assetIds;
+  } catch (e) {
+    console.error("Featured collection lookup failed:", e.message);
+    _featuredCache = { ids: [], at: Date.now() }; // don't retry-storm
+    return [];
+  }
+}
+
 /**
  * GET /api/storefront/catalog
  * Paginated catalog browse with filtering.
@@ -709,10 +781,68 @@ router.get("/storefront/catalog", async (req, res) => {
     // Pagination
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
-    query = query.range(from, to);
 
-    const { data, count, error } = await query;
-    if (error) throw error;
+    // ── FEATURED COLLECTION PINNING ──
+    // On the plain browse (no filters/search), artworks from the featured
+    // collection are shown first. Only applied to the default sort — if a
+    // shopper explicitly sorts by price/title, honour that instead.
+    const hasFilters = !!(artist || style || mood || orientation || era || subject || country || continent || tag || search);
+    const featuringActive = !hasFilters && (sort === "newest");
+
+    let featuredIds = [];
+    if (featuringActive) {
+      // Cap the pinned set so pagination stays exact and the exclude-filter
+      // stays a sane size (the collection can hold thousands of products).
+      const cap = parseInt(process.env.FEATURED_MAX || "96", 10);
+      featuredIds = (await getFeaturedAssetIds()).slice(0, cap);
+    }
+
+    let featuredRows = [];
+    let normalFrom = from;
+    let normalNeeded = perPage;
+
+    if (featuredIds.length) {
+      // Keep featured artworks out of the regular results so they can't repeat.
+      query = query.not("id", "in", `(${featuredIds.join(",")})`);
+
+      if (from < featuredIds.length) {
+        const slice = featuredIds.slice(from, Math.min(to + 1, featuredIds.length));
+        if (slice.length) {
+          const { data: fdata } = await supabase
+            .from("assets")
+            .select(
+              "id, title, drive_file_id, artist, style, mood, era, subject, ai_tags, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, created_at"
+            )
+            .in("id", slice);
+          // Preserve the collection's own ordering.
+          const byId = {};
+          (fdata || []).forEach((a) => { byId[a.id] = a; });
+          featuredRows = slice.map((id) => byId[id]).filter(Boolean);
+        }
+        normalNeeded = perPage - featuredRows.length;
+        normalFrom = 0;
+      } else {
+        normalFrom = from - featuredIds.length;
+      }
+    }
+
+    let data = [];
+    let count = 0;
+    if (normalNeeded > 0) {
+      query = query.range(normalFrom, normalFrom + normalNeeded - 1);
+      const r = await query;
+      if (r.error) throw r.error;
+      data = r.data || [];
+      count = r.count || 0;
+    } else {
+      // Page is entirely featured — still need the total for pagination.
+      const r = await query.range(0, 0);
+      if (r.error) throw r.error;
+      count = r.count || 0;
+    }
+
+    data = featuredRows.concat(data);
+    count = count + featuredIds.length;
 
     // Compute price tier for each asset
     const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
