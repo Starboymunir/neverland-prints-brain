@@ -904,12 +904,18 @@ router.get("/storefront/catalog", async (req, res) => {
       page,
       perPage,
       totalPages: Math.ceil((count || 0) / perPage),
+      // How many artworks were pinned from the featured collection (0 = featuring
+      // inactive, e.g. filters applied or the collection couldn't be resolved).
+      featured: featuredIds.length,
       filters: { artist, style, mood, orientation, era, subject, country, continent, sort, q: search, tag },
     });
   } catch (err) {
+    // The Shopify fallback silently hid real errors in this endpoint — log loudly
+    // so a broken primary path is visible instead of quietly degrading.
+    console.error("catalog primary path failed:", err.message);
     try {
       const fallback = await storefrontCatalogFromShopify(req);
-      return res.json(fallback);
+      return res.json(Object.assign({ fallback: true, fallbackReason: String(err.message).slice(0, 200) }, fallback));
     } catch (fbErr) {
       return res.status(500).json({ error: `${err.message} | fallback failed: ${fbErr.message}` });
     }
