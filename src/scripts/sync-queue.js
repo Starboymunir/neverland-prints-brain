@@ -184,17 +184,23 @@ async function main() {
   const runId = runData?.id;
 
   try {
-    // Fetch pending assets (ordered by artist for collection grouping)
-    const { data: assets, error } = await supabase
+    // Fetch pending assets. NOTE: do NOT `.order("artist")` in the DB — a sort
+    // over the filtered 185k-row table takes 5s+ and trips Supabase's statement
+    // timeout (57014). Fetch fast, then sort the small batch in memory below.
+    const { data: assetsRaw, error } = await supabase
       .from("assets")
       .select("*")
       .eq("shopify_status", "pending")
       .in("ingestion_status", ["tagged", "analyzed", "ready"])
       .not("width_px", "is", null)
-      .order("artist", { ascending: true })
       .limit(LIMIT);
 
     if (error) throw error;
+
+    // Group by artist in memory (instant on a batch of <= LIMIT rows) so
+    // collection assignment still batches an artist's products together.
+    const assets = (assetsRaw || []).sort((a, b) =>
+      String(a.artist || "").localeCompare(String(b.artist || "")));
     if (!assets?.length) {
       console.log("✅ All assets already synced!");
       return;
