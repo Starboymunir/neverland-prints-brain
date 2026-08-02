@@ -1,0 +1,516 @@
+{%- comment -%}v4-catalog-match-{{ "now" | date: "%s" }}{%- endcomment -%}
+{%- assign current_variant = product.selected_or_first_available_variant -%}
+
+<section class="product-page">
+  <div class="container">
+    <div class="product-layout">
+      <!-- Gallery with Frame Preview -->
+      <div class="product-gallery">
+        <div class="product-gallery__main">
+          <div class="frame-preview" id="frame-preview" data-frame="none">
+            <div class="frame-preview__mat" id="frame-mat">
+              <div class="frame-preview__img-wrap">
+                {%- if product.featured_image -%}
+                  <img
+                    id="product-main-img"
+                    src="{{ product.featured_image | image_url: width: 1200 }}"
+                    srcset="{{ product.featured_image | image_url: width: 800 }} 800w,
+                            {{ product.featured_image | image_url: width: 1200 }} 1200w,
+                            {{ product.featured_image | image_url: width: 1600 }} 1600w"
+                    sizes="(max-width: 768px) 95vw, 50vw"
+                    alt="{{ product.featured_image.alt | default: product.title | escape }}"
+                    loading="eager"
+                    fetchpriority="high"
+                  >
+                {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                  {%- assign drive_id = product.metafields.neverland.drive_file_id -%}
+                  <img
+                    id="product-main-img"
+                    src="https://lh3.googleusercontent.com/d/{{ drive_id }}=s1200"
+                    srcset="https://lh3.googleusercontent.com/d/{{ drive_id }}=s800 800w,
+                            https://lh3.googleusercontent.com/d/{{ drive_id }}=s1200 1200w,
+                            https://lh3.googleusercontent.com/d/{{ drive_id }}=s1600 1600w,
+                            https://lh3.googleusercontent.com/d/{{ drive_id }}=s2000 2000w"
+                    sizes="(max-width: 768px) 95vw, 50vw"
+                    alt="{{ product.title | escape }}"
+                    loading="eager"
+                    fetchpriority="high"
+                  >
+                {%- else -%}
+                  <div style="padding:120px;text-align:center;color:var(--text-muted);">No image available</div>
+                {%- endif -%}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Frame Style Selector (hidden when Unframed) -->
+        <div class="frame-selector" id="frame-selector" style="display:none">
+          <span class="frame-selector__label">Preview Frame Style</span>
+          <div class="frame-selector__options">
+            <button type="button" class="frame-option is-active" data-frame="black" title="Black Frame">
+              <span class="frame-option__swatch frame-option__swatch--black"></span>
+              <span class="frame-option__name">Black</span>
+            </button>
+            <button type="button" class="frame-option" data-frame="white" title="White Frame">
+              <span class="frame-option__swatch frame-option__swatch--white"></span>
+              <span class="frame-option__name">White</span>
+            </button>
+            <button type="button" class="frame-option" data-frame="natural" title="Natural Wood Frame">
+              <span class="frame-option__swatch frame-option__swatch--natural"></span>
+              <span class="frame-option__name">Natural</span>
+            </button>
+            <button type="button" class="frame-option" data-frame="walnut" title="Walnut Frame">
+              <span class="frame-option__swatch frame-option__swatch--walnut"></span>
+              <span class="frame-option__name">Walnut</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Details -->
+      <div class="product-details">
+        <div class="product-details__artist">{{ product.vendor }}</div>
+        <h1 class="product-details__title" id="product-title">{{ product.title }}</h1>
+
+        <div class="product-details__price">
+          <span class="product-details__price-current" id="product-price">$33.99</span>
+          <span class="product-details__price-compare" id="product-compare-price">$44.99</span>
+        </div>
+
+        <!-- Size Selector (skeleton pricing) -->
+        <div class="variant-selector" id="size-selector">
+          <div class="variant-selector__label">Size</div>
+          <div class="variant-selector__options" id="size-options">
+            <button type="button" class="variant-option is-selected" data-tier="small" data-variant-id="42927017099348" data-price="33.99" data-compare="44.99">Small — $33.99</button>
+            <button type="button" class="variant-option" data-tier="medium" data-variant-id="42927018377300" data-price="69.99" data-compare="90.99">Medium — $69.99</button>
+            <button type="button" class="variant-option" data-tier="large" data-variant-id="42927019360340" data-price="159.99" data-compare="209.99">Large — $159.99</button>
+            <button type="button" class="variant-option" data-tier="extra_large" data-variant-id="42927020802132" data-price="319.99" data-compare="419.99">Extra Large — $319.99</button>
+          </div>
+        </div>
+
+        <!-- Frame Selector -->
+        <div class="variant-selector" id="frame-type-selector">
+          <div class="variant-selector__label">Frame</div>
+          <div class="variant-selector__options" id="frame-type-options">
+            <button type="button" class="variant-option is-selected" data-frame="unframed">Unframed</button>
+            <button type="button" class="variant-option" data-frame="framed">Framed</button>
+          </div>
+        </div>
+
+        <!-- Add to Cart -->
+        <form method="post" action="/cart/add" id="product-cart-form">
+          <input type="hidden" name="id" id="variant-id" value="42927017099348">
+          <input type="hidden" name="quantity" value="1">
+          <input type="hidden" name="properties[_product_handle]" value="{{ product.handle }}">
+          <input type="hidden" name="properties[Artwork]" value="{{ product.title | escape }}">
+          <input type="hidden" name="properties[Artist]" value="{{ product.vendor | escape }}">
+          <input type="hidden" name="properties[Size]" id="prop-size" value="Small">
+          <input type="hidden" name="properties[Frame]" id="prop-frame" value="Unframed">
+          {%- if product.metafields.neverland.drive_file_id != blank -%}
+            <input type="hidden" name="properties[_drive_file_id]" value="{{ product.metafields.neverland.drive_file_id }}">
+          {%- endif -%}
+          <button type="submit" class="add-to-cart" id="add-to-cart-btn">
+            Add to Cart — <span id="cart-price">$33.99</span>
+          </button>
+        </form>
+
+        <!-- Trust Badges -->
+        <div class="product-trust">
+          <div class="product-trust__item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            <span>Satisfaction Guaranteed</span>
+          </div>
+          <div class="product-trust__item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            <span>Worldwide Shipping</span>
+          </div>
+          <div class="product-trust__item">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Ships in 7–14 days (US)</span>
+          </div>
+        </div>
+
+        <!-- Adding feedback (matches art-detail page) -->
+        <div class="art-detail__feedback" id="product-feedback" style="display:none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+          <span>Added to cart!</span>
+          <a href="/cart">View Cart</a>
+        </div>
+
+        <!-- Room View (matches art-detail layout — in details column, with dimension annotations) -->
+        <div id="room-preview-container">
+          <div class="room-preview" id="room-preview">
+            <div class="room-preview__heading">See It On Your Wall</div>
+            <div class="room-preview__scene" id="room-scene" style="background-image:url({{ 'mockup-wall.jpg' | asset_url }})">
+              <div class="room-preview__art-mount" id="room-art-mount">
+                <div class="room-preview__frame" id="room-art-frame" data-frame="none">
+                  {%- if product.featured_image -%}
+                    <img src="{{ product.featured_image | image_url: width: 600 }}" alt="{{ product.title | escape }}" loading="lazy" draggable="false">
+                  {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+                    {%- assign drive_id_room = product.metafields.neverland.drive_file_id -%}
+                    <img src="https://lh3.googleusercontent.com/d/{{ drive_id_room }}=s600" alt="{{ product.title | escape }}" loading="lazy" draggable="false">
+                  {%- endif -%}
+                </div>
+                <div class="room-preview__dim-w" id="room-dim-w">
+                  <span class="room-preview__dim-end"></span>
+                  <span class="room-preview__dim-line"></span>
+                  <span class="room-preview__dim-val" id="room-dim-w-val"></span>
+                  <span class="room-preview__dim-line"></span>
+                  <span class="room-preview__dim-end"></span>
+                </div>
+                <div class="room-preview__dim-h" id="room-dim-h">
+                  <span class="room-preview__dim-end"></span>
+                  <span class="room-preview__dim-line"></span>
+                  <span class="room-preview__dim-val" id="room-dim-h-val"></span>
+                  <span class="room-preview__dim-line"></span>
+                  <span class="room-preview__dim-end"></span>
+                </div>
+              </div>
+            </div>
+            <span class="room-preview__caption">Proportional room preview — dimensions update with size selection</span>
+          </div>
+        </div>
+
+        <!-- Print Specs Meta -->
+        <div class="product-meta">
+          {%- if product.metafields.neverland.ratio_class != blank -%}
+            <div class="product-meta__item">
+              <span class="product-meta__label">Orientation</span>
+              <span class="product-meta__value" id="spec-orientation">{{ product.metafields.neverland.ratio_class }}</span>
+            </div>
+          {%- endif -%}
+          {%- if product.metafields.neverland.max_print_cm != blank -%}
+            <div class="product-meta__item">
+              <span class="product-meta__label">Max Print Size</span>
+              <span class="product-meta__value" id="spec-maxprint">{{ product.metafields.neverland.max_print_cm }}</span>
+            </div>
+          {%- endif -%}
+          {%- if product.metafields.neverland.quality_tier != blank -%}
+            <div class="product-meta__item">
+              <span class="product-meta__label">Quality</span>
+              <span class="product-meta__value">{{ product.metafields.neverland.quality_tier | capitalize }} Grade</span>
+            </div>
+          {%- endif -%}
+          <div class="product-meta__item">
+            <span class="product-meta__label">Artist</span>
+            <span class="product-meta__value">{{ product.vendor }}</span>
+          </div>
+          {%- if product.metafields.neverland.style != blank -%}
+            <div class="product-meta__item">
+              <span class="product-meta__label">Style</span>
+              <span class="product-meta__value">{{ product.metafields.neverland.style }}</span>
+            </div>
+          {%- endif -%}
+          {%- if product.metafields.neverland.mood != blank -%}
+            <div class="product-meta__item">
+              <span class="product-meta__label">Mood</span>
+              <span class="product-meta__value">{{ product.metafields.neverland.mood }}</span>
+            </div>
+          {%- endif -%}
+        </div>
+
+        <!-- Accordion Details -->
+        <div class="product-accordion">
+          <div class="product-accordion__item">
+            <button class="product-accordion__trigger is-open" type="button">
+              About This Print
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="product-accordion__content is-open">
+              <div class="product-accordion__body">
+                {{ product.description }}
+              </div>
+            </div>
+          </div>
+
+          <div class="product-accordion__item">
+            <button class="product-accordion__trigger" type="button">
+              Materials & Quality
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="product-accordion__content">
+              <div class="product-accordion__body">
+                <ul>
+                  <li>Premium 310gsm cotton-rag archival paper</li>
+                  <li>Giclée printing with pigment-based inks</li>
+                  <li>Rated 200+ years lightfastness</li>
+                  <li>Vibrant, accurate color reproduction</li>
+                  <li>Textured matte finish</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="product-accordion__item">
+            <button class="product-accordion__trigger" type="button">
+              Shipping & Returns
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div class="product-accordion__content">
+              <div class="product-accordion__body">
+                <p><strong>Production</strong> — 1–3 business days for paper prints; up to 5 days for framed pieces.</p>
+                <p><strong>Shipping (US)</strong> — $11.95 flat. Most orders arrive in <strong>1–2 weeks</strong> via UPS, FedEx, or USPS. Faster Express &amp; Overnight options available at checkout.</p>
+                <p><strong>International shipping</strong> — $26.95 flat to all other countries. Allow <strong>3–5 weeks</strong> total. Customs duties or VAT (if any) are the recipient's responsibility.</p>
+                <p><strong>30-day satisfaction guarantee</strong> — if you're not happy with your unframed print, contact us within 30 days for a replacement or refund. Framed items may incur a 20% production fee on return. Damaged or lost items are replaced free of charge — just send a photo within 30 days.</p>
+                <p>Full details: <a href="/pages/shipping">Shipping</a> · <a href="/pages/returns">Returns &amp; Refunds</a></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function() {
+  // ── Skeleton variant IDs (unframed / framed) ──
+  var VARIANTS = {
+    small:       { unframed: '42927017099348', framed: '42927017132116', price: 33.99, compare: 44.99, label: 'Small' },
+    medium:      { unframed: '42927018377300', framed: '42927018410068', price: 69.99, compare: 90.99, label: 'Medium' },
+    large:       { unframed: '42927019360340', framed: '42927019393108', price: 159.99, compare: 209.99, label: 'Large' },
+    extra_large: { unframed: '42927020802132', framed: '42927020834900', price: 319.99, compare: 419.99, label: 'Extra Large' }
+  };
+
+  var TIER_SCALE = { small: 0.35, medium: 0.55, large: 0.75, extra_large: 1.0 };
+  var currentTier = 'small';
+  var currentFrame = 'unframed'; // 'unframed' or 'framed'
+  var currentFrameColor = 'none';
+  var maxPrintRaw = '{{ product.metafields.neverland.max_print_cm | default: "" }}';
+
+  // ── Clean title: strip trailing 4-digit year ──
+  var titleEl = document.getElementById('product-title');
+  if (titleEl) {
+    titleEl.textContent = titleEl.textContent.replace(/\s+\d{4}\s*$/, '');
+  }
+
+  // ── Format orientation: "panoramic_wide" → "Panoramic Wide" ──
+  var orientEl = document.getElementById('spec-orientation');
+  if (orientEl) {
+    var raw = orientEl.textContent.trim();
+    var parts = raw.split('_');
+    var name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    if (parts.length >= 3) {
+      orientEl.textContent = name + ' ' + parts[1] + ':' + parts[2];
+    } else if (parts.length === 2) {
+      orientEl.textContent = name + ' ' + parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+    } else {
+      orientEl.textContent = name;
+    }
+  }
+
+  // ── Format max print: round decimals, add " cm" if missing ──
+  var maxPrintEl = document.getElementById('spec-maxprint');
+  if (maxPrintEl) {
+    var mp = maxPrintEl.textContent.trim();
+    mp = mp.replace(/(\d+)\.\d+/g, function(m) { return Math.round(parseFloat(m)).toString(); });
+    if (mp.indexOf('cm') === -1 && mp.indexOf('in') === -1) mp += ' cm';
+    maxPrintEl.textContent = mp;
+  }
+
+  // ── Dimension calculation (matches catalog page) ──
+  function getArtDimsCm() {
+    var m = maxPrintRaw.match(/(\d+(?:\.\d+)?)\s*[×x]\s*(\d+(?:\.\d+)?)/i);
+    if (!m) return null;
+    var maxW = parseFloat(m[1]);
+    var maxH = parseFloat(m[2]);
+    var scale = TIER_SCALE[currentTier] || 0.35;
+    return { w: Math.round(maxW * scale), h: Math.round(maxH * scale) };
+  }
+
+  // ── Update room view dimensions and frame ──
+  function updateRoomView() {
+    var frame = document.getElementById('room-art-frame');
+    if (!frame) return;
+
+    // Update frame style
+    if (currentFrame === 'framed' && currentFrameColor && currentFrameColor !== 'none') {
+      frame.setAttribute('data-frame', currentFrameColor);
+    } else if (currentFrame === 'framed') {
+      frame.setAttribute('data-frame', 'black');
+    } else {
+      frame.setAttribute('data-frame', 'none');
+    }
+
+    var img = frame.querySelector('img');
+    var dimWVal = document.getElementById('room-dim-w-val');
+    var dimHVal = document.getElementById('room-dim-h-val');
+    var dimW = document.getElementById('room-dim-w');
+    var dimH = document.getElementById('room-dim-h');
+
+    var dims = getArtDimsCm();
+    if (dims && img) {
+      var wCm = dims.w;
+      var hCm = dims.h;
+
+      // Wall-height-based scaling: average wall = 250cm
+      var scene = document.getElementById('room-scene');
+      var sceneH = scene ? scene.offsetHeight : 420;
+      var isMobile = window.innerWidth <= 768;
+      var WALL_HEIGHT_CM = isMobile ? 350 : 250;
+      // 250cm wall spans ~80% of the mockup-wall.jpg scene (floor at ~84%).
+      var WALL_RATIO = 0.80;
+      var wallPx = sceneH * WALL_RATIO;
+      var pxPerCm = wallPx / WALL_HEIGHT_CM;
+
+      var imgW = Math.round(wCm * pxPerCm);
+      var imgH = Math.round(hCm * pxPerCm);
+
+      // Clamp to reasonable limits relative to scene
+      var maxPxW = Math.round(sceneH * 0.7);
+      var maxPxH = Math.round(wallPx * 0.85);
+      if (imgW > maxPxW) { imgH = Math.round(imgH * (maxPxW / imgW)); imgW = maxPxW; }
+      if (imgH > maxPxH) { imgW = Math.round(imgW * (maxPxH / imgH)); imgH = maxPxH; }
+
+      img.style.width = imgW + 'px';
+      img.style.height = imgH + 'px';
+      img.style.maxWidth = imgW + 'px';
+      img.style.maxHeight = imgH + 'px';
+
+      if (dimWVal) dimWVal.textContent = wCm + ' cm';
+      if (dimHVal) dimHVal.textContent = hCm + ' cm';
+      if (dimW) dimW.style.display = '';
+      if (dimH) dimH.style.display = '';
+    } else if (img) {
+      img.style.width = '120px';
+      img.style.height = '90px';
+      img.style.maxWidth = '120px';
+      img.style.maxHeight = '90px';
+      if (dimW) dimW.style.display = 'none';
+      if (dimH) dimH.style.display = 'none';
+    }
+  }
+
+  // ── Price update ──
+  function updatePrice() {
+    var tier = VARIANTS[currentTier];
+    var isFramed = currentFrame === 'framed';
+    var price = isFramed ? tier.compare : tier.price;
+    var variantId = isFramed ? tier.framed : tier.unframed;
+
+    document.getElementById('product-price').textContent = '$' + price.toFixed(2);
+    document.getElementById('cart-price').textContent = '$' + price.toFixed(2);
+    document.getElementById('variant-id').value = variantId;
+
+    // No fake strike-through — show only the real price for the selected size + frame.
+    var compareEl = document.getElementById('product-compare-price');
+    if (compareEl) compareEl.style.display = 'none';
+
+    // Update line item properties
+    document.getElementById('prop-size').value = tier.label;
+    document.getElementById('prop-frame').value = isFramed ? 'Framed' : 'Unframed';
+  }
+
+  // ── Size selector ──
+  document.querySelectorAll('#size-options .variant-option').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelector('#size-options .is-selected')?.classList.remove('is-selected');
+      btn.classList.add('is-selected');
+      currentTier = btn.getAttribute('data-tier');
+      updatePrice();
+      updateRoomView();
+    });
+  });
+
+  // ── Frame type selector (Unframed / Framed) ──
+  var frameSelectorPanel = document.getElementById('frame-selector');
+  document.querySelectorAll('#frame-type-options .variant-option').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelector('#frame-type-options .is-selected')?.classList.remove('is-selected');
+      btn.classList.add('is-selected');
+      currentFrame = btn.getAttribute('data-frame');
+      updatePrice();
+
+      if (currentFrame === 'unframed') {
+        if (frameSelectorPanel) frameSelectorPanel.style.display = 'none';
+        frameButtons.forEach(function(b) { b.classList.remove('is-active'); });
+        if (framePreview) framePreview.setAttribute('data-frame', 'none');
+        currentFrameColor = 'none';
+      } else {
+        if (frameSelectorPanel) frameSelectorPanel.style.display = '';
+        // Auto-select black if no frame color chosen yet
+        if (!currentFrameColor || currentFrameColor === 'none') {
+          var blackBtn = document.querySelector('.frame-option[data-frame="black"]');
+          if (blackBtn) {
+            frameButtons.forEach(function(b) { b.classList.remove('is-active'); });
+            blackBtn.classList.add('is-active');
+            currentFrameColor = 'black';
+            if (framePreview) framePreview.setAttribute('data-frame', 'black');
+          }
+        }
+      }
+      updateRoomView();
+    });
+  });
+
+  // ── Frame Preview Interaction ──
+  var framePreview = document.getElementById('frame-preview');
+  var frameButtons = document.querySelectorAll('.frame-option');
+
+  frameButtons.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var frame = this.getAttribute('data-frame');
+      frameButtons.forEach(function(b) { b.classList.remove('is-active'); });
+      this.classList.add('is-active');
+      if (framePreview) framePreview.setAttribute('data-frame', frame);
+      currentFrameColor = frame;
+
+      // Auto-select "Framed" if a frame color is picked
+      if (frame !== 'none' && currentFrame !== 'framed') {
+        document.querySelector('#frame-type-options .is-selected')?.classList.remove('is-selected');
+        var framedBtn = document.querySelector('#frame-type-options [data-frame="framed"]');
+        if (framedBtn) { framedBtn.classList.add('is-selected'); currentFrame = 'framed'; updatePrice(); }
+      }
+      updateRoomView();
+    });
+  });
+
+  // ── Accordion (event delegation) ──
+  // Delegated off document so it works no matter when the section renders and
+  // can't be silently killed by an earlier script error or a theme-app re-render
+  // (the direct-binding version sometimes didn't fire in the live storefront).
+  if (!window.__npAccordionBound) {
+    window.__npAccordionBound = true;
+    document.addEventListener('click', function(e) {
+      var trigger = e.target.closest('.product-accordion__trigger, .pp-accordion__trigger');
+      if (!trigger) return;
+      var content = trigger.nextElementSibling;
+      var isOpen = trigger.classList.toggle('is-open');
+      if (content) content.classList.toggle('is-open', isOpen);
+    });
+  }
+
+  // ── Add to cart feedback ──
+  var cartForm = document.getElementById('product-cart-form');
+  var feedbackEl = document.getElementById('product-feedback');
+  if (cartForm && feedbackEl) {
+    cartForm.addEventListener('submit', function() {
+      feedbackEl.style.display = '';
+      setTimeout(function() { feedbackEl.style.display = 'none'; }, 4000);
+    });
+  }
+
+  // Initial price + room dimensions
+  updatePrice();
+  updateRoomView();
+
+  // ── Image Protection ──
+  document.addEventListener('contextmenu', function(e) {
+    if (e.target.closest('.product-gallery, .frame-preview, .room-preview')) {
+      e.preventDefault();
+    }
+  });
+  document.addEventListener('dragstart', function(e) {
+    if (e.target.tagName === 'IMG') e.preventDefault();
+  });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Product Page",
+  "settings": [],
+  "presets": [{ "name": "Product Page" }]
+}
+{% endschema %}
