@@ -206,17 +206,26 @@ async function main() {
       return;
     }
 
-    // Pre-fetch variant counts to stay under the limit
+    // Bulk-fetch variant counts for the whole batch in ONE query. The previous
+    // per-asset count did up to 1000 sequential exact-count queries, which
+    // stalled the sync for hours before it ever created a product.
+    const batchIds = assets.map((a) => a.id);
+    const variantCountByAsset = {};
+    for (let i = 0; i < batchIds.length; i += 500) {
+      const chunk = batchIds.slice(i, i + 500);
+      const { data: vrows } = await supabase
+        .from("asset_variants")
+        .select("asset_id")
+        .in("asset_id", chunk);
+      (vrows || []).forEach((v) => {
+        variantCountByAsset[v.asset_id] = (variantCountByAsset[v.asset_id] || 0) + 1;
+      });
+    }
+
     let totalVariantsToCreate = 0;
     const assetsToSync = [];
-
     for (const asset of assets) {
-      const { count } = await supabase
-        .from("asset_variants")
-        .select("*", { count: "exact", head: true })
-        .eq("asset_id", asset.id);
-
-      const variantCount = count || 0;
+      const variantCount = variantCountByAsset[asset.id] || 0;
       if (totalVariantsToCreate + variantCount > MAX_VARIANTS) {
         console.log(`   ⚠️  Stopping at ${assetsToSync.length} assets — would exceed ${MAX_VARIANTS} variant limit`);
         break;
