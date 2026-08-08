@@ -124,13 +124,26 @@ async function fulfillItem({ supabase, finerworks, item, address, email }) {
     asset = data || null;
   } catch (e) { /* ignore */ }
 
-  let dims = resolveDims({ size: item.size, priceTier: item.priceTier, asset });
-  if (!dims) return fail(`Cannot determine print size (size="${item.size}")`);
-  dims = clampToPrintable(dims);
-
-  // Always derived server-side — the theme's product code carried an oversized
-  // tier and a border the customer never asked for.
-  const productCode = FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
+  // Determine the FinerWorks product code + print size.
+  // PRIORITY: honour the code the PRICE was computed from (passed as
+  // _finerworks_product_code by the dynamic price map). Area-based pricing means
+  // the customer paid for a specific size, so we MUST print that size — otherwise
+  // charge != print. Force borderless mounting M8 (identical cost, no unwanted
+  // border). Only fall back to computing a size when no priced code was passed
+  // (legacy flat orders).
+  let productCode = null;
+  let dims = null;
+  const passed = String(item.finerworksProductCode || "").trim().toUpperCase();
+  const m = passed.match(/^(\d+M\d+M)\d+(S(\d+)X(\d+))$/);
+  if (m) {
+    productCode = m[1] + "8" + m[2]; // force borderless (M8)
+    dims = { widthCm: parseInt(m[3], 10) * 2.54, heightCm: parseInt(m[4], 10) * 2.54 };
+  } else {
+    dims = resolveDims({ size: item.size, priceTier: item.priceTier, asset });
+    if (!dims) return fail(`Cannot determine print size (size="${item.size}")`);
+    dims = clampToPrintable(dims);
+    productCode = FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
+  }
 
   let pixelWidth = asset ? asset.width_px || 0 : 0;
   let pixelHeight = asset ? asset.height_px || 0 : 0;
