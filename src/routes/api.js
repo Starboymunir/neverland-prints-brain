@@ -979,7 +979,12 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
     const { data: asset, error } = await supabase
       .from("assets")
       .select("*, asset_variants(*)")
-      .eq("id", req.params.assetId)
+      // Accept either the Supabase UUID (catalog cards) or a Google-Drive file id
+      // (Shopify product cards only carry drive_file_id). Detect by UUID shape.
+      .eq(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.assetId) ? "id" : "drive_file_id",
+        req.params.assetId
+      )
       .single();
 
     if (error || !asset) {
