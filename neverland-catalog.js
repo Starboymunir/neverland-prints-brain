@@ -1845,7 +1845,15 @@
       const data = await apiFetch('/api/storefront/from-prices?drive_ids=' + encodeURIComponent(ids.join(',')));
       els.forEach(el => {
         const p = data && data[el.dataset.driveId];
-        if (p) el.textContent = 'From ' + formatPrice(p);
+        if (!p) return;
+        el.textContent = 'From ' + formatPrice(p);
+        // Sale "was" price on the card — consistent ~23% markup, charm-rounded.
+        var num = parseFloat(String(p).replace(/[^0-9.]/g, ''));
+        if (num > 0) {
+          var was = Math.max(num + 1, Math.round(num * 1.3) - 0.01);
+          var wasEl = el.parentElement && el.parentElement.querySelector('.js-from-was[data-drive-id="' + el.dataset.driveId + '"]');
+          if (wasEl) { wasEl.textContent = formatPrice(was.toFixed(2)); wasEl.style.display = ''; }
+        }
       });
     } catch (e) { /* keep fallback text */ }
   }

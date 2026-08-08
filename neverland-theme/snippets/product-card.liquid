@@ -1,0 +1,68 @@
+{%- comment -%}
+  Product Card Snippet — Optimized for fast image loading.
+  Prefers Shopify CDN (product.featured_image) when available.
+  Falls back to Google Drive via metafield if no Shopify image.
+  Usage: {% render 'product-card', product: product %}
+
+  Guard: the internal "Art Print" price-carrier products have no drive_file_id;
+  skip them so they never render as blank/placeholder cards anywhere.
+{%- endcomment -%}
+{%- if product.metafields.neverland.drive_file_id != blank -%}
+<div class="product-card" data-animate="fade-up">
+  <a href="{{ product.url }}" class="product-card__link">
+    <div class="product-card__img-wrap">
+      {%- if product.featured_image -%}
+        <img
+          class="product-card__img"
+          src="{{ product.featured_image | image_url: width: 600 }}"
+          srcset="{{ product.featured_image | image_url: width: 400 }} 400w,
+                  {{ product.featured_image | image_url: width: 600 }} 600w,
+                  {{ product.featured_image | image_url: width: 800 }} 800w"
+          sizes="(max-width: 480px) 90vw, (max-width: 768px) 45vw, (max-width: 1200px) 30vw, 300px"
+          alt="{{ product.featured_image.alt | default: product.title | escape }}"
+          width="{{ product.featured_image.width }}"
+          height="{{ product.featured_image.height }}"
+          loading="lazy"
+          decoding="async"
+        >
+      {%- elsif product.metafields.neverland.drive_file_id != blank -%}
+        {%- assign drive_id = product.metafields.neverland.drive_file_id -%}
+        <img
+          class="product-card__img"
+          src="https://lh3.googleusercontent.com/d/{{ drive_id }}=s600"
+          srcset="https://lh3.googleusercontent.com/d/{{ drive_id }}=s400 400w,
+                  https://lh3.googleusercontent.com/d/{{ drive_id }}=s600 600w,
+                  https://lh3.googleusercontent.com/d/{{ drive_id }}=s800 800w"
+          sizes="(max-width: 480px) 90vw, (max-width: 768px) 45vw, (max-width: 1200px) 30vw, 300px"
+          alt="{{ product.title | escape }}"
+          loading="lazy"
+          decoding="async"
+        >
+      {%- else -%}
+        <div class="product-card__placeholder">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+        </div>
+      {%- endif -%}
+
+      {%- if product.compare_at_price > product.price -%}
+        <span class="product-card__badge">Sale</span>
+      {%- elsif product.metafields.neverland.quality_tier == 'high' -%}
+        <span class="product-card__badge" style="background:var(--accent);">Museum Grade</span>
+      {%- endif -%}
+
+      <div class="product-card__quick"><span>Quick View</span></div>
+    </div>
+  </a>
+
+  <div class="product-card__info">
+    <h3 class="product-card__title">
+      <a href="{{ product.url }}">{{ product.title }}</a>
+    </h3>
+    <div class="product-card__artist">{{ product.vendor }}</div>
+    <div class="product-card__price">
+      <span class="js-from-was" data-drive-id="{{ product.metafields.neverland.drive_file_id }}" style="text-decoration:line-through;color:#999;font-size:0.85em;margin-right:6px;display:none;"></span>
+      <span class="js-from-price" data-drive-id="{{ product.metafields.neverland.drive_file_id }}">From $33.99</span>
+    </div>
+  </div>
+</div>
+{%- endif -%}
