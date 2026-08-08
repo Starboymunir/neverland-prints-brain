@@ -53,16 +53,27 @@ function ladderRoundUp(raw) {
   return LADDER[LADDER.length - 1];
 }
 
-function cmToInClamped(cm) {
-  return Math.min(MAX_SIDE_IN, Math.max(MIN_SIDE_IN, Math.round(cm / CM_PER_IN)));
+/**
+ * Convert a desired print size (cm) to WHOLE-INCH dimensions that FinerWorks can
+ * actually print, PRESERVING ASPECT RATIO. Scales the whole rectangle down so the
+ * longest side fits 48" (instead of clamping each side independently, which turned
+ * tall prints into squares). Returns { wIn, hIn }.
+ */
+function clampToPrintableIn(widthCm, heightCm) {
+  let w = (widthCm || 0) / CM_PER_IN;
+  let h = (heightCm || 0) / CM_PER_IN;
+  const longest = Math.max(w, h);
+  if (longest > MAX_SIDE_IN) { const f = MAX_SIDE_IN / longest; w *= f; h *= f; }
+  w = Math.min(MAX_SIDE_IN, Math.max(MIN_SIDE_IN, Math.round(w)));
+  h = Math.min(MAX_SIDE_IN, Math.max(MIN_SIDE_IN, Math.round(h)));
+  return { wIn: w, hIn: h };
 }
 
 /** FinerWorks base (unframed) cost for a physical size in cm, via the cost table. */
 function fwBaseCost(widthCm, heightCm) {
-  const a = cmToInClamped(widthCm);
-  const b = cmToInClamped(heightCm);
-  const lo = Math.min(a, b);
-  const hi = Math.max(a, b);
+  const { wIn, hIn } = clampToPrintableIn(widthCm, heightCm);
+  const lo = Math.min(wIn, hIn);
+  const hi = Math.max(wIn, hIn);
   const entry = COST_TABLE[`5M6M9S${lo}X${hi}`];
   return entry ? entry.cost : null;
 }
@@ -78,32 +89,45 @@ function tierDimsCm(maxWidthCm, maxHeightCm, tier) {
  * Returns { price, fwCost, dims, productCode } or null if not priceable.
  */
 function computePrice(maxWidthCm, maxHeightCm, tier, framed) {
-  const dims = tierDimsCm(maxWidthCm, maxHeightCm, tier);
-  const base = fwBaseCost(dims.widthCm, dims.heightCm);
-  if (base == null) return null;
+  const want = tierDimsCm(maxWidthCm, maxHeightCm, tier);
+  // Actual printable size (aspect-preserved). Everything below — cost, code, and
+  // the SIZE we display — derives from this, so what's shown = priced = printed.
+  const { wIn, hIn } = clampToPrintableIn(want.widthCm, want.heightCm);
+  const lo = Math.min(wIn, hIn);
+  const hi = Math.max(wIn, hIn);
+  const entry = COST_TABLE[`5M6M9S${lo}X${hi}`];
+  if (!entry) return null;
+  const base = entry.cost;
 
   let raw = base * MARGIN;
   if (framed) raw *= FRAME_UPLIFT;
   const price = ladderRoundUp(raw);
 
-  const a = cmToInClamped(dims.widthCm);
-  const b = cmToInClamped(dims.heightCm);
   return {
     price,
     fwCost: framed ? Number((base * FRAME_UPLIFT).toFixed(2)) : base,
-    dims: { widthCm: Math.round(dims.widthCm), heightCm: Math.round(dims.heightCm) },
-    productCode: `5M6M9S${Math.min(a, b)}X${Math.max(a, b)}`,
+    dims: { widthCm: Math.round(wIn * CM_PER_IN), heightCm: Math.round(hIn * CM_PER_IN) },
+    productCode: `5M6M9S${lo}X${hi}`,
   };
 }
 
-/** Full price map for an artwork: { small_unframed: {...}, ... } across all tiers/frames. */
+/**
+ * Full price map for an artwork: { small_unframed: {...}, ... }.
+ * Tiers that clamp to the SAME printable size (common when an artwork's max
+ * exceeds FinerWorks' 48" ceiling — e.g. Large and XL both hit the cap) are
+ * de-duplicated so the storefront never shows two identical size/price options.
+ */
 function computePriceMap(maxWidthCm, maxHeightCm) {
   const map = {};
+  const seen = new Set();
   for (const tier of Object.keys(TIER_SCALE)) {
-    for (const framed of [false, true]) {
-      const key = `${tier}_${framed ? "framed" : "unframed"}`;
-      map[key] = computePrice(maxWidthCm, maxHeightCm, tier, framed);
-    }
+    const uf = computePrice(maxWidthCm, maxHeightCm, tier, false);
+    if (!uf) continue;
+    if (seen.has(uf.productCode)) continue; // same printable size as a smaller tier
+    seen.add(uf.productCode);
+    map[`${tier}_unframed`] = uf;
+    const fr = computePrice(maxWidthCm, maxHeightCm, tier, true);
+    if (fr) map[`${tier}_framed`] = fr;
   }
   return map;
 }
