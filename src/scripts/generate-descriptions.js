@@ -52,13 +52,25 @@ const BASE = `https://${SHOP}/admin/api/${API_VER}`;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// ── OpenAI Setup ──────────────────────────────────────────
+// ── AI Setup ──────────────────────────────────────────────
+// Descriptions are a text-only task, so DeepSeek (OpenAI-compatible, much
+// cheaper) is used when DEEPSEEK_API_KEY is set; otherwise fall back to OpenAI.
+// NOTE: image TAGGING stays on Gemini — DeepSeek has no vision model.
 let openai = null;
+let AI_MODEL = "gpt-4o-mini";
 
 function initOpenAI() {
-  if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not set in .env");
-  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  console.log("✅ OpenAI GPT-4o-mini initialized");
+  if (process.env.DEEPSEEK_API_KEY) {
+    openai = new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com" });
+    AI_MODEL = "deepseek-chat";
+    console.log("✅ DeepSeek (deepseek-chat) initialized — cheaper text generation");
+  } else if (process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    AI_MODEL = "gpt-4o-mini";
+    console.log("✅ OpenAI GPT-4o-mini initialized");
+  } else {
+    throw new Error("Set DEEPSEEK_API_KEY (preferred, cheaper) or OPENAI_API_KEY in .env");
+  }
 }
 
 // ── Batch Description Generator ───────────────────────────
@@ -88,7 +100,7 @@ async function generateBatch(batch, retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: AI_MODEL,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: artworkList },
