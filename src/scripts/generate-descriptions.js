@@ -36,8 +36,13 @@ const getArg = (n) => { const a = args.find(x => x.startsWith(`--${n}=`)); retur
 const hasFlag = (n) => args.includes(`--${n}`);
 
 const LIMIT = parseInt(getArg("limit") || "0", 10); // 0 = all
-const BATCH_SIZE = parseInt(getArg("batch-size") || "50", 10);
-const AI_CONCURRENCY = parseInt(getArg("concurrency") || "10", 10);
+// Batch/concurrency tuned for Gemini's free tier (big batches truncate JSON,
+// high concurrency triggers 503/429). Override with --batch-size / --concurrency
+// on a paid tier for much higher throughput.
+const BATCH_SIZE = parseInt(getArg("batch-size") || "25", 10);
+const REGENERATE = hasFlag("regenerate");   // overwrite existing descriptions
+const SYNCED_ONLY = hasFlag("synced-only"); // only products live on Shopify
+const AI_CONCURRENCY = parseInt(getArg("concurrency") || "3", 10);
 const SHOPIFY_CONCURRENCY = parseInt(getArg("shopify-concurrency") || "8", 10);
 const SHOPIFY_ONLY = hasFlag("shopify-only");
 const GEMINI_ONLY = hasFlag("gemini-only"); // kept for CLI compat, means "AI only"
@@ -53,23 +58,28 @@ const BASE = `https://${SHOP}/admin/api/${API_VER}`;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // ── AI Setup ──────────────────────────────────────────────
-// Descriptions are a text-only task, so DeepSeek (OpenAI-compatible, much
-// cheaper) is used when DEEPSEEK_API_KEY is set; otherwise fall back to OpenAI.
-// NOTE: image TAGGING stays on Gemini — DeepSeek has no vision model.
+// Provider priority: Gemini (free tier) → DeepSeek → OpenAI. All are used via the
+// OpenAI-compatible interface, so the batching/JSON logic below is identical
+// regardless of provider. Descriptions are text-only. Override the Gemini model
+// with GEMINI_MODEL, or force OpenAI/DeepSeek by unsetting GEMINI_API_KEY.
 let openai = null;
 let AI_MODEL = "gpt-4o-mini";
 
 function initOpenAI() {
-  if (process.env.DEEPSEEK_API_KEY) {
+  if (process.env.GEMINI_API_KEY) {
+    openai = new OpenAI({ apiKey: process.env.GEMINI_API_KEY, baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" });
+    AI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
+    console.log(`✅ Gemini (${AI_MODEL}) initialized — free-tier descriptions`);
+  } else if (process.env.DEEPSEEK_API_KEY) {
     openai = new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com" });
     AI_MODEL = "deepseek-chat";
-    console.log("✅ DeepSeek (deepseek-chat) initialized — cheaper text generation");
+    console.log("✅ DeepSeek (deepseek-chat) initialized");
   } else if (process.env.OPENAI_API_KEY) {
     openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     AI_MODEL = "gpt-4o-mini";
     console.log("✅ OpenAI GPT-4o-mini initialized");
   } else {
-    throw new Error("Set DEEPSEEK_API_KEY (preferred, cheaper) or OPENAI_API_KEY in .env");
+    throw new Error("Set GEMINI_API_KEY (free), or DEEPSEEK_API_KEY, or OPENAI_API_KEY in .env");
   }
 }
 
@@ -298,9 +308,15 @@ async function phase1_generateDescriptions() {
     let query = supabase
       .from("assets")
       .select("id, title, artist, quality_tier, ratio_class, subject, style, mood, era, palette, ai_tags")
-      .or("description.is.null,description.eq.")
       .order("id")
       .limit(PAGE_SIZE);
+
+    // By default only fill missing descriptions. --regenerate rewrites ALL (used
+    // to replace the old generic descriptions with the improved metadata-driven
+    // ones). --synced-only limits to products already live on Shopify (what
+    // customers see) so those improve first.
+    if (!REGENERATE) query = query.or("description.is.null,description.eq.");
+    if (SYNCED_ONLY) query = query.not("shopify_product_id", "is", null);
 
     if (lastId) {
       query = query.gt("id", lastId);
