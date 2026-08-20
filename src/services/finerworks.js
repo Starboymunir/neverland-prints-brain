@@ -368,6 +368,78 @@ class FinerWorksService {
   }
 
   /**
+   * Create ONE FinerWorks order containing MULTIPLE items — so a customer's whole
+   * order ships together (one shipping charge) instead of one shipment per print.
+   *
+   * recipient: { name, email, address1, address2?, city, state_code?, country_code, zip, phone? }
+   * items: [{ productCode, quantity, title, imageUrl, thumbnailUrl?, pixelWidth?, pixelHeight?, lineId? }]
+   * externalId: order_po for the whole order (e.g. the Shopify order id)
+   */
+  async createMultiItemOrder({ recipient, items, externalId, shippingCode }) {
+    const { first, last } = this._splitName(recipient.name);
+    const countryCode = (recipient.country_code || "US").toLowerCase();
+    const stateCode = countryCode === "us" ? (recipient.state_code || null) : null;
+    const zipPostal = (recipient.zip && String(recipient.zip).trim()) || "000000";
+
+    const order_items = (items || []).map((it, idx) => ({
+      product_order_po: `${externalId}-${it.lineId || idx}`,
+      product_qty: it.quantity || 1,
+      product_sku: it.productCode,
+      product_image: it.imageUrl
+        ? {
+            pixel_width: it.pixelWidth || 0,
+            pixel_height: it.pixelHeight || 0,
+            product_url_file: it.imageUrl,
+            product_url_thumbnail: it.thumbnailUrl || it.imageUrl,
+            library_file: null,
+          }
+        : null,
+      product_title: it.title || "Artwork Print",
+      template: null,
+      product_guid: "00000000-0000-0000-0000-000000000000",
+      custom_data_1: null, custom_data_2: null, custom_data_3: null,
+    }));
+
+    const order = {
+      order_po: externalId,
+      order_key: null,
+      recipient: {
+        first_name: first, last_name: last, company_name: null,
+        address_1: recipient.address1, address_2: recipient.address2 || null, address_3: null,
+        city: recipient.city, state_code: stateCode, province: null,
+        zip_postal_code: zipPostal, country_code: countryCode,
+        phone: recipient.phone || null, email: recipient.email || null,
+        address_order_po: externalId,
+      },
+      order_items,
+      shipping_code: shippingCode || this.defaultShippingCode,
+      ship_by_date: null, customs_tax_info: null, gift_message: null,
+      test_mode: this.resolveTestMode(),
+      webhook_order_status_url: process.env.FINERWORKS_WEBHOOK_URL || null,
+      document_url: null, acct_number_ups: null, acct_number_fedex: null,
+      custom_data_1: null, custom_data_2: null, custom_data_3: null,
+      source: "neverland-prints",
+    };
+
+    const response = await this._request("POST", "/v3/submit_orders_v2", {
+      orders: [order], validate_only: false, payment_token: this.resolvePaymentToken(), account_key: null,
+    });
+
+    const created = Array.isArray(response && response.orders) ? response.orders[0] : null;
+    const fwOrderId = (created && (created.order_id || created.order_confirmation_id)) || null;
+    const message = (response && response.status && response.status.message) || "";
+    return {
+      id: externalId,
+      fwOrderId,
+      created: !!fwOrderId,
+      paymentFailed: /payment\s*failed/i.test(message),
+      message,
+      itemCount: order_items.length,
+      response,
+    };
+  }
+
+  /**
    * Fetch the latest status of one or more FinerWorks orders.
    * @param {string|string[]} ids - FW order numbers or order_po strings.
    * Returns the raw FW response so callers can read whichever fields exist.

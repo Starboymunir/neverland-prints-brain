@@ -210,6 +210,108 @@ async function fulfillItem({ supabase, finerworks, item, address, email }) {
 }
 
 /**
+ * Resolve one order line to what FinerWorks needs (image + product code + pixels),
+ * honouring the priced size (borderless M8). Returns { productCode, imageUrl, ... }
+ * or { error }. Shared by the single- and multi-item fulfil paths.
+ */
+async function resolveItem({ supabase, item }) {
+  const imageUrl = item.driveFileId ? `https://lh3.googleusercontent.com/d/${item.driveFileId}=s0` : item.previewUrl;
+  const thumbnailUrl = item.driveFileId ? `https://lh3.googleusercontent.com/d/${item.driveFileId}=s400` : item.previewUrl;
+  if (!imageUrl) return { error: "no image URL" };
+
+  let asset = null;
+  try {
+    let q = supabase.from("assets").select("width_px,height_px,max_print_width_cm,max_print_height_cm");
+    q = item.assetId ? q.eq("id", item.assetId) : q.eq("drive_file_id", item.driveFileId);
+    const { data } = await q.single();
+    asset = data || null;
+  } catch (e) { /* ignore */ }
+
+  let productCode = null;
+  let dims = null;
+  const passed = String(item.finerworksProductCode || "").trim().toUpperCase();
+  const m = passed.match(/^(\d+M\d+M)\d+(S(\d+)X(\d+))$/);
+  if (m) {
+    productCode = m[1] + "8" + m[2]; // force borderless (M8)
+    dims = { widthCm: parseInt(m[3], 10) * 2.54, heightCm: parseInt(m[4], 10) * 2.54 };
+  } else {
+    dims = resolveDims({ size: item.size, priceTier: item.priceTier, asset });
+    if (!dims) return { error: `cannot determine print size (size="${item.size}")` };
+    dims = clampToPrintable(dims);
+    productCode = FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
+  }
+
+  let pixelWidth = asset ? asset.width_px || 0 : 0;
+  let pixelHeight = asset ? asset.height_px || 0 : 0;
+  if (!pixelWidth || !pixelHeight) {
+    pixelWidth = Math.round(dims.widthCm * 0.393700787 * 300);
+    pixelHeight = Math.round(dims.heightCm * 0.393700787 * 300);
+  }
+  return { productCode, imageUrl, thumbnailUrl, pixelWidth, pixelHeight };
+}
+
+/**
+ * Fulfil ALL line items of one customer order as a SINGLE FinerWorks order — so
+ * the whole order ships together (one shipping charge) instead of one shipment
+ * per print. `rows` are fulfillment_orders rows for the same shopify_order_id.
+ */
+async function fulfillOrder({ supabase, finerworks, rows, address, email, shippingCode }) {
+  if (!rows || !rows.length) return { ok: false, error: "no rows" };
+  if (!address) return { ok: false, error: "no shipping address" };
+  const countryCode = countryCodeFor(address);
+  if (!countryCode) return { ok: false, error: `unknown country "${address.country}"` };
+
+  const orderId = rows[0].shopify_order_id;
+  const items = [];
+  const rowByLine = {};
+  for (const row of rows) {
+    const item = {
+      orderId: row.shopify_order_id, lineItemId: row.line_item_id,
+      artworkTitle: row.artwork_title, size: row.size, priceTier: row.price_tier,
+      driveFileId: row.drive_file_id, assetId: row.asset_id, quantity: row.quantity,
+      finerworksProductCode: row.finerworks_product_code,
+    };
+    const r = await resolveItem({ supabase, item });
+    if (r.error) {
+      await supabase.from("fulfillment_orders").update({ status: "fulfillment_failed", error: r.error.slice(0, 300) })
+        .eq("shopify_order_id", row.shopify_order_id).eq("line_item_id", row.line_item_id);
+      continue;
+    }
+    items.push({ ...r, quantity: row.quantity || 1, title: row.artwork_title, lineId: row.line_item_id });
+    rowByLine[row.line_item_id] = { row, productCode: r.productCode };
+  }
+  if (!items.length) return { ok: false, error: "no fulfillable items" };
+
+  const name = address.name || `${address.first_name || ""} ${address.last_name || ""}`.trim() || "Customer";
+  let fw;
+  try {
+    fw = await finerworks.createMultiItemOrder({
+      recipient: { name, email: email || null, address1: address.address1, address2: address.address2 || "",
+        city: address.city, state_code: address.province_code || "", country_code: countryCode, zip: address.zip, phone: address.phone || null },
+      items,
+      externalId: String(orderId),
+      shippingCode,
+    });
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+
+  if (!fw.created) return { ok: false, error: `FinerWorks created no order: ${fw.message || "no order_id"}` };
+
+  // Stamp every line of the order with the SAME FinerWorks order number.
+  for (const line of Object.keys(rowByLine)) {
+    await supabase.from("fulfillment_orders").update({
+      finerworks_order_id: String(fw.fwOrderId),
+      finerworks_product_code: rowByLine[line].productCode,
+      status: "sent_to_finerworks",
+      error: null,
+    }).eq("shopify_order_id", orderId).eq("line_item_id", line);
+  }
+  console.log(`   🖨️  FinerWorks order ${fw.fwOrderId} — ${fw.itemCount} items shipped together${fw.paymentFailed ? " [UNPAID]" : ""}`);
+  return { ok: true, fwOrderId: fw.fwOrderId, itemCount: fw.itemCount, unpaid: fw.paymentFailed };
+}
+
+/**
  * Work out what WOULD be printed for a stored order line, without submitting
  * anything. Used by the approval queue so nothing is ever approved blind —
  * the exact print size and the FinerWorks cost are shown up front.
@@ -242,4 +344,4 @@ async function previewItem({ supabase, row }) {
   };
 }
 
-module.exports = { fulfillItem, previewItem, resolveDims, countryCodeFor, TIER_LONGEST_EDGE_IN };
+module.exports = { fulfillItem, fulfillOrder, previewItem, resolveDims, countryCodeFor, TIER_LONGEST_EDGE_IN };

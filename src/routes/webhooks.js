@@ -13,7 +13,7 @@ const crypto = require("crypto");
 const supabase = require("../db/supabase");
 const FinerWorksService = require("../services/finerworks");
 const ShopifyService = require("../services/shopify");
-const { fulfillItem, previewItem } = require("../services/fulfillment");
+const { fulfillItem, fulfillOrder, previewItem } = require("../services/fulfillment");
 
 const router = express.Router();
 
@@ -449,7 +449,7 @@ router.post("/approve-order", async (req, res) => {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
 
-  const { order_name, shopify_order_id, line_item_id } = req.body || {};
+  const { order_name, shopify_order_id, line_item_id, shipping_code } = req.body || {};
   if (!order_name && !shopify_order_id) {
     return res.status(400).json({ error: "order_name or shopify_order_id is required" });
   }
@@ -463,37 +463,29 @@ router.post("/approve-order", async (req, res) => {
     if (error) throw new Error(error.message);
     if (!rows || rows.length === 0) return res.status(404).json({ error: "Order not found" });
 
-    const results = [];
+    // Group all line items of the SAME Shopify order into ONE FinerWorks order so
+    // the whole order ships together (one shipping charge), not one shipment per print.
+    const byOrder = {};
     for (const row of rows) {
-      if (row.status === "sent_to_finerworks" && row.finerworks_order_id) {
-        results.push({
-          artwork: row.artwork_title,
-          skipped: "already sent to FinerWorks",
-          finerworks_order_id: row.finerworks_order_id,
-        });
-        continue;
-      }
-
-      const result = await fulfillItem({
-        supabase,
-        finerworks,
-        item: {
-          orderId: row.shopify_order_id,
-          lineItemId: row.line_item_id,
-          artworkTitle: row.artwork_title,
-          size: row.size,
-          priceTier: row.price_tier,
-          driveFileId: row.drive_file_id,
-          assetId: row.asset_id,
-          quantity: row.quantity,
-        },
-        address: row.shipping_address,
-        email: row.customer_email,
-      });
-
-      results.push({ artwork: row.artwork_title, ...result });
+      // Skip items already sent (don't re-submit / double-charge).
+      if (row.status === "sent_to_finerworks" && row.finerworks_order_id) continue;
+      (byOrder[row.shopify_order_id] = byOrder[row.shopify_order_id] || []).push(row);
     }
 
+    const results = [];
+    for (const [oid, orderRows] of Object.entries(byOrder)) {
+      const r = await fulfillOrder({
+        supabase,
+        finerworks,
+        rows: orderRows,
+        address: orderRows[0].shipping_address,
+        email: orderRows[0].customer_email,
+        shippingCode: shipping_code || undefined, // Standard by default; pass EX/ON for expedited
+      });
+      results.push({ shopify_order_id: oid, items: orderRows.length, ...r });
+    }
+
+    if (!results.length) return res.json({ approved: order_name || shopify_order_id, results: [{ skipped: "all items already sent" }] });
     res.json({ approved: order_name || shopify_order_id, results });
   } catch (err) {
     res.status(500).json({ error: err.message });
