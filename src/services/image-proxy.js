@@ -35,12 +35,23 @@ class ImageProxy {
   }
 
   async init() {
+    const scopes = ["https://www.googleapis.com/auth/drive.readonly"];
+    // Prefer the JSON env var (Render/cloud), fall back to the key file (local) —
+    // mirrors src/services/drive.js so the health check + Drive fallback reflect reality.
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+      try {
+        const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+        const auth = new google.auth.GoogleAuth({ credentials, scopes });
+        this.drive = google.drive({ version: "v3", auth });
+        console.log("✅ Image Proxy initialized (Drive API via env-var key)");
+        return this;
+      } catch (e) {
+        console.warn("⚠️  GOOGLE_SERVICE_ACCOUNT_KEY present but invalid JSON:", e.message);
+      }
+    }
     const keyPath = path.resolve(config.google.serviceAccountKeyPath);
     if (fs.existsSync(keyPath)) {
-      const auth = new google.auth.GoogleAuth({
-        keyFile: keyPath,
-        scopes: ["https://www.googleapis.com/auth/drive.readonly"],
-      });
+      const auth = new google.auth.GoogleAuth({ keyFile: keyPath, scopes });
       this.drive = google.drive({ version: "v3", auth });
       console.log("✅ Image Proxy initialized (with Drive API fallback)");
     } else {
