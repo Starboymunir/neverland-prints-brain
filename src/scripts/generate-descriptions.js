@@ -83,6 +83,22 @@ function initOpenAI() {
   }
 }
 
+// Detect an OLD/generic description so --regenerate is self-resumable: a newly
+// written description never contains these cliches or template phrases, so once
+// rewritten it's skipped on the next run. Empty/null also counts as "old".
+const OLD_SIGNATURES = [
+  "mesmerizing", "interplay of light", "evokes", "captivating", "essence",
+  "meditation on", "dignified", "sublime", "ethereal", "timeless", "masterful",
+  "invites contemplation", "sense of", "striking representation", "rich narrative",
+  "warm earth tones", "printed on premium", "created during", "this piece evokes",
+  "an other ", "harmonious", "grandeur",
+];
+function looksOld(desc) {
+  if (!desc || !desc.trim()) return true;
+  const d = desc.toLowerCase();
+  return OLD_SIGNATURES.some((s) => d.includes(s));
+}
+
 // ── Batch Description Generator ───────────────────────────
 const SYSTEM_PROMPT = `You write short, vivid product descriptions for "Neverland Prints", a fine-art print store. Each artwork comes with real details (subject, style, mood, era, colors, tags) pulled from the actual image — USE them so every description is specific to THAT piece, never generic filler.
 
@@ -307,14 +323,15 @@ async function phase1_generateDescriptions() {
   while (true) {
     let query = supabase
       .from("assets")
-      .select("id, title, artist, quality_tier, ratio_class, subject, style, mood, era, palette, ai_tags")
+      .select("id, title, artist, quality_tier, ratio_class, subject, style, mood, era, palette, ai_tags, description")
       .order("id")
       .limit(PAGE_SIZE);
 
-    // By default only fill missing descriptions. --regenerate rewrites ALL (used
-    // to replace the old generic descriptions with the improved metadata-driven
-    // ones). --synced-only limits to products already live on Shopify (what
-    // customers see) so those improve first.
+    // Default: only fill missing descriptions. --regenerate replaces the OLD
+    // generic descriptions — but self-resumably: a freshly-written description
+    // never contains the banned cliches, so we skip ones that already "look new"
+    // and only rewrite the old-signature ones. That makes nightly chunked runs
+    // advance instead of redoing the same rows. --synced-only = live products first.
     if (!REGENERATE) query = query.or("description.is.null,description.eq.");
     if (SYNCED_ONLY) query = query.not("shopify_product_id", "is", null);
 
@@ -327,8 +344,9 @@ async function phase1_generateDescriptions() {
     if (error) throw error;
     if (!data || data.length === 0) break;
 
-    allAssets.push(...data);
     lastId = data[data.length - 1].id;
+    const page = REGENERATE ? data.filter((a) => looksOld(a.description)) : data;
+    allAssets.push(...page);
 
     if (allAssets.length % 10000 === 0) {
       console.log(`   ... fetched ${allAssets.length} so far`);
