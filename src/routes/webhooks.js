@@ -390,7 +390,7 @@ router.get("/pending-orders", async (req, res) => {
     const { data: rows, error } = await supabase
       .from("fulfillment_orders")
       .select("*")
-      .in("status", ["awaiting_approval", "pending", "fulfillment_failed"])
+      .in("status", ["awaiting_approval", "pending", "paid", "processing", "fulfillment_failed"])
       .order("created_at", { ascending: false })
       .limit(100);
     if (error) throw new Error(error.message);
