@@ -114,92 +114,138 @@ async function load(){
   }
 
   const data = await res.json();
-  const orders = data.orders || [];
-  count.textContent = orders.length + ' order' + (orders.length === 1 ? '' : 's') + ' waiting for approval';
+  const items = data.orders || [];
 
-  if (!orders.length){
+  // Group line items by their Shopify order so each customer order = ONE card
+  // (it ships as ONE FinerWorks order — one shipping charge for the whole order).
+  const groups = {};
+  items.forEach(it => { (groups[it.order_name] = groups[it.order_name] || []).push(it); });
+  const orderNames = Object.keys(groups);
+
+  count.textContent = orderNames.length + ' order' + (orderNames.length === 1 ? '' : 's') +
+                      ' waiting (' + items.length + ' prints)';
+
+  if (!orderNames.length){
     list.innerHTML = '<div class="empty">Nothing waiting. New orders will appear here.</div>';
     return;
   }
 
-  list.innerHTML = orders.map(render).join('');
+  list.innerHTML = orderNames.map(name => renderGroup(name, groups[name])).join('');
 }
 
-function render(o){
-  const a = o.shipping_address || {};
+function slug(s){ return String(s).replace(/[^A-Za-z0-9]/g,''); }
+
+function renderGroup(orderName, items){
+  const a = items[0].shipping_address || {};
   const addr = [a.name, a.address1, a.address2, [a.city, a.province].filter(Boolean).join(', '),
                 [a.zip, a.country].filter(Boolean).join(' ')].filter(Boolean).join('\n');
+  const id = slug(orderName);
 
-  const cost = o.finerworks_cost;
-  const sold = o.sold_for ? Number(o.sold_for) : null;
-  let margin = '<span class="f-val">—</span>';
-  if (cost != null && sold != null){
-    const diff = sold - cost;
-    margin = '<span class="' + (diff >= 0 ? 'profit' : 'loss') + '">' +
-             (diff >= 0 ? '+' : '') + '$' + diff.toFixed(2) + '</span>';
-  }
-
-  const badge = o.status === 'fulfillment_failed'
-    ? '<span class="pill fail">failed</span>'
-    : '<span class="pill wait">awaiting approval</span>';
-
-  const problem = o.preview_error || o.error;
+  let printTotal = 0, soldTotal = 0, anyErr = false;
+  const rows = items.map(o => {
+    const cost = Number(o.finerworks_cost) || 0; printTotal += cost;
+    soldTotal += Number(o.sold_for) || 0;
+    if (o.preview_error) anyErr = true;
+    return `<tr>
+      <td>${esc(o.artwork_title || 'Untitled')}</td>
+      <td>${esc(o.tier || '')}${o.print_size ? ' &middot; ' + esc(o.print_size) : ''}</td>
+      <td style="text-align:right">${o.quantity || 1}</td>
+      <td style="text-align:right" class="cost">${money(o.finerworks_cost)}</td>
+      ${o.preview_error ? `<td class="loss">⚠️ ${esc(o.preview_error)}</td>` : '<td></td>'}
+    </tr>`;
+  }).join('');
 
   return `
-  <div class="card" id="card-${o.line_item_id}">
+  <div class="card" id="card-${id}">
     <div class="row">
       <div>
-        <div class="title">${esc(o.artwork_title || 'Untitled')}</div>
-        <div class="meta">${esc(o.order_name || '')} &middot; ${esc(o.artist || 'Unknown')} &middot; ${esc(o.customer_email || '')}</div>
+        <div class="title">${esc(orderName)} — ${items.length} print${items.length===1?'':'s'}</div>
+        <div class="meta">${esc(items[0].customer_email || '')}</div>
       </div>
-      <div>${badge}</div>
+      <div><span class="pill wait">awaiting approval</span></div>
     </div>
 
-    <div class="grid">
-      <div><div class="f-label">Tier</div><div class="f-val">${esc(o.tier || '—')}</div></div>
-      <div><div class="f-label">Will print</div><div class="f-val">${esc(o.print_size || '—')}</div></div>
-      <div><div class="f-label">Qty</div><div class="f-val">${o.quantity || 1}</div></div>
-      <div><div class="f-label">You pay FinerWorks</div><div class="f-val cost">${money(cost)}</div></div>
-      <div><div class="f-label">Customer paid</div><div class="f-val">${money(sold)}</div></div>
-      <div><div class="f-label">Margin</div><div class="f-val">${margin}</div></div>
-    </div>
+    <table style="width:100%;border-collapse:collapse;margin:12px 0;font-size:13px">
+      <thead><tr style="color:var(--muted);text-align:left">
+        <th>Artwork</th><th>Size</th><th style="text-align:right">Qty</th><th style="text-align:right">Print cost</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
 
     <div class="addr">${esc(addr)}</div>
-    ${problem ? `<div class="result err">⚠️ ${esc(problem)}</div>` : ''}
+
+    <div class="grid" style="margin-top:14px">
+      <div>
+        <div class="f-label">Shipping method</div>
+        <select id="ship-${id}" class="f-val" style="background:#0c0e12;border:1px solid var(--line);color:var(--text);padding:8px;border-radius:6px;width:100%">
+          <option value="SD">Standard</option>
+          <option value="FT">Economy (cheapest)</option>
+          <option value="EX">2-Day Air (expedited)</option>
+          <option value="ON">1-Day Air (overnight)</option>
+        </select>
+      </div>
+      <div><div class="f-label">Print total</div><div class="f-val cost">${money(printTotal)}</div></div>
+      <div><div class="f-label">Shipping</div><div class="f-val cost" id="shipcost-${id}">— <button class="ghost" style="font-size:11px;padding:4px 8px" onclick="quote('${esc(orderName)}','${id}')">get quote</button></div></div>
+      <div><div class="f-label">You pay FinerWorks (total)</div><div class="f-val cost" id="total-${id}" data-print="${printTotal.toFixed(2)}">${money(printTotal)} + shipping</div></div>
+      <div><div class="f-label">Customer paid</div><div class="f-val">${money(soldTotal)}</div></div>
+    </div>
 
     <div style="margin-top:14px">
-      <button onclick="approve('${esc(o.order_name)}', ${o.line_item_id})"
-              ${o.preview_error ? 'disabled' : ''}>
-        Approve &amp; send to FinerWorks
-      </button>
-      <div class="note">Sends it to FinerWorks as unpaid. You still have to pay it there before it prints.</div>
+      <button onclick="approveOrder('${esc(orderName)}','${id}')" ${anyErr ? '' : ''}>Approve &amp; send to FinerWorks</button>
+      <div class="note">Sends the WHOLE order to FinerWorks as ONE unpaid shipment. You still pay it in FinerWorks before it prints.</div>
     </div>
-    <div id="res-${o.line_item_id}"></div>
+    <div id="res-${id}"></div>
   </div>`;
 }
 
-async function approve(orderName, lineItemId){
-  const card = document.getElementById('card-' + lineItemId);
-  const btn = card.querySelector('button');
-  const out = document.getElementById('res-' + lineItemId);
-  btn.disabled = true; btn.textContent = 'Sending…';
+// Live shipping quote for the whole order — fills the dropdown prices + total.
+async function quote(orderName, id){
+  const box = document.getElementById('shipcost-' + id);
+  box.textContent = 'quoting…';
+  try {
+    const res = await fetch(API + '/webhooks/quote-shipping' + qs(), {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ order_name: orderName })
+    });
+    const data = await res.json();
+    const opts = data.options || [];
+    if (!opts.length){ box.textContent = 'no quote'; return; }
+    const sel = document.getElementById('ship-' + id);
+    const rateByCode = {};
+    opts.forEach(o => { rateByCode[o.code] = o.rate; });
+    // Relabel dropdown options with live prices
+    Array.from(sel.options).forEach(opt => {
+      const r = rateByCode[opt.value];
+      opt.dataset.rate = r != null ? r : '';
+      opt.textContent = opt.textContent.replace(/ — \$.*$/, '') + (r != null ? ' — $' + r.toFixed(2) : '');
+    });
+    const upd = () => {
+      const rate = parseFloat(sel.options[sel.selectedIndex].dataset.rate || '0');
+      box.textContent = rate ? '$' + rate.toFixed(2) : '—';
+      const t = document.getElementById('total-' + id);
+      const print = parseFloat(t.dataset.print || '0');
+      t.textContent = '$' + (print + rate).toFixed(2);
+    };
+    sel.onchange = upd; upd();
+  } catch(e){ box.textContent = 'quote failed'; }
+}
 
+async function approveOrder(orderName, id){
+  const card = document.getElementById('card-' + id);
+  const btn = card.querySelector('div[style*="margin-top:14px"] button');
+  const out = document.getElementById('res-' + id);
+  const shipCode = (document.getElementById('ship-' + id) || {}).value || 'SD';
+  btn.disabled = true; btn.textContent = 'Sending…';
   try {
     const res = await fetch(API + '/webhooks/approve-order' + qs(), {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ order_name: orderName, line_item_id: lineItemId })
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ order_name: orderName, shipping_code: shipCode })
     });
     const data = await res.json();
     const r = (data.results || [])[0] || {};
-
     if (r.ok){
-      out.innerHTML = '<div class="result ok">✅ Sent. FinerWorks order <strong>#' + r.fwOrderId +
-        '</strong> — it is <strong>UNPAID</strong>. Open FinerWorks and pay it to start printing.</div>';
+      out.innerHTML = '<div class="result ok">✅ Sent as ONE shipment. FinerWorks order <strong>#' + r.fwOrderId +
+        '</strong> (' + (r.itemCount||'') + ' prints) — <strong>UNPAID</strong>. Open FinerWorks and pay it to start printing.</div>';
       btn.textContent = 'Sent ✓';
-    } else if (r.skipped){
-      out.innerHTML = '<div class="result ok">Already sent (FinerWorks #' + r.finerworks_order_id + ')</div>';
-      btn.textContent = 'Already sent';
     } else {
       out.innerHTML = '<div class="result err">❌ ' + esc(r.error || data.error || 'Failed') + '</div>';
       btn.disabled = false; btn.textContent = 'Retry';

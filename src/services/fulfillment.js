@@ -344,4 +344,4 @@ async function previewItem({ supabase, row }) {
   };
 }
 
-module.exports = { fulfillItem, fulfillOrder, previewItem, resolveDims, countryCodeFor, TIER_LONGEST_EDGE_IN };
+module.exports = { fulfillItem, fulfillOrder, resolveItem, previewItem, resolveDims, countryCodeFor, TIER_LONGEST_EDGE_IN };

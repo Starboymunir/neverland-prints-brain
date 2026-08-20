@@ -13,7 +13,7 @@ const crypto = require("crypto");
 const supabase = require("../db/supabase");
 const FinerWorksService = require("../services/finerworks");
 const ShopifyService = require("../services/shopify");
-const { fulfillItem, fulfillOrder, previewItem } = require("../services/fulfillment");
+const { fulfillItem, fulfillOrder, resolveItem, previewItem } = require("../services/fulfillment");
 
 const router = express.Router();
 
@@ -445,6 +445,60 @@ router.get("/pending-orders", async (req, res) => {
  * production starts only once it is paid in FinerWorks, so approving still costs
  * nothing by itself.
  */
+/**
+ * POST /webhooks/quote-shipping?key=...  Body: { order_name } or { shopify_order_id }
+ * Returns live FinerWorks shipping options (economy/standard/2-day/overnight) with
+ * costs for the WHOLE order — a quote only, nothing is placed or charged.
+ */
+router.post("/quote-shipping", async (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+
+  const { order_name, shopify_order_id } = req.body || {};
+  try {
+    let q = supabase.from("fulfillment_orders").select("*");
+    q = order_name ? q.eq("order_name", order_name) : q.eq("shopify_order_id", shopify_order_id);
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+    if (!rows || !rows.length) return res.status(404).json({ error: "Order not found" });
+
+    const address = rows[0].shipping_address || {};
+    const items = [];
+    for (const row of rows) {
+      const r = await resolveItem({
+        supabase,
+        item: {
+          size: row.size, priceTier: row.price_tier, driveFileId: row.drive_file_id,
+          assetId: row.asset_id, finerworksProductCode: row.finerworks_product_code, artworkTitle: row.artwork_title,
+        },
+      });
+      if (r.productCode) {
+        items.push({
+          product_sku: r.productCode, product_qty: row.quantity || 1, product_title: (row.artwork_title || "Print").slice(0, 40),
+          pixel_width: r.pixelWidth, pixel_height: r.pixelHeight, product_url_file: r.imageUrl, product_url_thumbnail: r.thumbnailUrl,
+        });
+      }
+    }
+    if (!items.length) return res.status(400).json({ error: "No priceable items" });
+
+    const quote = await finerworks.listShippingOptions({
+      recipient: {
+        first_name: "Q", last_name: "uote", address1: address.address1 || "1 Main St", city: address.city || "City",
+        state_code: address.province_code || null, zip: address.zip, country_code: address.country_code || "US",
+      },
+      items,
+    });
+    const options = ((quote.orders || [])[0] || {}).options || [];
+    res.json({
+      order: order_name || shopify_order_id,
+      options: options.map((o) => ({ code: o.shipping_code, method: o.shipping_method, rate: o.rate }))
+        .sort((a, b) => a.rate - b.rate),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post("/approve-order", async (req, res) => {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
