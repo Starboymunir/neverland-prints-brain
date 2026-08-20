@@ -945,7 +945,7 @@
             sizeList.push({
               tier,
               label: PRICE_TIERS[tier].label,
-              size: PRICE_TIERS[tier].label,
+              size: asset.priceMap[key].size || PRICE_TIERS[tier].label, // real cm dims
             });
           }
         }
@@ -981,10 +981,12 @@
           options.innerHTML = sizeList.map((s, i) => {
             const isSelected = i === defaultIdx ? ' is-selected' : '';
             const price = getPrice(s.tier, false);
+            // Tier name (easy for customers) + real dimensions when we have them.
+            const dims = (s.size && /\d/.test(s.size) && s.size !== s.label) ? ' · ' + s.size : '';
             return `<button type="button" class="variant-option${isSelected}"
                       data-variant-idx="${i}" data-tier="${s.tier}"
-                      data-size="${s.size}">
-                      ${escHtml(s.label)} — ${formatPrice(price)}
+                      data-size="${escHtml(s.size)}">
+                      ${escHtml(s.label)}${dims} — ${formatPrice(price)}
                     </button>`;
           }).join('');
 
@@ -1860,6 +1862,9 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     console.log('[NP-DEBUG] DOMContentLoaded fired');
+    // Bind the accordion globally (guarded, binds once) so BOTH /pages/art and
+    // /products/ share one handler — no duplicate handlers, no erratic toggling.
+    try { initAccordion(); } catch (e) {}
     initCatalogBrowse();
     initArtDetail();
     initSearchPage();

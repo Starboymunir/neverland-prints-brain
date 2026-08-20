@@ -76,6 +76,7 @@
         <div class="product-details__price">
           <span class="product-details__price-current" id="product-price">$33.99</span>
           <span class="product-details__price-compare" id="product-compare-price">$44.99</span>
+          <span class="product-details__price-badge" id="product-discount-badge" style="display:none;background:#e8462c;color:#fff;font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:999px;margin-left:8px;vertical-align:middle;letter-spacing:.02em;"></span>
         </div>
 
         <!-- Size Selector (skeleton pricing) -->
@@ -110,6 +111,9 @@
           {%- if product.metafields.neverland.drive_file_id != blank -%}
             <input type="hidden" name="properties[_drive_file_id]" value="{{ product.metafields.neverland.drive_file_id }}">
           {%- endif -%}
+          {%- comment -%} Set at runtime from the dynamic price map so fulfilment prints the size that was priced. {%- endcomment -%}
+          <input type="hidden" name="properties[_finerworks_product_code]" id="prop-fw-code" value="">
+          <input type="hidden" name="properties[_price_tier]" id="prop-price-tier" value="small">
           <button type="submit" class="add-to-cart" id="add-to-cart-btn">
             Add to Cart — <span id="cart-price">$33.99</span>
           </button>
@@ -279,6 +283,16 @@
   var currentFrameColor = 'none';
   var maxPrintRaw = '{{ product.metafields.neverland.max_print_cm | default: "" }}';
 
+  // Dynamic (area-based) pricing — the SAME per-artwork prices the cards show.
+  // Fetched from the backend by Drive id; falls back to the flat skeleton above
+  // if unavailable, so the buy button always works.
+  var DRIVE_ID = '{{ product.metafields.neverland.drive_file_id }}';
+  var API_BASE = 'https://neverland-prints-brain-xvuy.onrender.com';
+
+  // "Was" price for the sale strike-through: a consistent ~23% markup over the
+  // real price, charm-rounded to .99.
+  function computeWas(price) { return Math.max(price + 1, Math.round(price * 1.3) - 0.01); }
+
   // ── Clean title: strip trailing 4-digit year ──
   var titleEl = document.getElementById('product-title');
   if (titleEl) {
@@ -385,21 +399,88 @@
   // ── Price update ──
   function updatePrice() {
     var tier = VARIANTS[currentTier];
+    if (!tier) return;
     var isFramed = currentFrame === 'framed';
-    var price = isFramed ? tier.compare : tier.price;
+    var price = isFramed ? (tier.priceFramed != null ? tier.priceFramed : tier.price) : tier.price;
     var variantId = isFramed ? tier.framed : tier.unframed;
 
     document.getElementById('product-price').textContent = '$' + price.toFixed(2);
     document.getElementById('cart-price').textContent = '$' + price.toFixed(2);
     document.getElementById('variant-id').value = variantId;
 
-    // No fake strike-through — show only the real price for the selected size + frame.
+    // Sale strike-through + discount badge: a consistent "was" price above the real price.
+    var was = computeWas(price);
     var compareEl = document.getElementById('product-compare-price');
-    if (compareEl) compareEl.style.display = 'none';
+    if (compareEl) { compareEl.textContent = '$' + was.toFixed(2); compareEl.style.display = ''; }
+    var badge = document.getElementById('product-discount-badge');
+    if (badge) {
+      var pct = Math.round((1 - price / was) * 100);
+      badge.textContent = '-' + pct + '%';
+      badge.style.display = pct > 0 ? '' : 'none';
+    }
 
-    // Update line item properties
-    document.getElementById('prop-size').value = tier.label;
+    // Line item properties. Size = tier name + real cm dimensions (clear on the
+    // order + email), and the FinerWorks product code so fulfilment prints exactly
+    // what was priced.
+    var tierNameMap = { small: 'Small', medium: 'Medium', large: 'Large', extra_large: 'Extra Large' };
+    var sizeLabel = tierNameMap[currentTier] || tier.label || currentTier;
+    document.getElementById('prop-size').value = tier.size ? (sizeLabel + ' (' + tier.size + ')') : sizeLabel;
     document.getElementById('prop-frame').value = isFramed ? 'Framed' : 'Unframed';
+    var codeEl = document.getElementById('prop-fw-code');
+    if (codeEl) codeEl.value = tier.productCode || '';
+    var tierEl = document.getElementById('prop-price-tier');
+    if (tierEl) tierEl.value = currentTier;
+  }
+
+  // Pull the per-artwork area-based prices (same source as the cards) and apply
+  // them to the size buttons + VARIANTS. Falls back silently to the flat skeleton.
+  function applyDynamicPricing() {
+    if (!DRIVE_ID) return;
+    fetch(API_BASE + '/api/storefront/asset/' + encodeURIComponent(DRIVE_ID))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (a) {
+        if (!a || !a.dynamicPricing || !a.priceMap) return; // keep flat fallback
+        var m = a.priceMap;
+        var firstTier = null;
+        ['small', 'medium', 'large', 'extra_large'].forEach(function (t) {
+          var uf = m[t + '_unframed'], fr = m[t + '_framed'];
+          var btn = document.querySelector('#size-options .variant-option[data-tier="' + t + '"]');
+          if (!uf || !uf.variantId) {
+            // Tier de-duplicated (clamped to same size as a smaller tier) — hide it.
+            if (btn) btn.style.display = 'none';
+            return;
+          }
+          if (!firstTier) firstTier = t;
+          VARIANTS[t] = {
+            unframed: uf.variantId,
+            framed: fr && fr.variantId ? fr.variantId : uf.variantId,
+            price: parseFloat(uf.price),
+            priceFramed: fr ? parseFloat(fr.price) : parseFloat(uf.price),
+            label: VARIANTS[t] ? VARIANTS[t].label : t,
+            size: uf.size,
+            productCode: uf.productCode
+          };
+          if (btn) {
+            btn.style.display = '';
+            btn.dataset.variantId = uf.variantId;
+            btn.dataset.price = uf.price;
+            // Keep the tier NAME (easier for customers) + the real dimensions + price,
+            // e.g. "Large · 48 × 74 cm — $209.99".
+            var tierName = { small: 'Small', medium: 'Medium', large: 'Large', extra_large: 'Extra Large' }[t] || t;
+            var dims = uf.size ? ' · ' + uf.size : '';
+            btn.textContent = tierName + dims + ' — $' + parseFloat(uf.price).toFixed(2);
+          }
+        });
+        // If the currently-selected tier got hidden, fall back to the first available.
+        if (firstTier && !m[currentTier + '_unframed']) {
+          currentTier = firstTier;
+          document.querySelectorAll('#size-options .variant-option').forEach(function (b) { b.classList.remove('is-selected'); });
+          var sel = document.querySelector('#size-options .variant-option[data-tier="' + firstTier + '"]');
+          if (sel) sel.classList.add('is-selected');
+        }
+        updatePrice();
+      })
+      .catch(function () { /* keep flat fallback so the buy button always works */ });
   }
 
   // ── Size selector ──
@@ -466,20 +547,9 @@
     });
   });
 
-  // ── Accordion (event delegation) ──
-  // Delegated off document so it works no matter when the section renders and
-  // can't be silently killed by an earlier script error or a theme-app re-render
-  // (the direct-binding version sometimes didn't fire in the live storefront).
-  if (!window.__npAccordionBound) {
-    window.__npAccordionBound = true;
-    document.addEventListener('click', function(e) {
-      var trigger = e.target.closest('.product-accordion__trigger, .pp-accordion__trigger');
-      if (!trigger) return;
-      var content = trigger.nextElementSibling;
-      var isOpen = trigger.classList.toggle('is-open');
-      if (content) content.classList.toggle('is-open', isOpen);
-    });
-  }
+  // ── Accordion ──
+  // Handled globally by neverland-catalog.js (one shared handler for both
+  // accordion types) — no local handler here, so there's no double-fire.
 
   // ── Add to cart feedback ──
   var cartForm = document.getElementById('product-cart-form');
@@ -491,9 +561,11 @@
     });
   }
 
-  // Initial price + room dimensions
+  // Initial price + room dimensions (flat skeleton), then upgrade to per-artwork
+  // area-based pricing to match the cards.
   updatePrice();
   updateRoomView();
+  applyDynamicPricing();
 
   // ── Image Protection ──
   document.addEventListener('contextmenu', function(e) {
