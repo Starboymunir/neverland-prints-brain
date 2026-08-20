@@ -63,6 +63,24 @@ function startCronJobs() {
     );
   });
 
+  // ── Nightly AI descriptions at 4:30 AM (free Gemini) ──
+  // Fills any product missing a description (resumable — only touches null/empty),
+  // so newly-ingested art gets described automatically. Regenerating the OLD
+  // generic descriptions is a separate one-off pass (see generate-descriptions
+  // --regenerate); this keeps the catalog described going forward for $0.
+  cron.schedule("30 4 * * *", () => {
+    console.log(`\n⏰ [${new Date().toISOString()}] Running nightly AI descriptions...`);
+    exec(
+      `node ${path.join(ROOT, "src/scripts/generate-descriptions.js")} --gemini-only`,
+      { cwd: ROOT, timeout: 3 * 60 * 60 * 1000 }, // up to 3h (free tier is slow)
+      (error, stdout, stderr) => {
+        if (error) console.error("❌ Descriptions failed:", error.message);
+        if (stdout) console.log(stdout.slice(-1500));
+        console.log(`⏰ [${new Date().toISOString()}] Descriptions finished.`);
+      }
+    );
+  });
+
   // Health check log every 6 hours
   cron.schedule("0 */6 * * *", async () => {
     console.log(`\n⏰ [${new Date().toISOString()}] Health check...`);
