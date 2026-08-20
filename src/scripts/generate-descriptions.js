@@ -74,18 +74,19 @@ function initOpenAI() {
 }
 
 // ── Batch Description Generator ───────────────────────────
-const SYSTEM_PROMPT = `You are a world-class art curator writing product descriptions for "Neverland Prints", a premium fine art print store.
+const SYSTEM_PROMPT = `You write short, vivid product descriptions for "Neverland Prints", a fine-art print store. Each artwork comes with real details (subject, style, mood, era, colors, tags) pulled from the actual image — USE them so every description is specific to THAT piece, never generic filler.
 
 RULES:
-- Write EXACTLY 1-2 sentences per artwork (STRICT MAX 180 characters per description)
-- Capture the artistic essence, visual mood, and period/style
-- Sound refined, gallery-worthy, and enticing to art buyers
-- Do NOT mention printing, paper, framing, or shipping — only the artwork itself
-- Do NOT repeat the artwork title or artist name in the description
-- If you don't know the artwork, write something evocative based on the title and artist's known style
+- ONE sentence, 90–150 characters. Concrete and specific.
+- Lead with what is actually depicted (the scene/subject), then one feeling or a color/light detail.
+- Write for someone choosing art for their wall — help them picture it in a room.
+- Every description must be distinct — none should be swappable with another.
+- Do NOT mention printing, paper, frames, shipping, the title, or the artist's name.
+- If details are sparse, infer concretely from the title/subject — stay specific, never vague.
+- BANNED (never use these empty phrases): "mesmerizing", "interplay of light and color", "evokes", "captivating", "essence", "meditation on", "dignified", "sublime", "ethereal", "timeless", "invites contemplation", "sense of", "masterful", "striking representation", "rich narrative", "warm earth tones".
 
-Return ONLY a JSON object with an "items" array. Each element: {"i": <1-based index>, "d": "<description under 180 chars>"}
-Example: {"items": [{"i": 1, "d": "A hauntingly beautiful meditation on solitude, rendered in luminous watercolors that shimmer with quiet emotion."}]}`;
+Return ONLY JSON: {"items":[{"i":<1-based index>,"d":"<one sentence>"}]}
+Example: {"items":[{"i":1,"d":"Snow blankets a quiet monastery courtyard at dusk, its stone walls glowing faint blue as a lone procession files through the gate."}]}`;
 
 /**
  * Generate descriptions for a batch of products via GPT-4o-mini.
@@ -94,7 +95,17 @@ Example: {"items": [{"i": 1, "d": "A hauntingly beautiful meditation on solitude
  */
 async function generateBatch(batch, retries = 3) {
   const artworkList = batch
-    .map((b, i) => `${i + 1}. "${b.title}" by ${b.artist}`)
+    .map((b, i) => {
+      const bits = [];
+      if (b.subject) bits.push(`subject: ${b.subject}`);
+      if (b.style) bits.push(`style: ${b.style}`);
+      if (b.mood) bits.push(`mood: ${b.mood}`);
+      if (b.era) bits.push(`era: ${b.era}`);
+      if (b.palette) bits.push(`colors: ${Array.isArray(b.palette) ? b.palette.join(", ") : b.palette}`);
+      if (Array.isArray(b.tags) && b.tags.length) bits.push(`tags: ${b.tags.slice(0, 6).join(", ")}`);
+      const detail = bits.length ? `  [${bits.join("; ")}]` : "";
+      return `${i + 1}. "${b.title}" by ${b.artist}${detail}`;
+    })
     .join("\n");
 
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -286,7 +297,7 @@ async function phase1_generateDescriptions() {
   while (true) {
     let query = supabase
       .from("assets")
-      .select("id, title, artist, quality_tier, ratio_class")
+      .select("id, title, artist, quality_tier, ratio_class, subject, style, mood, era, palette, ai_tags")
       .or("description.is.null,description.eq.")
       .order("id")
       .limit(PAGE_SIZE);
@@ -359,6 +370,12 @@ async function phase1_generateDescriptions() {
       const batchData = batch.map((asset) => ({
         title: asset.title || "Untitled",
         artist: asset.artist || "Unknown Artist",
+        subject: asset.subject,
+        style: asset.style,
+        mood: asset.mood,
+        era: asset.era,
+        palette: asset.palette,
+        tags: asset.ai_tags,
       }));
 
       // Generate descriptions

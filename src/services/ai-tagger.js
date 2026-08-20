@@ -41,7 +41,9 @@ class AiTagger {
       throw new Error("GEMINI_API_KEY is not set in .env");
     }
     this.genAI = new GoogleGenerativeAI(config.gemini.apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    // "gemini-2.0-flash" was retired and now 404s (silently breaking tagging).
+    // "gemini-flash-latest" tracks the current free-tier flash model.
+    this.model = this.genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-flash-latest" });
     console.log("✅ Gemini AI Tagger initialized");
     return this;
   }
