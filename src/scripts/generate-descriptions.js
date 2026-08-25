@@ -145,6 +145,9 @@ async function generateBatch(batch, retries = 3) {
         temperature: 0.7,
         max_tokens: 4096,
         response_format: { type: "json_object" },
+        // Descriptions don't need reasoning — disabling Gemini's "thinking"
+        // tokens cuts cost ~7x (542 -> 73 tokens/call) with no quality loss.
+        ...(AI_MODEL.startsWith("gemini") ? { reasoning_effort: "none" } : {}),
       });
 
       const text = response.choices[0]?.message?.content?.trim() || "";
