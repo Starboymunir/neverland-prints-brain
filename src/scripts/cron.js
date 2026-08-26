@@ -71,8 +71,10 @@ function startCronJobs() {
   cron.schedule("30 4 * * *", () => {
     console.log(`\n⏰ [${new Date().toISOString()}] Running nightly AI descriptions (regenerate)...`);
     exec(
-      `node ${path.join(ROOT, "src/scripts/generate-descriptions.js")} --gemini-only --regenerate --synced-only`,
-      { cwd: ROOT, timeout: 3 * 60 * 60 * 1000 }, // up to 3h (free tier is slow)
+      // --limit caps memory on Render's free tier; concurrency 4 stays under the
+      // new paid account's rate limits. Resumable, so nightly runs finish the catalog.
+      `node ${path.join(ROOT, "src/scripts/generate-descriptions.js")} --gemini-only --regenerate --synced-only --concurrency=4 --batch-size=20 --limit=25000`,
+      { cwd: ROOT, timeout: 3 * 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 },
       (error, stdout, stderr) => {
         if (error) console.error("❌ Descriptions failed:", error.message);
         if (stdout) console.log(stdout.slice(-1500));

@@ -10,6 +10,8 @@
 
 const express = require("express");
 const crypto = require("crypto");
+const path = require("path");
+const { exec } = require("child_process");
 const supabase = require("../db/supabase");
 const FinerWorksService = require("../services/finerworks");
 const ShopifyService = require("../services/shopify");
@@ -497,6 +499,32 @@ router.post("/quote-shipping", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/**
+ * POST /webhooks/run-descriptions?key=...&limit=25000
+ * Kick off the AI description regenerate on the SERVER (cloud) so it doesn't
+ * depend on a laptop staying awake. Non-blocking; resumable; memory-bounded via
+ * --limit for Render's free tier. Guarded against concurrent runs.
+ */
+let _descRunning = false;
+router.post("/run-descriptions", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  if (_descRunning) return res.json({ ok: true, already_running: true });
+
+  const limit = Math.min(parseInt(req.query.limit || "25000", 10) || 25000, 40000);
+  const root = path.join(__dirname, "..", "..");
+  const cmd = `node ${path.join(root, "src/scripts/generate-descriptions.js")} --regenerate --synced-only --gemini-only --concurrency=4 --batch-size=20 --limit=${limit}`;
+  _descRunning = true;
+  console.log("🖊️  [run-descriptions] starting:", cmd);
+  exec(cmd, { cwd: root, timeout: 5 * 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    _descRunning = false;
+    if (err) console.error("🖊️  [run-descriptions] error:", err.message);
+    if (stdout) console.log(stdout.slice(-1200));
+    console.log("🖊️  [run-descriptions] finished.");
+  });
+  res.json({ ok: true, started: true, limit, note: "regenerating descriptions on the server (resumable)" });
 });
 
 router.post("/approve-order", async (req, res) => {
