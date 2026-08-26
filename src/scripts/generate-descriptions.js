@@ -68,8 +68,10 @@ let AI_MODEL = "gpt-4o-mini";
 function initOpenAI() {
   if (process.env.GEMINI_API_KEY) {
     openai = new OpenAI({ apiKey: process.env.GEMINI_API_KEY, baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/" });
-    AI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
-    console.log(`✅ Gemini (${AI_MODEL}) initialized — free-tier descriptions`);
+    // flash-LITE is ~6x cheaper than flash-latest (which maps to the pricey
+    // 2.5-flash) and plenty for one-sentence descriptions. Override via GEMINI_MODEL.
+    AI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
+    console.log(`✅ Gemini (${AI_MODEL}) initialized for descriptions`);
   } else if (process.env.DEEPSEEK_API_KEY) {
     openai = new OpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: "https://api.deepseek.com" });
     AI_MODEL = "deepseek-chat";
@@ -145,9 +147,9 @@ async function generateBatch(batch, retries = 3) {
         temperature: 0.7,
         max_tokens: 4096,
         response_format: { type: "json_object" },
-        // Descriptions don't need reasoning — disabling Gemini's "thinking"
-        // tokens cuts cost ~7x (542 -> 73 tokens/call) with no quality loss.
-        ...(AI_MODEL.startsWith("gemini") ? { reasoning_effort: "none" } : {}),
+        // Disable "thinking" on non-lite Gemini (flash-lite has none and 400s on
+        // this param) — it cut thinking-model cost ~7x with no quality loss.
+        ...(AI_MODEL.startsWith("gemini") && !AI_MODEL.includes("lite") ? { reasoning_effort: "none" } : {}),
       });
 
       const text = response.choices[0]?.message?.content?.trim() || "";
