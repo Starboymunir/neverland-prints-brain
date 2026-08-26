@@ -502,29 +502,56 @@ router.post("/quote-shipping", async (req, res) => {
 });
 
 /**
- * POST /webhooks/run-descriptions?key=...&limit=25000
- * Kick off the AI description regenerate on the SERVER (cloud) so it doesn't
- * depend on a laptop staying awake. Non-blocking; resumable; memory-bounded via
- * --limit for Render's free tier. Guarded against concurrent runs.
+ * POST /webhooks/run-descriptions?key=...&chunk=20000
+ * Kick off the AI description regenerate on the SERVER and SELF-CHAIN memory-safe
+ * chunks until the whole catalog is done — trigger once, it finishes on Render on
+ * its own (no laptop, no re-triggering). Each chunk is a fresh child process so
+ * memory is released between chunks; resumable via looksOld().
  */
 let _descRunning = false;
+let _descStats = { chunks: 0, done: 0, startedAt: null, lastChunk: null };
+
+function runDescriptionChunk(chunkSize, iter) {
+  const root = path.join(__dirname, "..", "..");
+  const cmd = `node ${path.join(root, "src/scripts/generate-descriptions.js")} --regenerate --synced-only --gemini-only --concurrency=4 --batch-size=20 --limit=${chunkSize}`;
+  console.log(`🖊️  [run-descriptions] chunk ${iter} starting`);
+  exec(cmd, { cwd: root, timeout: 3 * 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    if (err) console.error(`🖊️  [run-descriptions] chunk ${iter} error:`, err.message);
+    const out = stdout || "";
+    const found = parseInt((out.match(/Found (\d+) assets/) || [])[1] || "0", 10);
+    const gen = parseInt((out.match(/Phase 1 complete: (\d+)/) || [])[1] || "0", 10);
+    _descStats.chunks = iter;
+    _descStats.done += gen;
+    _descStats.lastChunk = { found, generated: gen, at: new Date().toISOString() };
+    console.log(`🖊️  [run-descriptions] chunk ${iter} done — found ${found}, generated ${gen}, total ${_descStats.done}`);
+
+    // Chain the next chunk while there is still work (a full chunk found = more remain).
+    if (found > 0 && iter < 60) {
+      setTimeout(() => runDescriptionChunk(chunkSize, iter + 1), 5000);
+    } else {
+      _descRunning = false;
+      console.log(`🖊️  [run-descriptions] ALL DONE — ${_descStats.done} descriptions over ${iter} chunks.`);
+    }
+  });
+}
+
 router.post("/run-descriptions", (req, res) => {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
-  if (_descRunning) return res.json({ ok: true, already_running: true });
+  if (_descRunning) return res.json({ ok: true, already_running: true, stats: _descStats });
 
-  const limit = Math.min(parseInt(req.query.limit || "25000", 10) || 25000, 40000);
-  const root = path.join(__dirname, "..", "..");
-  const cmd = `node ${path.join(root, "src/scripts/generate-descriptions.js")} --regenerate --synced-only --gemini-only --concurrency=4 --batch-size=20 --limit=${limit}`;
+  const chunk = Math.min(parseInt(req.query.chunk || "20000", 10) || 20000, 30000);
   _descRunning = true;
-  console.log("🖊️  [run-descriptions] starting:", cmd);
-  exec(cmd, { cwd: root, timeout: 5 * 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
-    _descRunning = false;
-    if (err) console.error("🖊️  [run-descriptions] error:", err.message);
-    if (stdout) console.log(stdout.slice(-1200));
-    console.log("🖊️  [run-descriptions] finished.");
-  });
-  res.json({ ok: true, started: true, limit, note: "regenerating descriptions on the server (resumable)" });
+  _descStats = { chunks: 0, done: 0, startedAt: new Date().toISOString(), lastChunk: null };
+  runDescriptionChunk(chunk, 1);
+  res.json({ ok: true, started: true, chunk, note: "self-chaining on the server until the whole catalog is done" });
+});
+
+/** GET /webhooks/run-descriptions/status?key=... — progress of the cloud run. */
+router.get("/run-descriptions/status", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  res.json({ running: _descRunning, ...(_descStats) });
 });
 
 router.post("/approve-order", async (req, res) => {
