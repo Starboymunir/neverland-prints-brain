@@ -547,11 +547,27 @@ router.post("/run-descriptions", (req, res) => {
   res.json({ ok: true, started: true, chunk, note: "self-chaining on the server until the whole catalog is done" });
 });
 
-/** GET /webhooks/run-descriptions/status?key=... — progress of the cloud run. */
-router.get("/run-descriptions/status", (req, res) => {
+/** GET /webhooks/run-descriptions/status?key=... — progress + live key test. */
+router.get("/run-descriptions/status", async (req, res) => {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
-  res.json({ running: _descRunning, ...(_descStats) });
+
+  // Test the SERVER's Gemini key directly (1-token call) so a bad/missing key on
+  // Render is caught immediately instead of showing as a silent 0-progress run.
+  let geminiKey = "not set";
+  const gk = process.env.GEMINI_API_KEY;
+  if (gk) {
+    try {
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${gk}`,
+        { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: "OK" }] }], generationConfig: { thinkingConfig: { thinkingBudget: 0 } } }) }
+      );
+      geminiKey = r.ok ? "WORKS" : `FAIL ${r.status}: ${(await r.text()).slice(0, 120)}`;
+    } catch (e) { geminiKey = "error: " + e.message.slice(0, 80); }
+  }
+
+  res.json({ running: _descRunning, geminiKey, ..._descStats });
 });
 
 router.post("/approve-order", async (req, res) => {
