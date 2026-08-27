@@ -617,4 +617,49 @@ router.post("/approve-order", async (req, res) => {
   }
 });
 
+// ── Self-chaining PRICE NORMALIZE on the server ────────────────────────────
+// Rewrites every product's Shopify variants to the dynamic engine prices so the
+// native feed (Google Shopping, Shop app, AI shop, ads) matches what's charged.
+// Resumable via the neverland.price_version metafield; runs to completion on Render.
+let _normRunning = false;
+let _normStats = { chunks: 0, done: 0, startedAt: null, lastChunk: null };
+
+function runNormalizeChunk(chunkSize, iter) {
+  const root = path.join(__dirname, "..", "..");
+  const cmd = `node ${path.join(root, "normalize-product-prices.js")} --apply --limit=${chunkSize}`;
+  console.log(`💲 [run-normalize] chunk ${iter} starting`);
+  exec(cmd, { cwd: root, timeout: 3 * 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    if (err) console.error(`💲 [run-normalize] chunk ${iter} error:`, err.message);
+    const out = stdout || "";
+    const norm = parseInt((out.match(/normalized (\d+)/) || [])[1] || "0", 10);
+    _normStats.chunks = iter;
+    _normStats.done += norm;
+    _normStats.lastChunk = { normalized: norm, at: new Date().toISOString() };
+    console.log(`💲 [run-normalize] chunk ${iter} done — normalized ${norm}, total ${_normStats.done}`);
+    if (norm > 0 && iter < 80) {
+      setTimeout(() => runNormalizeChunk(chunkSize, iter + 1), 5000);
+    } else {
+      _normRunning = false;
+      console.log(`💲 [run-normalize] ALL DONE — ${_normStats.done} products over ${iter} chunks.`);
+    }
+  });
+}
+
+router.post("/run-normalize", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  if (_normRunning) return res.json({ ok: true, already_running: true, stats: _normStats });
+  const chunk = Math.min(parseInt(req.query.chunk || "2000", 10) || 2000, 5000);
+  _normRunning = true;
+  _normStats = { chunks: 0, done: 0, startedAt: new Date().toISOString(), lastChunk: null };
+  runNormalizeChunk(chunk, 1);
+  res.json({ ok: true, started: true, chunk, note: "self-chaining price normalize on the server until done" });
+});
+
+router.get("/run-normalize/status", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  res.json({ running: _normRunning, ..._normStats });
+});
+
 module.exports = router;
