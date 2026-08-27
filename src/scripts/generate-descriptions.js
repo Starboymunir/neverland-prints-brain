@@ -88,12 +88,14 @@ function initOpenAI() {
 // Detect an OLD/generic description so --regenerate is self-resumable: a newly
 // written description never contains these cliches or template phrases, so once
 // rewritten it's skipped on the next run. Empty/null also counts as "old".
+// Only DISTINCTIVE phrases from the old generator / templates. Deliberately NOT
+// generic words (grandeur, harmonious, sense of, sublime, timeless…) — those show
+// up in GOOD new descriptions too and caused false positives that re-processed
+// (and re-billed) already-good rows.
 const OLD_SIGNATURES = [
-  "mesmerizing", "interplay of light", "evokes", "captivating", "essence",
-  "meditation on", "dignified", "sublime", "ethereal", "timeless", "masterful",
-  "invites contemplation", "sense of", "striking representation", "rich narrative",
-  "warm earth tones", "printed on premium", "created during", "this piece evokes",
-  "an other ", "harmonious", "grandeur",
+  "mesmerizing", "interplay of light", "meditation on", "invites contemplation",
+  "striking representation", "printed on premium", "created during",
+  "this piece evokes", "an other ", "museum-quality archival",
 ];
 function looksOld(desc) {
   if (!desc || !desc.trim()) return true;
