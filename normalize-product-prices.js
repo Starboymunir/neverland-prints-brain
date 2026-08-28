@@ -123,7 +123,7 @@ async function normalize(handle) {
 // re-run re-prices everything. A product is "done" only when its stored
 // price_version matches — structure alone is NOT enough (old runs left the
 // Size/cm structure but with stale prices, which is the bug we're fixing).
-const PRICE_VERSION = "v2-2026-08";
+const PRICE_VERSION = "v3-2026-08"; // v3 = price + AI description in one pass
 function isNormalized(node) {
   return !!(node.pv && node.pv.value === PRICE_VERSION);
 }
@@ -131,7 +131,7 @@ function isNormalized(node) {
 async function normalizeById(node) {
   const drive = node.metafield && node.metafield.value;
   if (!drive) return { skip: "no-drive" };
-  const asset = (await supa(`assets?select=max_print_width_cm,max_print_height_cm&drive_file_id=eq.${drive}&limit=1`))[0];
+  const asset = (await supa(`assets?select=max_print_width_cm,max_print_height_cm,description&drive_file_id=eq.${drive}&limit=1`))[0];
   if (!asset || !asset.max_print_width_cm) return { skip: "no-dims" };
   const tiers = targetTiers(asset.max_print_width_cm, asset.max_print_height_cm);
   if (!tiers.length) return { skip: "no-tiers" };
@@ -141,6 +141,10 @@ async function normalizeById(node) {
     variants: tiers.map((t) => ({ optionValues: [{ optionName: "Size", name: t.optionValue }], price: t.price, compareAtPrice: t.compareAt })),
     metafields: [{ namespace: "neverland", key: "price_version", type: "single_line_text_field", value: PRICE_VERSION }],
   };
+  // Also push the good AI description into the native Shopify body, so Google
+  // Shopping / Shop app / ads / AI shop show it (they read Shopify, not our JS).
+  const desc = (asset.description || "").trim();
+  if (desc) input.descriptionHtml = `<p>${desc.replace(/[<>]/g, "")}</p>`;
   const r = await gql(`mutation($input: ProductSetInput!){ productSet(synchronous:true, input:$input){ product{ id } userErrors{ message } } }`, { input });
   const errs = r && r.data && r.data.productSet && r.data.productSet.userErrors;
   if (r && r.data && r.data.productSet && r.data.productSet.product && (!errs || !errs.length)) return { ok: true };
