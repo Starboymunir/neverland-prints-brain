@@ -123,7 +123,10 @@ async function normalize(handle) {
 // re-run re-prices everything. A product is "done" only when its stored
 // price_version matches — structure alone is NOT enough (old runs left the
 // Size/cm structure but with stale prices, which is the bug we're fixing).
-const PRICE_VERSION = "v3-2026-08"; // v3 = price + AI description in one pass
+const PRICE_VERSION = "v4-2026-08"; // v4 = price + AI description + product category
+// Shopify Standard Taxonomy: Home & Garden > Decor > Artwork > Posters, Prints,
+// & Visual Artwork > Prints. Required for cross-channel/Managed Markets, Google feed.
+const CATEGORY_ID = "gid://shopify/TaxonomyCategory/hg-3-4-2-2";
 function isNormalized(node) {
   return !!(node.pv && node.pv.value === PRICE_VERSION);
 }
@@ -140,6 +143,7 @@ async function normalizeById(node) {
   if (!tiers.length) return { skip: "no-tiers" };
   const input = {
     id: node.id,
+    category: CATEGORY_ID,
     productOptions: [{ name: "Size", values: tiers.map((t) => ({ name: t.optionValue })) }],
     variants: tiers.map((t) => ({ optionValues: [{ optionName: "Size", name: t.optionValue }], price: t.price, compareAtPrice: t.compareAt })),
     metafields: [{ namespace: "neverland", key: "price_version", type: "single_line_text_field", value: PRICE_VERSION }],
