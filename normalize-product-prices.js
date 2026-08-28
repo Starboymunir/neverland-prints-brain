@@ -129,10 +129,13 @@ function isNormalized(node) {
 }
 
 async function normalizeById(node) {
-  const drive = node.metafield && node.metafield.value;
-  if (!drive) return { skip: "no-drive" };
-  const asset = (await supa(`assets?select=max_print_width_cm,max_print_height_cm,description&drive_file_id=eq.${drive}&limit=1`))[0];
-  if (!asset || !asset.max_print_width_cm) return { skip: "no-dims" };
+  // Look up the asset by SHOPIFY PRODUCT ID — reliable, since every synced asset
+  // stores shopify_product_id, whereas the drive_file_id metafield is missing on
+  // many products (which made the old lookup skip almost everything).
+  const legacyId = node.legacyResourceId || String(node.id || "").split("/").pop();
+  if (!legacyId) return { skip: "no-id" };
+  const asset = (await supa(`assets?select=max_print_width_cm,max_print_height_cm,description&shopify_product_id=eq.${legacyId}&limit=1`))[0];
+  if (!asset || !asset.max_print_width_cm) return { skip: "no-asset" };
   const tiers = targetTiers(asset.max_print_width_cm, asset.max_print_height_cm);
   if (!tiers.length) return { skip: "no-tiers" };
   const input = {
@@ -157,8 +160,7 @@ async function runBatch(limit) {
   while (done < MAX) {
     const j = await gql(`{ products(first: 100${after ? `, after:"${after}"` : ""}) {
         pageInfo{ hasNextPage endCursor }
-        edges{ node{ id handle
-          metafield(namespace:"neverland", key:"drive_file_id"){ value }
+        edges{ node{ id handle legacyResourceId
           pv: metafield(namespace:"neverland", key:"price_version"){ value } } }
     } }`);
     if (!j || !j.data) { console.log("throttle/err, backing off..."); await new Promise((r) => setTimeout(r, 3000)); continue; }
