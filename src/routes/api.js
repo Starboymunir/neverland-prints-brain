@@ -1624,6 +1624,10 @@ router.post("/storefront/events", async (req, res) => {
         collection_id: e.collection_id ? parseInt(e.collection_id) : null,
         search_query: e.search_query || null,
         session_id: e.session_id || req.ip,
+        // Persistent first-party visitor ID + consent flag (foundation for the
+        // anonymous personalized homepage). Falls back to session/ip when absent.
+        visitor_id: e.visitor_id || e.session_id || null,
+        consent: typeof e.consent === "boolean" ? e.consent : null,
         metadata: e.metadata || {},
       }));
 
