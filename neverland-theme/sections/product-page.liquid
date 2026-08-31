@@ -70,7 +70,14 @@
 
       <!-- Details -->
       <div class="product-details">
-        <div class="product-details__artist">{{ product.vendor }}</div>
+        {%- if product.vendor != blank -%}
+          <a class="product-details__artist product-details__artist--link" href="/pages/catalog?artist={{ product.vendor | url_encode }}" title="See more works by {{ product.vendor | escape }}">
+            {{ product.vendor }}
+            <svg class="product-details__artist-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+        {%- else -%}
+          <div class="product-details__artist">{{ product.vendor }}</div>
+        {%- endif -%}
         <h1 class="product-details__title" id="product-title">{{ product.title }}</h1>
 
         <div class="product-details__price">
@@ -198,7 +205,11 @@
           {%- endif -%}
           <div class="product-meta__item">
             <span class="product-meta__label">Artist</span>
-            <span class="product-meta__value">{{ product.vendor }}</span>
+            {%- if product.vendor != blank -%}
+              <a class="product-meta__value product-meta__value--link" href="/pages/catalog?artist={{ product.vendor | url_encode }}">{{ product.vendor }}</a>
+            {%- else -%}
+              <span class="product-meta__value">{{ product.vendor }}</span>
+            {%- endif -%}
           </div>
           {%- if product.metafields.neverland.style != blank -%}
             <div class="product-meta__item">
@@ -222,7 +233,7 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
             </button>
             <div class="product-accordion__content is-open">
-              <div class="product-accordion__body">
+              <div class="product-accordion__body" id="about-print-body">
                 {{ product.description }}
               </div>
             </div>
@@ -439,7 +450,14 @@
     fetch(API_BASE + '/api/storefront/asset/' + encodeURIComponent(DRIVE_ID))
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (a) {
-        if (!a || !a.dynamicPricing || !a.priceMap) return; // keep flat fallback
+        if (!a) return;
+        // Show the good AI description from the backend (Supabase) instead of the
+        // old Shopify body_html, without pushing 186k product updates to Shopify.
+        if (a.description && a.description.trim()) {
+          var ab = document.getElementById('about-print-body');
+          if (ab) ab.textContent = a.description.trim();
+        }
+        if (!a.dynamicPricing || !a.priceMap) return; // keep flat fallback for pricing
         var m = a.priceMap;
         var firstTier = null;
         ['small', 'medium', 'large', 'extra_large'].forEach(function (t) {
