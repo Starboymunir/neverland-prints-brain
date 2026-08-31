@@ -1,0 +1,8 @@
+{
+  "_comment": "Optional per-collection nudges. Keys loosely match a collection name; matched categories get a small capped bonus. Safe to edit; unknown collections just get no bonus. (Reserved for future collection-aware scoring; the current engine reads artists/famous/config — profiles are here so the file exists and is hand-editable.)",
+  "renaissance": { "preferred_categories": ["religious", "mythology", "female_portrait", "historical"], "bonus_per_category": 0.02, "bonus_cap": 0.06 },
+  "impressionism": { "preferred_categories": ["landscape", "flowers", "coastal", "river", "female_portrait"], "bonus_per_category": 0.02, "bonus_cap": 0.08 },
+  "botanical": { "preferred_categories": ["flowers", "botanical", "still_life", "fruit"], "bonus_per_category": 0.03, "bonus_cap": 0.09 },
+  "japanese woodblock": { "preferred_categories": ["landscape", "coastal", "mountains", "bird", "flowers"], "bonus_per_category": 0.02, "bonus_cap": 0.08 },
+  "landscape": { "preferred_categories": ["landscape", "mountains", "coastal", "lake", "river"], "bonus_per_category": 0.02, "bonus_cap": 0.08 }
+}

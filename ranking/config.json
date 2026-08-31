@@ -1,0 +1,21 @@
+{
+  "_comment": "Tuning for commercial-ranking.js. Hand-editable. Weights should sum to ~1 across the non-vision terms; visual_commercial_appeal is reserved for an optional future cloud-vision pass and is redistributed automatically while 0.",
+  "weights": {
+    "visual_commercial_appeal": 0.0,
+    "subject_commercial": 0.34,
+    "decor_appeal": 0.24,
+    "product_versatility": 0.16,
+    "artist_recognition": 0.14,
+    "famous_work": 0.08,
+    "emotional_appeal": 0.04
+  },
+  "subject_priors": {
+    "_comment": "0..1 — how sellable each subject is as wall art / decor.",
+    "female_portrait": 0.72, "male_portrait": 0.42, "romance": 0.78, "motherhood": 0.6, "family": 0.58,
+    "flowers": 0.92, "botanical": 0.84, "landscape": 0.86, "mountains": 0.8, "coastal": 0.85, "water": 0.72,
+    "river": 0.7, "lake": 0.74, "architecture": 0.66, "venice": 0.88, "rome": 0.72, "paris": 0.82,
+    "mythology": 0.62, "religious": 0.5, "angel": 0.6, "animal": 0.8, "horse": 0.74, "bird": 0.78,
+    "still_life": 0.72, "fruit": 0.62, "historical": 0.55, "military": 0.4, "fantasy": 0.74, "fairytale": 0.72,
+    "decorative": 0.5, "technical": 0.22, "anatomy": 0.25, "academic_study": 0.3
+  }
+}
