@@ -631,12 +631,18 @@ function runNormalizeChunk(chunkSize, iter) {
   exec(cmd, { cwd: root, timeout: 3 * 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
     if (err) console.error(`💲 [run-normalize] chunk ${iter} error:`, err.message);
     const out = stdout || "";
-    const norm = parseInt((out.match(/normalized (\d+)/) || [])[1] || "0", 10);
+    // Take the MAX "normalized N" seen (the per-page counter is cumulative and
+    // printed every 100 scanned) — the old code grabbed the FIRST match, which
+    // is an early low number, so the chain stopped after one short chunk.
+    const nums = [...out.matchAll(/normalized (\d+)/g)].map((m) => parseInt(m[1], 10));
+    const norm = nums.length ? Math.max(...nums) : 0;
     _normStats.chunks = iter;
     _normStats.done += norm;
     _normStats.lastChunk = { normalized: norm, at: new Date().toISOString() };
     console.log(`💲 [run-normalize] chunk ${iter} done — normalized ${norm}, total ${_normStats.done}`);
-    if (norm > 0 && iter < 80) {
+    // Keep chaining while a chunk still did work. iter cap raised — each chunk
+    // caps at chunkSize normalized, so ~89k / chunkSize chunks are needed.
+    if (norm > 0 && iter < 400) {
       setTimeout(() => runNormalizeChunk(chunkSize, iter + 1), 5000);
     } else {
       _normRunning = false;
@@ -649,7 +655,7 @@ router.post("/run-normalize", (req, res) => {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
   if (_normRunning) return res.json({ ok: true, already_running: true, stats: _normStats });
-  const chunk = Math.min(parseInt(req.query.chunk || "2000", 10) || 2000, 5000);
+  const chunk = Math.min(parseInt(req.query.chunk || "8000", 10) || 8000, 20000);
   _normRunning = true;
   _normStats = { chunks: 0, done: 0, startedAt: new Date().toISOString(), lastChunk: null };
   runNormalizeChunk(chunk, 1);
