@@ -1653,6 +1653,164 @@ router.post("/storefront/events", async (req, res) => {
   }
 });
 
+// ── Anonymous personalized homepage recommendations ────────────────────────
+const recommender = require("../services/recommender");
+
+// Map an asset row → the same card shape the catalog uses (dynamic engine price,
+// never hardcoded), so the theme can render recommendations with existing cards.
+function assetToItem(a) {
+  const tier = computePriceTier(a.max_print_width_cm, a.max_print_height_cm);
+  return {
+    id: a.id,
+    title: a.title,
+    artist: a.artist,
+    style: a.style,
+    mood: a.mood,
+    subject: a.subject,
+    orientation: a.ratio_class,
+    image: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`,
+    imageSrcset: {
+      s400: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s400`,
+      s600: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`,
+      s800: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s800`,
+    },
+    driveFileId: a.drive_file_id,
+    priceTier: tier.tier,
+    price: cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || tier.price,
+    comparePrice: tier.comparePrice,
+    commercialScore: a.commercial_score != null ? Number(a.commercial_score) : null,
+  };
+}
+
+const REC_ASSET_COLS =
+  "id, title, drive_file_id, artist, style, mood, era, subject, palette, ai_tags, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, commercial_score, shopify_product_id";
+
+/**
+ * GET /api/storefront/recommendations?visitor_id=...&session_id=...
+ * Returns personalized homepage modules (or a curated cold-start when the
+ * visitor has no usable history). Uses LIVE commercial_score + catalog data;
+ * prices are computed by the pricing engine, never hardcoded.
+ */
+router.get("/storefront/recommendations", async (req, res) => {
+  try {
+    const visitorId = (req.query.visitor_id || "").toString().slice(0, 64) || null;
+    const sessionId = (req.query.session_id || "").toString().slice(0, 64) || null;
+    const perModule = Math.min(20, Math.max(4, parseInt(req.query.per_module || "12", 10)));
+
+    // 1. Pull this visitor's recent events (newest first). Bot-exclusion: rows
+    //    with consent === false are ignored for personalization; and having a
+    //    first-party visitor_id at all already filters most bot traffic (bots
+    //    don't run our JS / set localStorage).
+    let events = [];
+    if (visitorId || sessionId) {
+      const orFilter = [visitorId ? `visitor_id.eq.${visitorId}` : null, sessionId ? `session_id.eq.${sessionId}` : null].filter(Boolean).join(",");
+      const { data } = await supabase
+        .from("analytics_events")
+        .select("event_type, product_id, created_at, consent, search_query")
+        .or(orFilter)
+        .not("consent", "is", false)
+        .order("created_at", { ascending: false })
+        .limit(300);
+      events = data || [];
+    }
+
+    // 2. Join events → asset metadata by shopify_product_id.
+    const productIds = [...new Set(events.map((e) => e.product_id).filter((x) => x != null))].slice(0, 200);
+    const assetByProductId = new Map();
+    if (productIds.length) {
+      const { data: assets } = await supabase.from("assets").select(REC_ASSET_COLS).in("shopify_product_id", productIds);
+      for (const a of assets || []) {
+        a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0;
+        assetByProductId.set(String(a.shopify_product_id), a);
+      }
+    }
+
+    const profile = recommender.buildProfile(events, assetByProductId);
+    const modules = [];
+    const excludeIds = new Set(profile.seenAssetIds);
+
+    if (profile.hasHistory) {
+      // ── Recently viewed (their own path back in) ──
+      const rvItems = profile.viewedOrder
+        .map((id) => [...assetByProductId.values()].find((a) => a.id === id))
+        .filter(Boolean).slice(0, perModule).map(assetToItem);
+      if (rvItems.length) modules.push({ key: "recently_viewed", title: "Recently viewed", items: rvItems });
+
+      // ── Inspired by what you viewed (subject/style neighbours, re-ranked) ──
+      const candidateSubjects = profile.topSubjects.slice(0, 4);
+      const candidateStyles = profile.topStyles.slice(0, 2);
+      let candidates = [];
+      if (candidateSubjects.length || candidateStyles.length) {
+        const orParts = [
+          ...candidateSubjects.map((s) => `subject.eq.${s}`),
+          ...candidateStyles.map((s) => `style.eq.${s}`),
+        ].join(",");
+        const { data } = await supabase
+          .from("assets")
+          .select(REC_ASSET_COLS)
+          .or(orParts)
+          .not("commercial_score", "is", null)
+          .order("commercial_score", { ascending: false })
+          .limit(240);
+        candidates = (data || []).filter((a) => !excludeIds.has(a.id));
+        candidates.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
+      }
+      const inspired = recommender.pickDiverse(candidates, profile, perModule);
+      inspired.forEach((a) => excludeIds.add(a.id));
+      if (inspired.length) modules.push({ key: "inspired_by_viewed", title: "Inspired by what you viewed", items: inspired.map(assetToItem) });
+
+      // ── More from artists you like ──
+      if (profile.topArtists.length) {
+        const { data } = await supabase
+          .from("assets")
+          .select(REC_ASSET_COLS)
+          .in("artist", profile.topArtists.slice(0, 4))
+          .not("commercial_score", "is", null)
+          .order("commercial_score", { ascending: false })
+          .limit(120);
+        const artistPool = (data || []).filter((a) => !excludeIds.has(a.id));
+        artistPool.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
+        const picks = recommender.pickDiverse(artistPool, profile, perModule);
+        picks.forEach((a) => excludeIds.add(a.id));
+        if (picks.length) modules.push({ key: "more_like_this", title: "More from artists you love", items: picks.map(assetToItem) });
+      }
+
+      // ── Recommended collections (their strongest subjects) ──
+      const collections = profile.topSubjects.slice(0, 6).map((s) => ({
+        title: s, url: `/pages/catalog?subject=${encodeURIComponent(s)}`,
+      }));
+      if (collections.length) modules.push({ key: "recommended_collections", title: "Collections for you", collections });
+    }
+
+    // ── Cold-start / always-on fallback: curated top commercial score ──
+    if (!profile.hasHistory || modules.length === 0) {
+      const { data } = await supabase
+        .from("assets")
+        .select(REC_ASSET_COLS)
+        .not("commercial_score", "is", null)
+        .order("commercial_score", { ascending: false })
+        .limit(300);
+      let pool = (data || []).filter((a) => !excludeIds.has(a.id));
+      pool.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
+      // Diversify by subject so the cold-start shelf isn't all one theme.
+      const picks = recommender.pickDiverse(pool, profile, perModule);
+      modules.unshift({ key: "editors_picks", title: "Handpicked for your walls", items: picks.map(assetToItem) });
+    }
+
+    res.set("Cache-Control", "private, max-age=45");
+    res.json({
+      personalized: profile.hasHistory,
+      visitor_id: visitorId,
+      signal: Math.round(profile.signalCount * 100) / 100,
+      taste: profile.hasHistory ? { subjects: profile.topSubjects, artists: profile.topArtists, styles: profile.topStyles } : null,
+      modules,
+    });
+  } catch (err) {
+    console.error("recommendations error:", err.message);
+    res.status(200).json({ personalized: false, modules: [], error: err.message });
+  }
+});
+
 /**
  * Helper: download image from URL into a Buffer (works on all Node versions).
  */

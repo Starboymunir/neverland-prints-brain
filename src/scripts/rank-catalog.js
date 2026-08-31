@@ -47,8 +47,17 @@ async function fetchPage(afterId) {
   // also skip rows that already have a score, so resuming is cheap.
   const filter = RESCORE ? "" : "&commercial_score=is.null";
   const after = afterId ? `&id=gt.${afterId}` : "";
-  const r = await req("GET", "assets", `?select=${SELECT}&ingestion_status=in.(ready,analyzed)${filter}${after}&order=id.asc&limit=${PAGE}`);
-  try { return JSON.parse(r.body); } catch (e) { return []; }
+  const qs = `?select=${SELECT}&ingestion_status=in.(ready,analyzed)${filter}${after}&order=id.asc&limit=${PAGE}`;
+  // Retry transient failures — a non-2xx or unparseable body must NOT be
+  // mistaken for "no rows left" (which would silently end the run early).
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const r = await req("GET", "assets", qs);
+    if (r.status >= 200 && r.status < 300) {
+      try { const rows = JSON.parse(r.body); if (Array.isArray(rows)) return rows; } catch (e) {}
+    }
+    await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+  }
+  throw new Error("fetchPage failed after retries (afterId=" + afterId + ")");
 }
 
 async function updateOne(id, score) {
