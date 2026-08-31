@@ -758,7 +758,7 @@ router.get("/storefront/catalog", async (req, res) => {
     let query = supabase
       .from("assets")
       .select(
-        "id, title, drive_file_id, artist, style, mood, era, subject, ai_tags, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, created_at",
+        "id, title, drive_file_id, artist, style, mood, era, subject, ai_tags, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, created_at, commercial_score",
         { count: "exact" }
       )
       .in("ingestion_status", ["ready", "analyzed"])
@@ -815,6 +815,13 @@ router.get("/storefront/catalog", async (req, res) => {
         // If we have trending data, we'll re-sort after fetch
         // Otherwise fall back to quality_tier (best quality first) + newest
         query = query.order("quality_tier", { ascending: true }).order("created_at", { ascending: false });
+        break;
+      case "commercial":
+      case "recommended":
+        // Sellability order from the commercial-ranking engine (highest first).
+        // NULLs (unscored) sink to the bottom so a partial scoring run still
+        // surfaces the best-scored artworks first.
+        query = query.order("commercial_score", { ascending: false, nullsFirst: false });
         break;
       case "newest":
       default:

@@ -668,4 +668,51 @@ router.get("/run-normalize/status", (req, res) => {
   res.json({ running: _normRunning, ..._normStats });
 });
 
+// ── Self-chaining COMMERCIAL RANKING on the server ─────────────────────────
+// Scores the whole assets catalog with the commercial-ranking engine and
+// writes commercial_score on each row (used by ?sort=commercial and, later,
+// the personalized homepage baseline). Resumable: each chunk scores the next
+// batch of still-null rows. Needs the assets.commercial_score column.
+let _rankRunning = false;
+let _rankStats = { chunks: 0, scored: 0, startedAt: null, lastChunk: null };
+
+function runRankChunk(chunkSize, iter) {
+  const root = path.join(__dirname, "..", "..");
+  const cmd = `node ${path.join(root, "src", "scripts", "rank-catalog.js")} --limit=${chunkSize}`;
+  console.log(`⭐ [run-ranking] chunk ${iter} starting`);
+  exec(cmd, { cwd: root, timeout: 3 * 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    if (err) console.error(`⭐ [run-ranking] chunk ${iter} error:`, err.message);
+    const out = stdout || "";
+    const m = out.match(/RANK DONE — scored (\d+)/);
+    const scored = m ? parseInt(m[1], 10) : 0;
+    _rankStats.chunks = iter;
+    _rankStats.scored += scored;
+    _rankStats.lastChunk = { scored, at: new Date().toISOString() };
+    console.log(`⭐ [run-ranking] chunk ${iter} done — scored ${scored}, total ${_rankStats.scored}`);
+    if (scored > 0 && iter < 400) {
+      setTimeout(() => runRankChunk(chunkSize, iter + 1), 3000);
+    } else {
+      _rankRunning = false;
+      console.log(`⭐ [run-ranking] ALL DONE — ${_rankStats.scored} scored over ${iter} chunks.`);
+    }
+  });
+}
+
+router.post("/run-ranking", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  if (_rankRunning) return res.json({ ok: true, already_running: true, stats: _rankStats });
+  const chunk = Math.min(parseInt(req.query.chunk || "20000", 10) || 20000, 60000);
+  _rankRunning = true;
+  _rankStats = { chunks: 0, scored: 0, startedAt: new Date().toISOString(), lastChunk: null };
+  runRankChunk(chunk, 1);
+  res.json({ ok: true, started: true, chunk, note: "self-chaining commercial ranking on the server until done" });
+});
+
+router.get("/run-ranking/status", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  res.json({ running: _rankRunning, ..._rankStats });
+});
+
 module.exports = router;
