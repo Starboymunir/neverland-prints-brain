@@ -1812,6 +1812,81 @@ router.get("/storefront/recommendations", async (req, res) => {
 });
 
 /**
+ * GET /api/storefront/similar?product_id=...  (or ?asset_id=...)
+ * Product-page "You may also like": artworks genuinely related to the one the
+ * visitor is looking at — same subject/style, plus more by the same artist —
+ * ranked by the commercial score, so the strongest related pieces surface.
+ * Uses LIVE catalog + engine pricing; never hardcoded.
+ */
+router.get("/storefront/similar", async (req, res) => {
+  try {
+    const productId = (req.query.product_id || "").toString().replace(/\D/g, "") || null;
+    const assetId = (req.query.asset_id || "").toString().slice(0, 64) || null;
+    const limit = Math.min(24, Math.max(4, parseInt(req.query.limit || "12", 10)));
+
+    // 1. Resolve the seed artwork.
+    let seedQ = supabase.from("assets").select(REC_ASSET_COLS).limit(1);
+    seedQ = assetId ? seedQ.eq("id", assetId) : seedQ.eq("shopify_product_id", productId);
+    const { data: seedRows } = await seedQ;
+    const seed = (seedRows || [])[0];
+    if (!seed) return res.status(200).json({ items: [], seed: null });
+
+    const exclude = new Set([seed.id]);
+    const picks = [];
+    const addFrom = (rows, cap) => {
+      let n = 0;
+      for (const a of rows || []) {
+        if (exclude.has(a.id)) continue;
+        exclude.add(a.id);
+        a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0;
+        picks.push(a);
+        if (++n >= cap) break;
+      }
+    };
+
+    // 2. Same subject &/or style, strongest first (the bulk of the shelf).
+    const orParts = [seed.subject ? `subject.eq.${seed.subject}` : null, seed.style ? `style.eq.${seed.style}` : null].filter(Boolean).join(",");
+    if (orParts) {
+      const { data } = await supabase
+        .from("assets").select(REC_ASSET_COLS)
+        .or(orParts).not("commercial_score", "is", null)
+        .order("commercial_score", { ascending: false }).limit(80);
+      addFrom(data, Math.ceil(limit * 0.7));
+    }
+
+    // 3. More by the same artist (a natural "see more of this artist" pull-in).
+    if (seed.artist && picks.length < limit) {
+      const { data } = await supabase
+        .from("assets").select(REC_ASSET_COLS)
+        .eq("artist", seed.artist).not("commercial_score", "is", null)
+        .order("commercial_score", { ascending: false }).limit(40);
+      addFrom(data, limit - picks.length);
+    }
+
+    // 4. Top up with editor's picks if the artwork is very niche.
+    if (picks.length < limit) {
+      const { data } = await supabase
+        .from("assets").select(REC_ASSET_COLS)
+        .not("commercial_score", "is", null)
+        .order("commercial_score", { ascending: false }).limit(60);
+      addFrom(data, limit - picks.length);
+    }
+
+    // Rank the assembled set by commercial score and cap.
+    const items = picks
+      .sort((a, b) => (Number(b.commercial_score) || 0) - (Number(a.commercial_score) || 0))
+      .slice(0, limit)
+      .map(assetToItem);
+
+    res.set("Cache-Control", "public, max-age=300");
+    res.json({ seed: { id: seed.id, title: seed.title, artist: seed.artist, subject: seed.subject }, items });
+  } catch (err) {
+    console.error("similar error:", err.message);
+    res.status(200).json({ items: [], error: err.message });
+  }
+});
+
+/**
  * Helper: download image from URL into a Buffer (works on all Node versions).
  */
 function downloadImage(url) {

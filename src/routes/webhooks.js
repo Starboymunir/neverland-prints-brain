@@ -622,28 +622,31 @@ router.post("/approve-order", async (req, res) => {
 // native feed (Google Shopping, Shop app, AI shop, ads) matches what's charged.
 // Resumable via the neverland.price_version metafield; runs to completion on Render.
 let _normRunning = false;
-let _normStats = { chunks: 0, done: 0, startedAt: null, lastChunk: null };
+let _normStats = { chunks: 0, done: 0, startedAt: null, lastChunk: null, cursor: "" };
 
 function runNormalizeChunk(chunkSize, iter) {
   const root = path.join(__dirname, "..", "..");
-  const cmd = `node ${path.join(root, "normalize-product-prices.js")} --apply --limit=${chunkSize}`;
-  console.log(`💲 [run-normalize] chunk ${iter} starting`);
-  exec(cmd, { cwd: root, timeout: 3 * 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+  const after = _normStats.cursor ? ` --after-id=${_normStats.cursor}` : "";
+  const cmd = `node ${path.join(root, "normalize-product-prices.js")} --apply --limit=${chunkSize}${after}`;
+  console.log(`💲 [run-normalize] chunk ${iter} starting (after=${_normStats.cursor || "start"})`);
+  exec(cmd, { cwd: root, timeout: 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
     if (err) console.error(`💲 [run-normalize] chunk ${iter} error:`, err.message);
     const out = stdout || "";
-    // Take the MAX "normalized N" seen (the per-page counter is cumulative and
-    // printed every 100 scanned) — the old code grabbed the FIRST match, which
-    // is an early low number, so the chain stopped after one short chunk.
-    const nums = [...out.matchAll(/normalized (\d+)/g)].map((m) => parseInt(m[1], 10));
-    const norm = nums.length ? Math.max(...nums) : 0;
+    const norm = parseInt((out.match(/normalized (\d+)/) || [])[1] || "0", 10);
+    const scanned = parseInt((out.match(/SCANNED=(\d+)/) || [])[1] || "0", 10);
+    const resume = (out.match(/RESUME_AFTER=([^\s]+)/) || [])[1] || _normStats.cursor;
     _normStats.chunks = iter;
     _normStats.done += norm;
-    _normStats.lastChunk = { normalized: norm, at: new Date().toISOString() };
-    console.log(`💲 [run-normalize] chunk ${iter} done — normalized ${norm}, total ${_normStats.done}`);
-    // Keep chaining while a chunk still did work. iter cap raised — each chunk
-    // caps at chunkSize normalized, so ~89k / chunkSize chunks are needed.
-    if (norm > 0 && iter < 400) {
-      setTimeout(() => runNormalizeChunk(chunkSize, iter + 1), 5000);
+    _normStats.cursor = resume;
+    _normStats.lastChunk = { normalized: norm, scanned, at: new Date().toISOString() };
+    console.log(`💲 [run-normalize] chunk ${iter} done — normalized ${norm}, scanned ${scanned}, total ${_normStats.done}`);
+    // Continue while the last batch was full (more rows remain). Stop only when a
+    // batch comes back short — that's the true end of the catalog. A transient
+    // error (scanned 0 but not end) also retries a few times rather than quitting.
+    const moreRemain = scanned >= chunkSize;
+    const transient = scanned === 0 && err;
+    if ((moreRemain || transient) && iter < 5000) {
+      setTimeout(() => runNormalizeChunk(chunkSize, iter + 1), transient ? 15000 : 3000);
     } else {
       _normRunning = false;
       console.log(`💲 [run-normalize] ALL DONE — ${_normStats.done} products over ${iter} chunks.`);
@@ -655,11 +658,14 @@ router.post("/run-normalize", (req, res) => {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
   if (_normRunning) return res.json({ ok: true, already_running: true, stats: _normStats });
-  const chunk = Math.min(parseInt(req.query.chunk || "8000", 10) || 8000, 20000);
+  // Batch size per chunk (Supabase page). Default 500 keeps each child short so a
+  // restart loses little; the chain forwards a cursor so there's no re-scan.
+  const chunk = Math.min(parseInt(req.query.chunk || "500", 10) || 500, 2000);
+  const startAfter = req.query.after || ""; // optional manual resume point
   _normRunning = true;
-  _normStats = { chunks: 0, done: 0, startedAt: new Date().toISOString(), lastChunk: null };
+  _normStats = { chunks: 0, done: 0, startedAt: new Date().toISOString(), lastChunk: null, cursor: startAfter };
   runNormalizeChunk(chunk, 1);
-  res.json({ ok: true, started: true, chunk, note: "self-chaining price normalize on the server until done" });
+  res.json({ ok: true, started: true, chunk, note: "cursor-resumable price normalize on the server until done" });
 });
 
 router.get("/run-normalize/status", (req, res) => {
@@ -676,10 +682,15 @@ router.get("/run-normalize/status", (req, res) => {
 let _rankRunning = false;
 let _rankStats = { chunks: 0, scored: 0, startedAt: null, lastChunk: null };
 
-function runRankChunk(chunkSize, iter) {
+function runRankChunk(chunkSize, iter, rescore) {
   const root = path.join(__dirname, "..", "..");
-  const cmd = `node ${path.join(root, "src", "scripts", "rank-catalog.js")} --limit=${chunkSize}`;
-  console.log(`⭐ [run-ranking] chunk ${iter} starting`);
+  // rescore = one full keyset pass over EVERY row (rank-catalog paginates
+  // internally), so no --limit and no chaining. Null-only scoring stays chunked
+  // (each chunk naturally continues since scored rows drop out of the filter).
+  const limitFlag = rescore ? "" : ` --limit=${chunkSize}`;
+  const rescoreFlag = rescore ? " --rescore" : "";
+  const cmd = `node ${path.join(root, "src", "scripts", "rank-catalog.js")}${limitFlag}${rescoreFlag}`;
+  console.log(`⭐ [run-ranking] chunk ${iter} starting${rescore ? " (RESCORE full pass)" : ""}`);
   exec(cmd, { cwd: root, timeout: 3 * 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
     if (err) console.error(`⭐ [run-ranking] chunk ${iter} error:`, err.message);
     const out = stdout || "";
@@ -689,8 +700,8 @@ function runRankChunk(chunkSize, iter) {
     _rankStats.scored += scored;
     _rankStats.lastChunk = { scored, at: new Date().toISOString() };
     console.log(`⭐ [run-ranking] chunk ${iter} done — scored ${scored}, total ${_rankStats.scored}`);
-    if (scored > 0 && iter < 400) {
-      setTimeout(() => runRankChunk(chunkSize, iter + 1), 3000);
+    if (!rescore && scored > 0 && iter < 400) {
+      setTimeout(() => runRankChunk(chunkSize, iter + 1, false), 3000);
     } else {
       _rankRunning = false;
       console.log(`⭐ [run-ranking] ALL DONE — ${_rankStats.scored} scored over ${iter} chunks.`);
@@ -702,11 +713,12 @@ router.post("/run-ranking", (req, res) => {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
   if (_rankRunning) return res.json({ ok: true, already_running: true, stats: _rankStats });
+  const rescore = req.query.rescore === "1" || req.query.rescore === "true";
   const chunk = Math.min(parseInt(req.query.chunk || "20000", 10) || 20000, 60000);
   _rankRunning = true;
   _rankStats = { chunks: 0, scored: 0, startedAt: new Date().toISOString(), lastChunk: null };
-  runRankChunk(chunk, 1);
-  res.json({ ok: true, started: true, chunk, note: "self-chaining commercial ranking on the server until done" });
+  runRankChunk(chunk, 1, rescore);
+  res.json({ ok: true, started: true, rescore, note: rescore ? "full rescore pass on the server" : "self-chaining commercial ranking until done" });
 });
 
 router.get("/run-ranking/status", (req, res) => {

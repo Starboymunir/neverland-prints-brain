@@ -171,32 +171,61 @@ async function normalizeById(node) {
   return { error: JSON.stringify(errs || (r && r.errors) || "unknown").slice(0, 150) };
 }
 
-async function runBatch(limit) {
-  let after = null, scanned = 0, done = 0, skipped = 0, failed = 0, alreadyOk = 0;
-  const MAX = limit || Infinity;
-  while (done < MAX) {
-    const j = await gql(`{ products(first: 100${after ? `, after:"${after}"` : ""}) {
-        pageInfo{ hasNextPage endCursor }
-        edges{ node{ id handle legacyResourceId
-          pv: metafield(namespace:"neverland", key:"price_version"){ value } } }
-    } }`);
-    if (!j || !j.data) { console.log("throttle/err, backing off..."); await new Promise((r) => setTimeout(r, 3000)); continue; }
-    for (const e of j.data.products.edges) {
-      scanned++;
-      const n = e.node;
-      if (isNormalized(n)) { alreadyOk++; continue; }
-      const res = await normalizeById(n);
+// Normalize straight from a Supabase asset row (no Shopify lookup): the row
+// already carries shopify_product_id, print dimensions, and the AI description.
+async function normalizeFromAsset(asset) {
+  const legacyId = asset.shopify_product_id;
+  if (!legacyId) return { skip: "no-shopify-id" };
+  if (!asset.max_print_width_cm) return { skip: "no-dimensions" };
+  const tiers = targetTiers(asset.max_print_width_cm, asset.max_print_height_cm);
+  if (!tiers.length) return { skip: "no-tiers" };
+  const input = {
+    id: `gid://shopify/Product/${legacyId}`,
+    category: CATEGORY_ID,
+    productOptions: [{ name: "Size", values: tiers.map((t) => ({ name: t.optionValue })) }],
+    variants: tiers.map((t) => ({ optionValues: [{ optionName: "Size", name: t.optionValue }], price: t.price, compareAtPrice: t.compareAt })),
+    metafields: [{ namespace: "neverland", key: "price_version", type: "single_line_text_field", value: PRICE_VERSION }],
+  };
+  const desc = (asset.description || "").trim();
+  if (desc) input.descriptionHtml = `<p>${desc.replace(/[<>]/g, "")}</p>`;
+  // Retry on Shopify GraphQL throttling (cost-based) rather than dropping the row.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const r = await gql(`mutation($input: ProductSetInput!){ productSet(synchronous:true, input:$input){ product{ id } userErrors{ message } } }`, { input });
+    const throttled = r && r.errors && JSON.stringify(r.errors).includes("THROTTLED");
+    if (throttled) { await new Promise((res) => setTimeout(res, 2000 * (attempt + 1))); continue; }
+    const errs = r && r.data && r.data.productSet && r.data.productSet.userErrors;
+    if (r && r.data && r.data.productSet && r.data.productSet.product && (!errs || !errs.length)) return { ok: true };
+    return { error: JSON.stringify(errs || (r && r.errors) || "unknown").slice(0, 150) };
+  }
+  return { error: "throttled-give-up" };
+}
+
+// Forward-only, resumable batch driven by a stable Supabase id-cursor. Each
+// invocation processes the next `limit` assets after `afterId` (ordered by id),
+// then prints RESUME_AFTER / SCANNED so the server chain can continue exactly
+// where it left off — no Shopify re-scan, no premature stop.
+async function runBatchCursor(afterId, limit) {
+  const CONC = 3;
+  const rows = await supa(
+    `assets?select=id,shopify_product_id,max_print_width_cm,max_print_height_cm,description` +
+    `&shopify_product_id=not.is.null${afterId ? `&id=gt.${afterId}` : ""}&order=id.asc&limit=${limit}`
+  );
+  let done = 0, skipped = 0, failed = 0, idx = 0;
+  async function worker() {
+    while (idx < rows.length) {
+      const a = rows[idx++];
+      const res = await normalizeFromAsset(a);
       if (res.ok) done++;
       else if (res.skip) skipped++;
-      else { failed++; if (failed <= 10) console.log("  FAIL", n.handle, res.error); }
-      await new Promise((r) => setTimeout(r, 250)); // rate limit
-      if (done >= MAX) break;
+      else { failed++; if (failed <= 8) console.log("  FAIL", a.shopify_product_id, res.error); }
+      await new Promise((r) => setTimeout(r, 120));
     }
-    console.log(`  scanned ${scanned} | normalized ${done} | already ${alreadyOk} | skipped ${skipped} | failed ${failed}`);
-    if (!j.data.products.pageInfo.hasNextPage) break;
-    after = j.data.products.pageInfo.endCursor;
   }
-  console.log(`\nBATCH DONE — normalized ${done}, already-ok ${alreadyOk}, skipped ${skipped}, failed ${failed}`);
+  await Promise.all(Array.from({ length: CONC }, () => worker()));
+  const lastId = rows.length ? rows[rows.length - 1].id : (afterId || "");
+  console.log(`normalized ${done} | skipped ${skipped} | failed ${failed} | scanned ${rows.length}`);
+  console.log(`RESUME_AFTER=${lastId}`);
+  console.log(`SCANNED=${rows.length}`);
 }
 
 (async () => {
@@ -205,7 +234,8 @@ async function runBatch(limit) {
     if (!APPLY) console.log("DRY RUN — add --apply to write.");
     return;
   }
-  const limit = parseInt(getArg("limit") || "0", 10) || Infinity;
+  const limit = parseInt(getArg("limit") || "500", 10) || 500;
+  const afterId = getArg("after-id") || "";
   if (!APPLY) { console.log("Batch mode needs --apply. Add --limit=N to cap."); return; }
-  await runBatch(limit);
+  await runBatchCursor(afterId, limit);
 })();

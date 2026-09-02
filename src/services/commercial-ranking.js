@@ -116,6 +116,22 @@ const PALETTE_APPEAL = {
 
 function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
+// ── Sketch / drawing de-prioritization ──────────────────────────────────────
+// Client: "de-prioritize sketches, let paintings come up first." We detect
+// pencil/charcoal/pen studies & unfinished drawings from title + metadata, but
+// DO NOT punish finished fine prints (woodblock, engraving, lithograph, etc.)
+// or paintings, which sell perfectly well as wall art.
+const SKETCH_TOKENS = /\b(sketch|sketches|sketchbook|drawing|drawings|study|studies|pencil|charcoal|chalk|graphite|crayon|pen and ink|ink drawing|preparatory|unfinished|croquis)\b/i;
+const FINISHED_TOKENS = /\b(oil|canvas|painting|painted|fresco|tempera|gouache|watercolou?r|woodblock|woodcut|ukiyo|engraving|etching|lithograph|aquatint|mezzotint|poster)\b/i;
+function sketchPenalty(asset) {
+  const text = norm([asset.title, asset.style, asset.subject, asset.medium, ...(Array.isArray(asset.ai_tags) ? asset.ai_tags : [])].join(" "));
+  if (!SKETCH_TOKENS.test(text)) return 0;
+  // "Figure Study" as the AI subject is a strong sketch signal on its own.
+  const strongStudy = norm(asset.subject) === "figure study";
+  if (FINISHED_TOKENS.test(text) && !strongStudy) return 0.06; // ambiguous → very mild
+  return 0.22; // clear sketch/drawing/study → let finished paintings rank above
+}
+
 // ── Optional external tuning DBs (client's hand-tuned files) ────────────────
 function loadJson(file) {
   try {
@@ -306,6 +322,10 @@ function scoreAsset(asset, visualAppeal = null) {
   // direct technical penalty so a genuine study can't ride an unrelated keyword up
   score = clamp01(score - 0.3 * penalty);
 
+  // de-prioritize sketches/drawings so finished paintings surface first
+  const sketchPen = sketchPenalty(asset);
+  if (sketchPen) score = clamp01(score - sketchPen);
+
   // small iconic bonuses
   if (artist.recognition >= 0.8 && famous.strength >= 0.5) score = clamp01(score + 0.05 * artist.commercial);
   if (famous.strength >= 0.5 && famous.recognition >= 0.7) score = clamp01(score + 0.05);
@@ -319,6 +339,7 @@ function scoreAsset(asset, visualAppeal = null) {
       artist: Math.round(artistTerm * 1000) / 1000,
       famous: Math.round(famousTerm * 1000) / 1000,
       penalty: Math.round(penalty * 1000) / 1000,
+      sketch_penalty: sketchPen,
       primary_subject: Object.keys(hits).sort((a, b) => hits[b] - hits[a])[0] || "unclassified",
       artist_name: artist.name,
     },
