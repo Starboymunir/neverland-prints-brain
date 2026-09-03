@@ -204,12 +204,43 @@ async function normalizeFromAsset(asset) {
 // invocation processes the next `limit` assets after `afterId` (ordered by id),
 // then prints RESUME_AFTER / SCANNED so the server chain can continue exactly
 // where it left off — no Shopify re-scan, no premature stop.
+// Like supa() but returns null on a real failure (network/timeout/non-2xx/
+// non-array) instead of [] — so the caller can tell "query failed, retry" apart
+// from "genuinely no rows left" (the empty result that means end-of-catalog).
+function supaRowsOrNull(qs) {
+  return new Promise((resolve) => {
+    const u = new URL(SU + "/rest/v1/" + qs);
+    const rq = https.request(
+      { hostname: u.hostname, path: u.pathname + u.search, timeout: 30000, headers: { apikey: SK, Authorization: "Bearer " + SK } },
+      (x) => {
+        let d = ""; x.on("data", (c) => (d += c));
+        x.on("end", () => {
+          if (x.statusCode >= 200 && x.statusCode < 300) {
+            try { const j = JSON.parse(d); return resolve(Array.isArray(j) ? j : null); } catch (e) { return resolve(null); }
+          }
+          resolve(null);
+        });
+      }
+    );
+    rq.on("error", () => resolve(null));
+    rq.on("timeout", () => { rq.destroy(); resolve(null); });
+    rq.end();
+  });
+}
+
 async function runBatchCursor(afterId, limit) {
   const CONC = 3;
-  const rows = await supa(
+  const qs =
     `assets?select=id,shopify_product_id,max_print_width_cm,max_print_height_cm,description` +
-    `&shopify_product_id=not.is.null${afterId ? `&id=gt.${afterId}` : ""}&order=id.asc&limit=${limit}`
-  );
+    `&shopify_product_id=not.is.null${afterId ? `&id=gt.${afterId}` : ""}&order=id.asc&limit=${limit}`;
+  // Retry the page fetch before ever concluding "empty" — a transient Supabase
+  // failure must NOT be mistaken for end-of-catalog (that was the stall bug).
+  let rows = null;
+  for (let attempt = 0; attempt < 6 && rows === null; attempt++) {
+    rows = await supaRowsOrNull(qs);
+    if (rows === null) { console.log(`  page fetch failed, retry ${attempt + 1}/6`); await new Promise((r) => setTimeout(r, 2000 * (attempt + 1))); }
+  }
+  if (rows === null) { console.error("FETCH_FAILED after retries"); process.exit(1); } // non-zero → server chain retries this chunk
   let done = 0, skipped = 0, failed = 0, idx = 0;
   async function worker() {
     while (idx < rows.length) {
