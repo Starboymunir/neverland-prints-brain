@@ -229,7 +229,7 @@ function supaRowsOrNull(qs) {
 }
 
 async function runBatchCursor(afterId, limit) {
-  const CONC = 3;
+  const CONC = 8; // higher throughput; normalizeFromAsset retries on Shopify throttling
   const qs =
     `assets?select=id,shopify_product_id,max_print_width_cm,max_print_height_cm,description` +
     `&shopify_product_id=not.is.null${afterId ? `&id=gt.${afterId}` : ""}&order=id.asc&limit=${limit}`;

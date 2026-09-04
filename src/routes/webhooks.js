@@ -639,6 +639,13 @@ function runNormalizeChunk(chunkSize, iter) {
     _normStats.done += norm;
     _normStats.cursor = resume;
     _normStats.lastChunk = { normalized: norm, scanned, at: new Date().toISOString() };
+    // Persist the cursor DURABLY so a cold restart (Render free-tier spin-down)
+    // resumes exactly here instead of from the top. Fire-and-forget.
+    if (resume) {
+      supabase.from("analytics_events")
+        .insert({ event_type: "_norm_cursor", search_query: String(resume), consent: false, metadata: { done: _normStats.done, at: new Date().toISOString() } })
+        .then(() => {}, () => {});
+    }
     console.log(`💲 [run-normalize] chunk ${iter} done — normalized ${norm}, scanned ${scanned}, total ${_normStats.done}`);
     // Continue while the last batch was full (more rows remain). Stop only when a
     // batch comes back short — that's the true end of the catalog. A transient
@@ -672,6 +679,38 @@ router.get("/run-normalize/status", (req, res) => {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
   res.json({ running: _normRunning, ..._normStats });
+});
+
+// ── Cloud-cron keep-alive + auto-resume ────────────────────────────────────
+// A scheduled cloud ping hits this every few minutes. Two jobs:
+//   1. The inbound request keeps the Render free-tier service awake (so an
+//      in-flight self-chain keeps advancing instead of freezing).
+//   2. If no run is active (e.g. after a cold restart), it RESUMES the price
+//      normalize from the durable cursor stored in Supabase — so the backfill
+//      finishes unattended, with no laptop and no lost progress.
+async function readDurableCursor() {
+  try {
+    const { data } = await supabase
+      .from("analytics_events")
+      .select("search_query")
+      .eq("event_type", "_norm_cursor")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    return (data && data[0] && data[0].search_query) || "";
+  } catch (e) { return ""; }
+}
+
+router.post("/normalize-tick", async (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  if (_normRunning) return res.json({ ok: true, warm: true, running: true, done: _normStats.done, cursor: _normStats.cursor });
+  // Not running — resume from the durable cursor.
+  const cursor = await readDurableCursor();
+  const chunk = 500;
+  _normRunning = true;
+  _normStats = { chunks: 0, done: 0, startedAt: new Date().toISOString(), lastChunk: null, cursor };
+  runNormalizeChunk(chunk, 1);
+  res.json({ ok: true, resumed: true, from: cursor || "start" });
 });
 
 // ── Self-chaining COMMERCIAL RANKING on the server ─────────────────────────
