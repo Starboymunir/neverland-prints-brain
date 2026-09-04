@@ -15,6 +15,10 @@ require("dotenv").config();
 const https = require("https");
 const pricing = require("./src/services/pricing");
 
+// Safety net: a transient network/TLS blip must never hard-crash a long backfill.
+process.on("unhandledRejection", (e) => console.error("[warn] unhandledRejection:", e && e.message));
+process.on("uncaughtException", (e) => console.error("[warn] uncaughtException:", e && e.message));
+
 const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
 const TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN;
 const VER = process.env.SHOPIFY_API_VERSION || "2024-10";
@@ -33,11 +37,13 @@ function gql(query, variables) {
   return new Promise((resolve, reject) => {
     const b = JSON.stringify({ query, variables });
     const rq = https.request(
-      { hostname: SHOP, path: `/admin/api/${VER}/graphql.json`, method: "POST",
+      { hostname: SHOP, path: `/admin/api/${VER}/graphql.json`, method: "POST", timeout: 30000,
         headers: { "X-Shopify-Access-Token": TOKEN, "Content-Type": "application/json", "Content-Length": Buffer.byteLength(b) } },
       (x) => { let d = ""; x.on("data", (c) => (d += c)); x.on("end", () => { try { resolve(JSON.parse(d)); } catch (e) { reject(e); } }); }
     );
-    rq.on("error", reject); rq.write(b); rq.end();
+    rq.on("error", reject);
+    rq.on("timeout", () => { rq.destroy(new Error("gql timeout")); });
+    rq.write(b); rq.end();
   });
 }
 function supa(qs) {
@@ -192,7 +198,14 @@ async function normalizeFromAsset(asset) {
   // ("This product is currently being modified" / TOO_MANY_PARALLEL... — happens
   // when the drip-sync touches the same product). Backoff with jitter.
   for (let attempt = 0; attempt < 8; attempt++) {
-    const r = await gql(`mutation($input: ProductSetInput!){ productSet(synchronous:true, input:$input){ product{ id } userErrors{ message } } }`, { input });
+    let r;
+    try {
+      r = await gql(`mutation($input: ProductSetInput!){ productSet(synchronous:true, input:$input){ product{ id } userErrors{ message } } }`, { input });
+    } catch (e) {
+      // transient network/TLS error — back off and retry, never crash the run
+      await new Promise((res) => setTimeout(res, 1500 * (attempt + 1) + Math.floor(Math.random() * 900)));
+      continue;
+    }
     const errStr = r && r.errors ? JSON.stringify(r.errors) : "";
     const ue = r && r.data && r.data.productSet && r.data.productSet.userErrors;
     const ueStr = ue && ue.length ? JSON.stringify(ue) : "";
@@ -249,10 +262,14 @@ async function runBatchCursor(afterId, limit) {
   async function worker() {
     while (idx < rows.length) {
       const a = rows[idx++];
-      const res = await normalizeFromAsset(a);
-      if (res.ok) done++;
-      else if (res.skip) skipped++;
-      else { failed++; if (failed <= 8) console.log("  FAIL", a.shopify_product_id, res.error); }
+      try {
+        const res = await normalizeFromAsset(a);
+        if (res.ok) done++;
+        else if (res.skip) skipped++;
+        else { failed++; if (failed <= 8) console.log("  FAIL", a.shopify_product_id, res.error); }
+      } catch (e) {
+        failed++; if (failed <= 8) console.log("  FAIL", a.shopify_product_id, "exception:", e && e.message);
+      }
       await new Promise((r) => setTimeout(r, 120));
     }
   }
