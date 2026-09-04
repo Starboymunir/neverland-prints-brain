@@ -188,16 +188,20 @@ async function normalizeFromAsset(asset) {
   };
   const desc = (asset.description || "").trim();
   if (desc) input.descriptionHtml = `<p>${desc.replace(/[<>]/g, "")}</p>`;
-  // Retry on Shopify GraphQL throttling (cost-based) rather than dropping the row.
-  for (let attempt = 0; attempt < 4; attempt++) {
+  // Retry on transient conditions: GraphQL throttling AND lock contention
+  // ("This product is currently being modified" / TOO_MANY_PARALLEL... — happens
+  // when the drip-sync touches the same product). Backoff with jitter.
+  for (let attempt = 0; attempt < 8; attempt++) {
     const r = await gql(`mutation($input: ProductSetInput!){ productSet(synchronous:true, input:$input){ product{ id } userErrors{ message } } }`, { input });
-    const throttled = r && r.errors && JSON.stringify(r.errors).includes("THROTTLED");
-    if (throttled) { await new Promise((res) => setTimeout(res, 2000 * (attempt + 1))); continue; }
-    const errs = r && r.data && r.data.productSet && r.data.productSet.userErrors;
-    if (r && r.data && r.data.productSet && r.data.productSet.product && (!errs || !errs.length)) return { ok: true };
-    return { error: JSON.stringify(errs || (r && r.errors) || "unknown").slice(0, 150) };
+    const errStr = r && r.errors ? JSON.stringify(r.errors) : "";
+    const ue = r && r.data && r.data.productSet && r.data.productSet.userErrors;
+    const ueStr = ue && ue.length ? JSON.stringify(ue) : "";
+    const retryable = /THROTTLED|TOO_MANY|being modified|try again/i.test(errStr + ueStr);
+    if (retryable) { await new Promise((res) => setTimeout(res, 1500 * (attempt + 1) + Math.floor(Math.random() * 900))); continue; }
+    if (r && r.data && r.data.productSet && r.data.productSet.product && (!ue || !ue.length)) return { ok: true };
+    return { error: (errStr || ueStr || "unknown").slice(0, 150) };
   }
-  return { error: "throttled-give-up" };
+  return { error: "retry-give-up" };
 }
 
 // Forward-only, resumable batch driven by a stable Supabase id-cursor. Each
@@ -229,7 +233,7 @@ function supaRowsOrNull(qs) {
 }
 
 async function runBatchCursor(afterId, limit) {
-  const CONC = 8; // higher throughput; normalizeFromAsset retries on Shopify throttling
+  const CONC = 5; // balance throughput vs lock contention with the drip-sync
   const qs =
     `assets?select=id,shopify_product_id,max_print_width_cm,max_print_height_cm,description` +
     `&shopify_product_id=not.is.null${afterId ? `&id=gt.${afterId}` : ""}&order=id.asc&limit=${limit}`;
@@ -257,6 +261,24 @@ async function runBatchCursor(afterId, limit) {
   console.log(`normalized ${done} | skipped ${skipped} | failed ${failed} | scanned ${rows.length}`);
   console.log(`RESUME_AFTER=${lastId}`);
   console.log(`SCANNED=${rows.length}`);
+  return { scanned: rows.length, lastId, done, skipped, failed };
+}
+
+// Loop runBatchCursor to completion in ONE process (for local/direct runs that
+// don't suffer Render's free-tier spin-down). Keyset-resumes from afterId.
+async function runToCompletion(afterId, pageSize) {
+  let cursor = afterId || "";
+  let totalDone = 0, totalFail = 0, page = 0;
+  const t0 = Date.now();
+  for (;;) {
+    const r = await runBatchCursor(cursor, pageSize);
+    cursor = r.lastId;
+    totalDone += r.done; totalFail += r.failed; page++;
+    const mins = ((Date.now() - t0) / 60000).toFixed(1);
+    console.log(`  [loop] page ${page} | total normalized ${totalDone} | failed ${totalFail} | ${mins}m | cursor ${String(cursor).slice(0, 8)}`);
+    if (r.scanned < pageSize) break; // short page = true end of catalog
+  }
+  console.log(`\nLOOP DONE — normalized ${totalDone}, failed ${totalFail} over ${page} pages.`);
 }
 
 (async () => {
@@ -268,5 +290,6 @@ async function runBatchCursor(afterId, limit) {
   const limit = parseInt(getArg("limit") || "500", 10) || 500;
   const afterId = getArg("after-id") || "";
   if (!APPLY) { console.log("Batch mode needs --apply. Add --limit=N to cap."); return; }
-  await runBatchCursor(afterId, limit);
+  if (args.includes("--loop")) await runToCompletion(afterId, limit);
+  else await runBatchCursor(afterId, limit);
 })();
