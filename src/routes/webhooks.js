@@ -700,7 +700,8 @@ async function readDurableCursor() {
   } catch (e) { return ""; }
 }
 
-router.post("/normalize-tick", async (req, res) => {
+// GET and POST both accepted (uptime pingers like cron-job.org default to GET).
+async function normalizeTick(req, res) {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
   if (_normRunning) return res.json({ ok: true, warm: true, running: true, done: _normStats.done, cursor: _normStats.cursor });
@@ -711,7 +712,9 @@ router.post("/normalize-tick", async (req, res) => {
   _normStats = { chunks: 0, done: 0, startedAt: new Date().toISOString(), lastChunk: null, cursor };
   runNormalizeChunk(chunk, 1);
   res.json({ ok: true, resumed: true, from: cursor || "start" });
-});
+}
+router.get("/normalize-tick", normalizeTick);
+router.post("/normalize-tick", normalizeTick);
 
 // ── Self-chaining COMMERCIAL RANKING on the server ─────────────────────────
 // Scores the whole assets catalog with the commercial-ranking engine and
