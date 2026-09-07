@@ -699,6 +699,64 @@ router.get("/storefront/catalog", async (req, res) => {
     const search = req.query.q || req.query.search;
     const tag = req.query.tag;
 
+    // ── FOR-YOU: a personalized, rotating feed over the top-quality pool ──
+    // Makes the main grid feel like a personal timeline (re-ranked by the
+    // visitor's own taste, freshened by a time-bucketed rotation) instead of a
+    // fixed order. Only when explicitly requested with an anonymous visitor id;
+    // a search query always takes precedence (honour explicit intent).
+    const visitorId = (req.query.visitor_id || "").toString().slice(0, 64) || null;
+    const sessionId = (req.query.session_id || "").toString().slice(0, 64) || null;
+    if (sort === "for_you" && (visitorId || sessionId) && !search) {
+      const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
+      // profile
+      let profile = { subjects: {}, styles: {}, moods: {}, artists: {}, palettes: {}, orientations: {}, bands: {}, eras: {}, hasHistory: false };
+      const orFilter = [visitorId ? `visitor_id.eq.${visitorId}` : null, sessionId ? `session_id.eq.${sessionId}` : null].filter(Boolean).join(",");
+      const { data: evs } = await supabase.from("analytics_events")
+        .select("event_type, product_id, created_at, consent, search_query")
+        .or(orFilter).not("consent", "is", false).order("created_at", { ascending: false }).limit(200);
+      const pids = [...new Set((evs || []).map((e) => e.product_id).filter((x) => x != null))].slice(0, 150);
+      const abp = new Map();
+      if (pids.length) {
+        const { data: pas } = await supabase.from("assets").select(REC_ASSET_COLS).in("shopify_product_id", pids);
+        for (const a of pas || []) { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; abp.set(String(a.shopify_product_id), a); }
+      }
+      profile = recommender.buildProfile(evs || [], abp);
+      // candidate pool: strongest artworks, honouring any active filters
+      let pq = supabase.from("assets").select(REC_ASSET_COLS).not("commercial_score", "is", null);
+      if (subject) pq = pq.eq("subject", subject);
+      if (style) pq = pq.eq("style", style);
+      if (artist) pq = pq.eq("artist", artist);
+      if (mood) pq = pq.eq("mood", mood);
+      if (orientation) pq = pq.eq("ratio_class", orientation);
+      if (era) pq = pq.eq("era", era);
+      const { data: poolData } = await pq.order("commercial_score", { ascending: false }).limit(600);
+      const pool = (poolData || []).filter((a) => !profile.seenAssetIds || !profile.seenAssetIds.has(a.id));
+      pool.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
+      const ranked = recommender.pickDiverse(pool, profile, pool.length, { exploreSeed: recommender.rotationSeed(visitorId || sessionId, "foryou"), exploreAmount: 0.12 });
+      const start = (page - 1) * perPage;
+      const items = ranked.slice(start, start + perPage).map((a) => {
+        const tier = computePriceTier(a.max_print_width_cm, a.max_print_height_cm);
+        const tags = Array.isArray(a.ai_tags) ? a.ai_tags : [];
+        return {
+          id: a.id, title: a.title, artist: a.artist, style: a.style, mood: a.mood, era: a.era, subject: a.subject,
+          country: tags.find((t) => !KNOWN_CONTINENTS.includes(t) && t !== "Unknown" && typeof t === "string" && t.length > 1) || null,
+          continent: tags.find((t) => KNOWN_CONTINENTS.includes(t)) || null,
+          orientation: a.ratio_class, quality: a.quality_tier,
+          image: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`,
+          imageSrcset: { s400: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s400`, s600: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`, s800: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s800` },
+          driveFileId: a.drive_file_id, priceTier: tier.tier,
+          price: cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || tier.price, comparePrice: tier.comparePrice,
+          maxPrint: `${Math.round(a.max_print_width_cm || 0)} × ${Math.round(a.max_print_height_cm || 0)} cm`,
+        };
+      });
+      res.set("Cache-Control", "private, max-age=45");
+      return res.json({
+        items, total: ranked.length, page, perPage, totalPages: Math.ceil(ranked.length / perPage),
+        personalized: profile.hasHistory, featured: 0,
+        filters: { artist, style, mood, orientation, era, subject, country, continent, sort, q: search, tag },
+      });
+    }
+
     // ── POPULAR SORT: fetch trending asset IDs from analytics ──
     let popularAssetIds = null;
     if (sort === "popular") {
@@ -1755,7 +1813,7 @@ router.get("/storefront/recommendations", async (req, res) => {
         candidates = (data || []).filter((a) => !excludeIds.has(a.id));
         candidates.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
       }
-      const inspired = recommender.pickDiverse(candidates, profile, perModule);
+      const inspired = recommender.pickDiverse(candidates, profile, perModule, { exploreSeed: recommender.rotationSeed(visitorId || sessionId, "inspired"), exploreAmount: 0.1 });
       inspired.forEach((a) => excludeIds.add(a.id));
       if (inspired.length) modules.push({ key: "inspired_by_viewed", title: "Inspired by what you viewed", items: inspired.map(assetToItem) });
 
@@ -1770,7 +1828,7 @@ router.get("/storefront/recommendations", async (req, res) => {
           .limit(120);
         const artistPool = (data || []).filter((a) => !excludeIds.has(a.id));
         artistPool.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
-        const picks = recommender.pickDiverse(artistPool, profile, perModule);
+        const picks = recommender.pickDiverse(artistPool, profile, perModule, { exploreSeed: recommender.rotationSeed(visitorId || sessionId, "artist"), exploreAmount: 0.1 });
         picks.forEach((a) => excludeIds.add(a.id));
         if (picks.length) modules.push({ key: "more_like_this", title: "More from artists you love", items: picks.map(assetToItem) });
       }
@@ -1792,8 +1850,9 @@ router.get("/storefront/recommendations", async (req, res) => {
         .limit(300);
       let pool = (data || []).filter((a) => !excludeIds.has(a.id));
       pool.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
-      // Diversify by subject so the cold-start shelf isn't all one theme.
-      const picks = recommender.pickDiverse(pool, profile, perModule);
+      // Diversify by subject AND rotate (exploreSeed) so the shelf isn't the same
+      // frozen order on every visit — even anonymous visitors see it evolve.
+      const picks = recommender.pickDiverse(pool, profile, perModule, { exploreSeed: recommender.rotationSeed(visitorId || sessionId, "editors"), exploreAmount: 0.16 });
       modules.unshift({ key: "editors_picks", title: "Handpicked for your walls", items: picks.map(assetToItem) });
     }
 
@@ -1823,6 +1882,27 @@ router.get("/storefront/similar", async (req, res) => {
     const productId = (req.query.product_id || "").toString().replace(/\D/g, "") || null;
     const assetId = (req.query.asset_id || "").toString().slice(0, 64) || null;
     const limit = Math.min(24, Math.max(4, parseInt(req.query.limit || "12", 10)));
+    const visitorId = (req.query.visitor_id || "").toString().slice(0, 64) || null;
+    const sessionId = (req.query.session_id || "").toString().slice(0, 64) || null;
+
+    // Load the visitor's taste profile so "you may also like" leans toward what
+    // THIS person likes (not only the current artwork). Same anonymous signals as
+    // the homepage; a cold profile just falls back to similarity + quality.
+    let profile = { subjects: {}, styles: {}, moods: {}, artists: {}, palettes: {}, orientations: {}, bands: {}, eras: {}, hasHistory: false };
+    if (visitorId || sessionId) {
+      const orFilter = [visitorId ? `visitor_id.eq.${visitorId}` : null, sessionId ? `session_id.eq.${sessionId}` : null].filter(Boolean).join(",");
+      const { data: evs } = await supabase.from("analytics_events")
+        .select("event_type, product_id, created_at, consent, search_query")
+        .or(orFilter).not("consent", "is", false)
+        .order("created_at", { ascending: false }).limit(200);
+      const pids = [...new Set((evs || []).map((e) => e.product_id).filter((x) => x != null))].slice(0, 150);
+      const abp = new Map();
+      if (pids.length) {
+        const { data: pas } = await supabase.from("assets").select(REC_ASSET_COLS).in("shopify_product_id", pids);
+        for (const a of pas || []) { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; abp.set(String(a.shopify_product_id), a); }
+      }
+      profile = recommender.buildProfile(evs || [], abp);
+    }
 
     // 1. Resolve the seed artwork.
     let seedQ = supabase.from("assets").select(REC_ASSET_COLS).limit(1);
@@ -1872,14 +1952,18 @@ router.get("/storefront/similar", async (req, res) => {
       addFrom(data, limit - picks.length);
     }
 
-    // Rank the assembled set by commercial score and cap.
+    // Rank: the pool is already relevant to THIS artwork (same subject/style/
+    // artist); within it, order by the visitor's taste + quality baseline + a
+    // little rotation, so it's personalized and fresh rather than a static list.
+    const exploreSeed = recommender.rotationSeed(visitorId || sessionId, "similar-" + seed.id);
     const items = picks
-      .sort((a, b) => (Number(b.commercial_score) || 0) - (Number(a.commercial_score) || 0))
+      .map((a) => ({ a, s: recommender.personalizedScore(a, profile, { exploreSeed, exploreAmount: 0.08 }) }))
+      .sort((x, y) => y.s - x.s)
       .slice(0, limit)
-      .map(assetToItem);
+      .map((x) => assetToItem(x.a));
 
-    res.set("Cache-Control", "public, max-age=300");
-    res.json({ seed: { id: seed.id, title: seed.title, artist: seed.artist, subject: seed.subject }, items });
+    res.set("Cache-Control", visitorId ? "private, max-age=60" : "public, max-age=300");
+    res.json({ seed: { id: seed.id, title: seed.title, artist: seed.artist, subject: seed.subject }, personalized: profile.hasHistory, items });
   } catch (err) {
     console.error("similar error:", err.message);
     res.status(200).json({ items: [], error: err.message });

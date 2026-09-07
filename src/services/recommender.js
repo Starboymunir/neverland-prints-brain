@@ -50,6 +50,24 @@ function priceBand(price) {
   return "statement";
 }
 
+// Deterministic 0..1 hash of a string (FNV-1a). Same input → same output, so a
+// given (asset, seed) pair is stable within a rotation window but reshuffles
+// when the seed changes.
+function hash01(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 1000000) / 1000000;
+}
+
+// A rotation seed that changes over time (default every 30 min) and per visitor,
+// so the "feed" feels alive — the same strong pool reorders between visits/refreshes
+// instead of showing the identical order forever. Pass a stable string (e.g. a
+// module name) so different shelves rotate independently.
+function rotationSeed(visitorOrSession, salt = "", windowMs = 30 * 60 * 1000) {
+  const bucket = Math.floor(Date.now() / windowMs);
+  return `${visitorOrSession || "anon"}:${salt}:${bucket}`;
+}
+
 /**
  * Build a taste profile from events joined to their asset metadata.
  * @param events  [{event_type, product_id, created_at, search_query}] newest-first
@@ -112,21 +130,29 @@ function personalizedScore(asset, profile, opts = {}) {
   delta -= Math.min(0.12, 0.04 * shownOfSubject);
 
   delta = Math.max(-MAX_DELTA, Math.min(MAX_DELTA, delta));
-  return Math.max(0, Math.min(1.3, base + delta));
+  let score = base + delta;
+
+  // Exploration: bounded, seeded jitter so the same strong pool reorders between
+  // visits (feed feels alive, not frozen) without wrecking the quality ranking.
+  if (opts.exploreSeed) {
+    const j = hash01(String(asset.id) + "|" + opts.exploreSeed); // 0..1, stable per window
+    score += (opts.exploreAmount != null ? opts.exploreAmount : 0.1) * (j - 0.5) * 2;
+  }
+  return Math.max(0, Math.min(1.4, score));
 }
 
 /**
  * Greedy diversity-aware pick: order by personalized score but discourage
  * repeating the same subject back-to-back (preserves variety on the shelf).
  */
-function pickDiverse(candidates, profile, n) {
+function pickDiverse(candidates, profile, n, opts = {}) {
   const shownSubjectCounts = {};
   const out = [];
   const pool = candidates.slice();
   while (out.length < n && pool.length) {
     let bestIdx = 0, bestScore = -Infinity;
     for (let i = 0; i < pool.length; i++) {
-      const s = personalizedScore(pool[i], profile, { shownSubjectCounts });
+      const s = personalizedScore(pool[i], profile, { shownSubjectCounts, exploreSeed: opts.exploreSeed, exploreAmount: opts.exploreAmount });
       if (s > bestScore) { bestScore = s; bestIdx = i; }
     }
     const chosen = pool.splice(bestIdx, 1)[0];
@@ -136,4 +162,4 @@ function pickDiverse(candidates, profile, n) {
   return out;
 }
 
-module.exports = { buildProfile, personalizedScore, pickDiverse, priceBand, MAX_DELTA };
+module.exports = { buildProfile, personalizedScore, pickDiverse, priceBand, rotationSeed, hash01, MAX_DELTA };
