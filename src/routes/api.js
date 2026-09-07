@@ -729,7 +729,7 @@ router.get("/storefront/catalog", async (req, res) => {
       if (mood) pq = pq.eq("mood", mood);
       if (orientation) pq = pq.eq("ratio_class", orientation);
       if (era) pq = pq.eq("era", era);
-      const { data: poolData } = await pq.order("commercial_score", { ascending: false }).limit(600);
+      const { data: poolData } = await pq.order("commercial_score", { ascending: false }).limit(1000);
       const pool = (poolData || []).filter((a) => !profile.seenAssetIds || !profile.seenAssetIds.has(a.id));
       pool.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
       const ranked = recommender.pickDiverse(pool, profile, pool.length, { exploreSeed: recommender.rotationSeed(visitorId || sessionId, "foryou"), exploreAmount: 0.12 });

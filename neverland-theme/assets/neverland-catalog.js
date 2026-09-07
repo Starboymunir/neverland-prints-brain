@@ -583,6 +583,18 @@
     // Update URL
     setUrlParams({ page: page > 1 ? page : null, ...filters });
 
+    // Personalize the default browse for returning visitors (TikTok-style feed):
+    // when the shopper hasn't picked an explicit sort or searched, order the grid
+    // by their own taste via the backend's for_you feed. Any explicit sort or
+    // search overrides this and browses the full catalog normally.
+    try {
+      var _vId = localStorage.getItem('nv_visitor_id') || '';
+      var _sId = sessionStorage.getItem('nv_session_id') || '';
+      if (_vId) params.set('visitor_id', _vId);
+      if (_sId) params.set('session_id', _sId);
+      if (_vId && !filters.sort && !filters.q) params.set('sort', 'for_you');
+    } catch (e) {}
+
     try {
       const data = await apiFetch(`/api/storefront/catalog?${params}`);
 

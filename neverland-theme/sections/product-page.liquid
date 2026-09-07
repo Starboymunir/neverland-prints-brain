@@ -278,6 +278,81 @@
   </div>
 </section>
 
+{%- comment -%} ── You may also like — related artworks based on THIS piece ── {%- endcomment -%}
+<section class="related-artworks" id="related-artworks" hidden aria-label="You may also like">
+  <div class="container">
+    <div class="related-artworks__head">
+      <span class="related-artworks__eyebrow">Curated to match</span>
+      <h2 class="related-artworks__title">You may also like</h2>
+      <p class="related-artworks__sub" id="related-sub">More pieces in the same spirit as this artwork.</p>
+    </div>
+    <div class="related-artworks__grid" id="related-grid"></div>
+  </div>
+</section>
+
+<style>
+  .related-artworks { padding: clamp(3rem, 6vw, 5.5rem) 0; background: var(--bg-alt, #f6f1e8); border-top: 1px solid var(--border, #e7e0d4); }
+  .related-artworks__head { text-align: center; max-width: 640px; margin: 0 auto clamp(1.8rem, 4vw, 3rem); }
+  .related-artworks__eyebrow { display: inline-block; font-size: .72rem; letter-spacing: .18em; text-transform: uppercase; color: #b08948; font-weight: 700; margin-bottom: .6rem; }
+  .related-artworks__title { font-family: var(--font-display, Georgia, serif); font-size: clamp(1.7rem, 3.4vw, 2.6rem); line-height: 1.05; margin: 0 0 .5rem; color: var(--text, #1a1a1a); }
+  .related-artworks__sub { font-size: .95rem; color: var(--text-muted, #6b6459); margin: 0; }
+  .related-artworks__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(14px, 2vw, 26px); }
+  @media (max-width: 1024px) { .related-artworks__grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 700px)  { .related-artworks__grid { grid-template-columns: repeat(2, 1fr); gap: 14px; } }
+  .ra-card { display: flex; flex-direction: column; text-decoration: none; color: inherit; }
+  .ra-card__frame { position: relative; background: #fff; padding: 10px; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.06); overflow: hidden; transition: transform .45s cubic-bezier(.2,.7,.2,1), box-shadow .45s; }
+  .ra-card:hover .ra-card__frame { transform: translateY(-6px); box-shadow: 0 24px 44px -22px rgba(0,0,0,.4); }
+  .ra-card__imgwrap { aspect-ratio: 4 / 5; overflow: hidden; border-radius: 4px; background: var(--bg-alt, #efe9de); }
+  .ra-card__img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .6s cubic-bezier(.2,.7,.2,1); }
+  .ra-card:hover .ra-card__img { transform: scale(1.06); }
+  .ra-card__seal { position: absolute; top: 16px; right: 16px; background: rgba(20,18,16,.9); color: #f0d9a6; font-size: .58rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; line-height: 1.1; text-align: center; }
+  .ra-card__body { padding: 14px 4px 0; }
+  .ra-card__title { font-size: .95rem; font-weight: 600; line-height: 1.3; margin: 0 0 2px; color: var(--text, #1a1a1a); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .ra-card__artist { font-size: .8rem; color: var(--text-muted, #6b6459); margin: 0 0 6px; }
+  .ra-card__price { font-size: .9rem; font-weight: 700; color: var(--text, #1a1a1a); }
+  .ra-card__price small { font-weight: 400; color: var(--text-muted, #6b6459); font-size: .74rem; }
+  .related-artworks[hidden] { display: none; }
+</style>
+
+<script>
+(function () {
+  var API = 'https://neverland-prints-brain-xvuy.onrender.com';
+  var PRODUCT_ID = {{ product.id | json }};
+  var sec = document.getElementById('related-artworks');
+  var grid = document.getElementById('related-grid');
+  if (!sec || !grid || !PRODUCT_ID) return;
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function money(n){ var v = Number(n); return isFinite(v) ? '$' + v.toFixed(2) : ''; }
+  function card(item){
+    var img = (item.imageSrcset && item.imageSrcset.s600) || item.image || '';
+    var seal = (typeof item.commercialScore === 'number' && item.commercialScore >= 0.62) ? '<span class="ra-card__seal">Top&nbsp;Pick</span>' : '';
+    return '<a class="ra-card" href="/pages/art?id=' + encodeURIComponent(item.id) + '">' +
+      '<div class="ra-card__frame"><div class="ra-card__imgwrap">' +
+      '<img class="ra-card__img" loading="lazy" src="' + esc(img) + '" alt="' + esc(item.title) + '">' + seal +
+      '</div></div>' +
+      '<div class="ra-card__body">' +
+      '<h3 class="ra-card__title">' + esc(item.title) + '</h3>' +
+      '<p class="ra-card__artist">' + esc(item.artist || 'Unknown Artist') + '</p>' +
+      '<span class="ra-card__price"><small>From</small> ' + money(item.price) + '</span>' +
+      '</div></a>';
+  }
+  var vId = ''; try { vId = localStorage.getItem('nv_visitor_id') || ''; } catch (e) {}
+  var sId = ''; try { sId = sessionStorage.getItem('nv_session_id') || ''; } catch (e) {}
+  fetch(API + '/api/storefront/similar?product_id=' + encodeURIComponent(PRODUCT_ID) + '&limit=8' +
+        (vId ? '&visitor_id=' + encodeURIComponent(vId) : '') + (sId ? '&session_id=' + encodeURIComponent(sId) : ''))
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var items = (data && data.items) || [];
+      if (!items.length) return; // stay hidden if nothing relevant
+      grid.innerHTML = items.map(card).join('');
+      var sub = document.getElementById('related-sub');
+      if (sub && data.seed && data.seed.subject) sub.textContent = 'More ' + String(data.seed.subject).toLowerCase() + ' and pieces in the same spirit.';
+      sec.hidden = false;
+    })
+    .catch(function () { /* stay hidden on error */ });
+})();
+</script>
+
 <script>
 (function() {
   // ── Skeleton variant IDs (unframed / framed) ──
