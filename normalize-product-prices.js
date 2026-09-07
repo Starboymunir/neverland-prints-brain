@@ -177,44 +177,74 @@ async function normalizeById(node) {
   return { error: JSON.stringify(errs || (r && r.errors) || "unknown").slice(0, 150) };
 }
 
-// Normalize straight from a Supabase asset row (no Shopify lookup): the row
-// already carries shopify_product_id, print dimensions, and the AI description.
+// A gql() call that retries on transient GraphQL throttling / network blips and
+// returns the parsed response (or null after giving up). Note: the daily
+// VARIANT_THROTTLE_EXCEEDED (variant *creation* limit) is NOT retryable — it
+// only clears the next day — which is exactly why we no longer create variants.
+async function gqlRetry(query, variables) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    let r;
+    try { r = await gql(query, variables); }
+    catch (e) { await new Promise((res) => setTimeout(res, 1200 * (attempt + 1) + Math.floor(Math.random() * 700))); continue; }
+    const errStr = r && r.errors ? JSON.stringify(r.errors) : "";
+    if (/THROTTLED|being modified|try again/i.test(errStr) && !/VARIANT_THROTTLE/i.test(errStr)) {
+      await new Promise((res) => setTimeout(res, 1200 * (attempt + 1) + Math.floor(Math.random() * 700)));
+      continue;
+    }
+    return r;
+  }
+  return null;
+}
+
+// Normalize straight from a Supabase asset row. CRITICAL: we UPDATE the existing
+// variant in place (price/compare/availability) and set category + description via
+// productUpdate — we NEVER create variants. Recreating the Size option made a new
+// variant per size, which blew Shopify's ~1,000/day variant-creation cap and
+// stalled the whole backfill. Updating in place has no such limit, so this
+// finishes the entire catalog. The multi-size selection is handled by the custom
+// storefront; the native "from" price is what ads / Google / Shop app / AI shop read.
 async function normalizeFromAsset(asset) {
   const legacyId = asset.shopify_product_id;
   if (!legacyId) return { skip: "no-shopify-id" };
   if (!asset.max_print_width_cm) return { skip: "no-dimensions" };
+  const gid = `gid://shopify/Product/${legacyId}`;
   const tiers = targetTiers(asset.max_print_width_cm, asset.max_print_height_cm);
   if (!tiers.length) return { skip: "no-tiers" };
+  const fromPrice = Math.min(...tiers.map((t) => parseFloat(t.price)));
+  const wasP = wasPrice(fromPrice);
+
+  // 1. Read current version + option name (safety: never destroy an already-sized
+  //    product, since productSet is declarative).
+  const info = await gqlRetry(`{ product(id:"${gid}"){ pv:metafield(namespace:"neverland",key:"price_version"){ value } options{ name } variants(first:1){ edges{ node{ id } } } } }`);
+  const prod = info && info.data && info.data.product;
+  if (!prod) return { error: "no-product" };
+  if (prod.pv && prod.pv.value === PRICE_VERSION) return { skip: "already" };
+  if (!(prod.variants && prod.variants.edges && prod.variants.edges[0])) return { skip: "no-variant" };
+  const optName = prod.options && prod.options[0] && prod.options[0].name;
+  // Only touch single-option "Title/Default Title" skeletons. Anything already
+  // restructured (a "Size" option with real size variants) is left untouched.
+  if (optName && optName !== "Title") return { skip: "has-structure" };
+
+  // 2. ONE productSet that KEEPS the existing "Title/Default Title" option — so
+  //    the existing variant is updated in place (no new variant → no daily
+  //    variant-creation cap) — and sets price + made-to-order availability +
+  //    category + description + version stamp together.
+  const desc = (asset.description || "").trim().replace(/[<>]/g, "");
   const input = {
-    id: `gid://shopify/Product/${legacyId}`,
+    id: gid,
     category: CATEGORY_ID,
-    productOptions: [{ name: "Size", values: tiers.map((t) => ({ name: t.optionValue })) }],
-    variants: tiers.map((t) => ({ optionValues: [{ optionName: "Size", name: t.optionValue }], price: t.price, compareAtPrice: t.compareAt })),
+    productOptions: [{ name: "Title", values: [{ name: "Default Title" }] }],
+    variants: [{ optionValues: [{ optionName: "Title", name: "Default Title" }], price: fromPrice.toFixed(2), compareAtPrice: wasP, inventoryPolicy: "CONTINUE", inventoryItem: { tracked: false } }],
     metafields: [{ namespace: "neverland", key: "price_version", type: "single_line_text_field", value: PRICE_VERSION }],
   };
-  const desc = (asset.description || "").trim();
-  if (desc) input.descriptionHtml = `<p>${desc.replace(/[<>]/g, "")}</p>`;
-  // Retry on transient conditions: GraphQL throttling AND lock contention
-  // ("This product is currently being modified" / TOO_MANY_PARALLEL... — happens
-  // when the drip-sync touches the same product). Backoff with jitter.
-  for (let attempt = 0; attempt < 8; attempt++) {
-    let r;
-    try {
-      r = await gql(`mutation($input: ProductSetInput!){ productSet(synchronous:true, input:$input){ product{ id } userErrors{ message } } }`, { input });
-    } catch (e) {
-      // transient network/TLS error — back off and retry, never crash the run
-      await new Promise((res) => setTimeout(res, 1500 * (attempt + 1) + Math.floor(Math.random() * 900)));
-      continue;
-    }
-    const errStr = r && r.errors ? JSON.stringify(r.errors) : "";
-    const ue = r && r.data && r.data.productSet && r.data.productSet.userErrors;
-    const ueStr = ue && ue.length ? JSON.stringify(ue) : "";
-    const retryable = /THROTTLED|TOO_MANY|being modified|try again/i.test(errStr + ueStr);
-    if (retryable) { await new Promise((res) => setTimeout(res, 1500 * (attempt + 1) + Math.floor(Math.random() * 900))); continue; }
-    if (r && r.data && r.data.productSet && r.data.productSet.product && (!ue || !ue.length)) return { ok: true };
-    return { error: (errStr || ueStr || "unknown").slice(0, 150) };
+  if (desc) input.descriptionHtml = `<p>${desc}</p>`;
+  const r = await gqlRetry(`mutation($input: ProductSetInput!){ productSet(synchronous:true, input:$input){ product{ id } userErrors{ message } } }`, { input });
+  const ue = r && r.data && r.data.productSet && r.data.productSet.userErrors;
+  if (!r || (r.errors && r.errors.length) || (ue && ue.length)) {
+    return { error: JSON.stringify((r && (r.errors || ue)) || "productset-failed").slice(0, 150) };
   }
-  return { error: "retry-give-up" };
+  if (r.data.productSet.product) return { ok: true };
+  return { error: "no-product-returned" };
 }
 
 // Forward-only, resumable batch driven by a stable Supabase id-cursor. Each
@@ -246,7 +276,7 @@ function supaRowsOrNull(qs) {
 }
 
 async function runBatchCursor(afterId, limit) {
-  const CONC = 5; // balance throughput vs lock contention with the drip-sync
+  const CONC = 12; // in-place updates don't create variants, so we can push harder
   const qs =
     `assets?select=id,shopify_product_id,max_print_width_cm,max_print_height_cm,description` +
     `&shopify_product_id=not.is.null${afterId ? `&id=gt.${afterId}` : ""}&order=id.asc&limit=${limit}`;
