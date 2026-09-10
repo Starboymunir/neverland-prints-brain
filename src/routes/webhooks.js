@@ -734,7 +734,7 @@ function shopGql(query, variables) {
   });
 }
 let _dzRunning = false;
-let _dzStats = { pages: 0, scanned: 0, drafted: 0, failed: 0, startedAt: null, cursor: null, done: false };
+let _dzStats = { pages: 0, scanned: 0, drafted: 0, fixed: 0, failed: 0, startedAt: null, cursor: null, done: false };
 async function draftOne(id) {
   for (let i = 0; i < 5; i++) {
     const r = await shopGql(`mutation($p:ProductInput!){ productUpdate(input:$p){ userErrors{ message } } }`, { p: { id, status: "DRAFT" } });
@@ -745,24 +745,42 @@ async function draftOne(id) {
   }
   return false;
 }
+// Make a priced product ALWAYS AVAILABLE (print-on-demand: no stock, oversell).
+async function makeAvailable(productId, variantIds) {
+  const vars = variantIds.map((id) => ({ id, inventoryPolicy: "CONTINUE", inventoryItem: { tracked: false } }));
+  for (let i = 0; i < 5; i++) {
+    const r = await shopGql(`mutation($pid:ID!,$vars:[ProductVariantsBulkInput!]!){ productVariantsBulkUpdate(productId:$pid,variants:$vars){ userErrors{ message } } }`, { pid: productId, vars });
+    const errStr = r.errors ? JSON.stringify(r.errors) : "";
+    if (/THROTTLED|being modified|try again/i.test(errStr)) { await new Promise((res) => setTimeout(res, 1500 * (i + 1))); continue; }
+    const ue = r.data && r.data.productVariantsBulkUpdate && r.data.productVariantsBulkUpdate.userErrors;
+    return !!(r.data && r.data.productVariantsBulkUpdate && (!ue || !ue.length));
+  }
+  return false;
+}
 async function runDraftZeroChunk() {
   const after = _dzStats.cursor;
-  const r = await shopGql(`{ products(first:250${after ? `, after:"${after}"` : ""}){ pageInfo{ hasNextPage endCursor } edges{ node{ id status variants(first:20){ edges{ node{ price } } } } } } }`);
+  const r = await shopGql(`{ products(first:100${after ? `, after:"${after}"` : ""}){ pageInfo{ hasNextPage endCursor } edges{ node{ id status variants(first:20){ edges{ node{ id price inventoryPolicy inventoryItem{ tracked } } } } } } } }`);
   if (!r.data || !r.data.products) { setTimeout(runDraftZeroChunk, 5000); return; } // transient — retry same cursor
-  const targets = [];
+  const toDraft = [], toFix = [];
   for (const e of r.data.products.edges) {
     _dzStats.scanned++;
     const n = e.node;
     if (n.status !== "ACTIVE") continue;
-    const prices = n.variants.edges.map((v) => parseFloat(v.node.price));
-    if (prices.length && Math.min(...prices) === 0) targets.push(n.id);
+    const vs = n.variants.edges.map((v) => v.node);
+    const prices = vs.map((v) => parseFloat(v.price));
+    if (prices.length && Math.min(...prices) === 0) { toDraft.push(n.id); continue; } // $0 duplicate → unpublish
+    // priced but not always-available → fix inventory so it can be sold
+    const bad = vs.filter((v) => v.inventoryPolicy === "DENY" || (v.inventoryItem && v.inventoryItem.tracked));
+    if (bad.length) toFix.push({ id: n.id, variantIds: bad.map((v) => v.id) });
   }
   let i = 0;
-  await Promise.all(Array.from({ length: 5 }, async () => { while (i < targets.length) { const id = targets[i++]; const ok = await draftOne(id); if (ok) _dzStats.drafted++; else _dzStats.failed++; await new Promise((res) => setTimeout(res, 60)); } }));
+  await Promise.all(Array.from({ length: 5 }, async () => { while (i < toDraft.length) { const id = toDraft[i++]; const ok = await draftOne(id); if (ok) _dzStats.drafted++; else _dzStats.failed++; await new Promise((res) => setTimeout(res, 50)); } }));
+  let j = 0;
+  await Promise.all(Array.from({ length: 5 }, async () => { while (j < toFix.length) { const t = toFix[j++]; const ok = await makeAvailable(t.id, t.variantIds); if (ok) _dzStats.fixed++; else _dzStats.failed++; await new Promise((res) => setTimeout(res, 50)); } }));
   _dzStats.pages++;
   _dzStats.cursor = r.data.products.pageInfo.endCursor;
-  if (r.data.products.pageInfo.hasNextPage) { setTimeout(runDraftZeroChunk, 400); }
-  else { _dzRunning = false; _dzStats.done = true; console.log(`[draft-zero] DONE scanned=${_dzStats.scanned} drafted=${_dzStats.drafted} failed=${_dzStats.failed}`); }
+  if (r.data.products.pageInfo.hasNextPage) { setTimeout(runDraftZeroChunk, 300); }
+  else { _dzRunning = false; _dzStats.done = true; console.log(`[product-health] DONE scanned=${_dzStats.scanned} drafted=${_dzStats.drafted} fixed=${_dzStats.fixed} failed=${_dzStats.failed}`); }
 }
 router.post("/draft-zero", (req, res) => {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
