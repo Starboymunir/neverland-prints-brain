@@ -759,7 +759,7 @@ async function makeAvailable(productId, variantIds) {
 }
 async function runDraftZeroChunk() {
   const after = _dzStats.cursor;
-  const r = await shopGql(`{ products(first:100${after ? `, after:"${after}"` : ""}){ pageInfo{ hasNextPage endCursor } edges{ node{ id status variants(first:20){ edges{ node{ id price inventoryPolicy inventoryItem{ tracked } } } } } } } }`);
+  const r = await shopGql(`{ products(first:200${after ? `, after:"${after}"` : ""}){ pageInfo{ hasNextPage endCursor } edges{ node{ id status variants(first:12){ edges{ node{ id price inventoryPolicy inventoryItem{ tracked } } } } } } } }`);
   if (!r.data || !r.data.products) { setTimeout(runDraftZeroChunk, 5000); return; } // transient — retry same cursor
   const toDraft = [], toFix = [];
   for (const e of r.data.products.edges) {
@@ -774,12 +774,12 @@ async function runDraftZeroChunk() {
     if (bad.length) toFix.push({ id: n.id, variantIds: bad.map((v) => v.id) });
   }
   let i = 0;
-  await Promise.all(Array.from({ length: 5 }, async () => { while (i < toDraft.length) { const id = toDraft[i++]; const ok = await draftOne(id); if (ok) _dzStats.drafted++; else _dzStats.failed++; await new Promise((res) => setTimeout(res, 50)); } }));
+  await Promise.all(Array.from({ length: 10 }, async () => { while (i < toDraft.length) { const id = toDraft[i++]; const ok = await draftOne(id); if (ok) _dzStats.drafted++; else _dzStats.failed++; await new Promise((res) => setTimeout(res, 20)); } }));
   let j = 0;
-  await Promise.all(Array.from({ length: 5 }, async () => { while (j < toFix.length) { const t = toFix[j++]; const ok = await makeAvailable(t.id, t.variantIds); if (ok) _dzStats.fixed++; else _dzStats.failed++; await new Promise((res) => setTimeout(res, 50)); } }));
+  await Promise.all(Array.from({ length: 14 }, async () => { while (j < toFix.length) { const t = toFix[j++]; const ok = await makeAvailable(t.id, t.variantIds); if (ok) _dzStats.fixed++; else _dzStats.failed++; await new Promise((res) => setTimeout(res, 20)); } }));
   _dzStats.pages++;
   _dzStats.cursor = r.data.products.pageInfo.endCursor;
-  if (r.data.products.pageInfo.hasNextPage) { setTimeout(runDraftZeroChunk, 300); }
+  if (r.data.products.pageInfo.hasNextPage) { setTimeout(runDraftZeroChunk, 120); }
   else { _dzRunning = false; _dzStats.done = true; console.log(`[product-health] DONE scanned=${_dzStats.scanned} drafted=${_dzStats.drafted} fixed=${_dzStats.fixed} failed=${_dzStats.failed}`); }
 }
 router.post("/draft-zero", (req, res) => {
