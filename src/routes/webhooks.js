@@ -787,7 +787,7 @@ router.post("/draft-zero", (req, res) => {
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
   if (_dzRunning) return res.json({ ok: true, already_running: true, stats: _dzStats });
   _dzRunning = true;
-  _dzStats = { pages: 0, scanned: 0, drafted: 0, failed: 0, startedAt: new Date().toISOString(), cursor: null, done: false };
+  _dzStats = { pages: 0, scanned: 0, drafted: 0, fixed: 0, failed: 0, startedAt: new Date().toISOString(), cursor: null, done: false };
   runDraftZeroChunk();
   res.json({ ok: true, started: true, note: "drafting ACTIVE $0 products on the server until done" });
 });
