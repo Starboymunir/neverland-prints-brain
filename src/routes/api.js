@@ -817,7 +817,11 @@ router.get("/storefront/catalog", async (req, res) => {
       .from("assets")
       .select(
         "id, title, drive_file_id, artist, style, mood, era, subject, ai_tags, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, created_at, commercial_score",
-        { count: "exact" }
+        // "planned" uses the Postgres planner's row estimate instead of a full
+        // COUNT over 185k rows on every request — the exact count was making the
+        // unfiltered catalog take 5-12s (filtered was fast). The total is only
+        // used for the "X results" label + pagination, so an estimate is fine.
+        { count: "planned" }
       )
       .in("ingestion_status", ["ready", "analyzed"])
       .not("drive_file_id", "is", null);
