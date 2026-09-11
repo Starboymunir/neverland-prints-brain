@@ -797,6 +797,66 @@ router.get("/draft-zero/status", (req, res) => {
   res.json({ running: _dzRunning, ..._dzStats });
 });
 
+// ── Self-chaining DRIVE-IMAGE METAFIELD backfill ───────────────────────────
+// Most native products have NO Shopify image, so collection cards render empty.
+// Their image DOES exist in Supabase (assets.drive_file_id). This writes that id
+// into the neverland.drive_file_id product metafield so the theme's product-card
+// falls back to the Drive image instead of a blank placeholder. Driven by a
+// Supabase id-cursor; sets 25 products per metafieldsSet call.
+let _bfRunning = false;
+let _bfStats = { batches: 0, scanned: 0, set: 0, failed: 0, startedAt: null, cursor: "", done: false };
+async function bfSupaRows(afterId, limit) {
+  let q = supabase.from("assets").select("id,shopify_product_id,drive_file_id")
+    .not("shopify_product_id", "is", null).not("drive_file_id", "is", null)
+    .order("id", { ascending: true }).limit(limit);
+  if (afterId) q = q.gt("id", afterId);
+  const { data, error } = await q;
+  if (error) return null;
+  return data || [];
+}
+async function setMetaBatch(rows) {
+  const metafields = rows.map((a) => ({ ownerId: `gid://shopify/Product/${a.shopify_product_id}`, namespace: "neverland", key: "drive_file_id", type: "single_line_text_field", value: String(a.drive_file_id) }));
+  for (let i = 0; i < 5; i++) {
+    const r = await shopGql(`mutation($m:[MetafieldsSetInput!]!){ metafieldsSet(metafields:$m){ userErrors{ message } } }`, { m: metafields });
+    const errStr = r.errors ? JSON.stringify(r.errors) : "";
+    if (/THROTTLED|being modified|try again/i.test(errStr)) { await new Promise((res) => setTimeout(res, 1500 * (i + 1))); continue; }
+    const ue = r.data && r.data.metafieldsSet && r.data.metafieldsSet.userErrors;
+    if (r.data && r.data.metafieldsSet && (!ue || !ue.length)) return metafields.length;
+    return 0;
+  }
+  return 0;
+}
+async function runBackfillChunk() {
+  const rows = await bfSupaRows(_bfStats.cursor, 200);
+  if (rows === null) { setTimeout(runBackfillChunk, 8000); return; } // transient fetch fail — retry
+  if (!rows.length) { _bfRunning = false; _bfStats.done = true; console.log(`[img-meta] DONE scanned=${_bfStats.scanned} set=${_bfStats.set} failed=${_bfStats.failed}`); return; }
+  // metafieldsSet allows 25 per call
+  for (let k = 0; k < rows.length; k += 25) {
+    const slice = rows.slice(k, k + 25);
+    const ok = await setMetaBatch(slice);
+    if (ok) _bfStats.set += ok; else _bfStats.failed += slice.length;
+    _bfStats.scanned += slice.length;
+    await new Promise((res) => setTimeout(res, 40));
+  }
+  _bfStats.batches++;
+  _bfStats.cursor = rows[rows.length - 1].id;
+  setTimeout(runBackfillChunk, 120);
+}
+router.post("/backfill-drive-meta", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  if (_bfRunning) return res.json({ ok: true, already_running: true, stats: _bfStats });
+  _bfRunning = true;
+  _bfStats = { batches: 0, scanned: 0, set: 0, failed: 0, startedAt: new Date().toISOString(), cursor: req.query.after || "", done: false };
+  runBackfillChunk();
+  res.json({ ok: true, started: true, note: "backfilling drive_file_id product metafield so collection cards show images" });
+});
+router.get("/backfill-drive-meta/status", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  res.json({ running: _bfRunning, ..._bfStats });
+});
+
 // ── Self-chaining COMMERCIAL RANKING on the server ─────────────────────────
 // Scores the whole assets catalog with the commercial-ranking engine and
 // writes commercial_score on each row (used by ?sort=commercial and, later,
