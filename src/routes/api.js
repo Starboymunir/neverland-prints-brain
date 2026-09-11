@@ -1915,59 +1915,63 @@ router.get("/storefront/similar", async (req, res) => {
     const seed = (seedRows || [])[0];
     if (!seed) return res.status(200).json({ items: [], seed: null });
 
-    const exclude = new Set([seed.id]);
-    const picks = [];
-    const addFrom = (rows, cap) => {
-      let n = 0;
-      for (const a of rows || []) {
-        if (exclude.has(a.id)) continue;
-        exclude.add(a.id);
-        a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0;
-        picks.push(a);
-        if (++n >= cap) break;
-      }
-    };
-
-    // 2. Same subject &/or style, strongest first (the bulk of the shelf).
-    const orParts = [seed.subject ? `subject.eq.${seed.subject}` : null, seed.style ? `style.eq.${seed.style}` : null].filter(Boolean).join(",");
-    if (orParts) {
-      const { data } = await supabase
-        .from("assets").select(REC_ASSET_COLS)
-        .or(orParts).not("commercial_score", "is", null)
-        .order("commercial_score", { ascending: false }).limit(80);
-      addFrom(data, Math.ceil(limit * 0.7));
-    }
-
-    // 3. More by the same artist (a natural "see more of this artist" pull-in).
-    if (seed.artist && picks.length < limit) {
-      const { data } = await supabase
-        .from("assets").select(REC_ASSET_COLS)
-        .eq("artist", seed.artist).not("commercial_score", "is", null)
-        .order("commercial_score", { ascending: false }).limit(40);
-      addFrom(data, limit - picks.length);
-    }
-
-    // 4. Top up with editor's picks if the artwork is very niche.
-    if (picks.length < limit) {
-      const { data } = await supabase
-        .from("assets").select(REC_ASSET_COLS)
-        .not("commercial_score", "is", null)
-        .order("commercial_score", { ascending: false }).limit(60);
-      addFrom(data, limit - picks.length);
-    }
-
-    // Rank: the pool is already relevant to THIS artwork (same subject/style/
-    // artist); within it, order by the visitor's taste + quality baseline + a
-    // little rotation, so it's personalized and fresh rather than a static list.
+    // Build several DISTINCT recommendation shelves for the product page:
+    // "More by this artist", "More <subject>", "More from the <era>", "More
+    // <style>". Each shelf is ranked by commercial score + the visitor's taste +
+    // a little rotation, and items are de-duplicated ACROSS shelves so each row
+    // shows different pieces.
+    const perShelf = Math.min(20, Math.max(6, parseInt(req.query.per_shelf || "12", 10)));
     const exploreSeed = recommender.rotationSeed(visitorId || sessionId, "similar-" + seed.id);
-    const items = picks
-      .map((a) => ({ a, s: recommender.personalizedScore(a, profile, { exploreSeed, exploreAmount: 0.08 }) }))
-      .sort((x, y) => y.s - x.s)
-      .slice(0, limit)
-      .map((x) => assetToItem(x.a));
+    const seenAcross = new Set([seed.id]);
+    const rank = (rows) => rows
+      .map((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; return { a, s: recommender.personalizedScore(a, profile, { exploreSeed, exploreAmount: 0.08 }) }; })
+      .sort((x, y) => y.s - x.s).map((x) => x.a);
+    async function shelf(col, val, cap) {
+      if (!val) return [];
+      const { data } = await supabase.from("assets").select(REC_ASSET_COLS)
+        .eq(col, val).not("commercial_score", "is", null)
+        .order("commercial_score", { ascending: false }).limit(cap * 5);
+      const fresh = (data || []).filter((a) => !seenAcross.has(a.id));
+      const picked = rank(fresh).slice(0, cap);
+      picked.forEach((a) => seenAcross.add(a.id));
+      return picked;
+    }
+
+    const BAD = new Set(["", "unknown", "Unknown", "other", "Other", "Anonymous", "anonymous"]);
+    const groups = [];
+    // 1) More by this artist (skip anonymous/unknown)
+    if (seed.artist && !BAD.has(seed.artist)) {
+      const items = (await shelf("artist", seed.artist, perShelf)).map(assetToItem);
+      if (items.length) groups.push({ key: "artist", title: `More by ${seed.artist}`, items });
+    }
+    // 2) More of this subject (e.g. "More Flowers", "More Landscape art")
+    if (seed.subject && !BAD.has(seed.subject)) {
+      const items = (await shelf("subject", seed.subject, perShelf)).map(assetToItem);
+      if (items.length) groups.push({ key: "subject", title: `More ${seed.subject.toLowerCase()} art`, items });
+    }
+    // 3) More from this era/time
+    if (seed.era && !BAD.has(seed.era)) {
+      const items = (await shelf("era", seed.era, perShelf)).map(assetToItem);
+      if (items.length) groups.push({ key: "era", title: `More from the ${seed.era}`, items });
+    }
+    // 4) More in this style (fills out the page for pieces with a distinct style)
+    if (seed.style && !BAD.has(seed.style)) {
+      const items = (await shelf("style", seed.style, perShelf)).map(assetToItem);
+      if (items.length) groups.push({ key: "style", title: `More ${seed.style} art`, items });
+    }
+    // 5) Fallback: if nothing matched (very niche piece), a general strong shelf.
+    if (!groups.length) {
+      const { data } = await supabase.from("assets").select(REC_ASSET_COLS)
+        .not("commercial_score", "is", null).order("commercial_score", { ascending: false }).limit(perShelf * 5);
+      const items = rank((data || []).filter((a) => !seenAcross.has(a.id))).slice(0, perShelf).map(assetToItem);
+      if (items.length) groups.push({ key: "editors", title: "You may also like", items });
+    }
+
+    // Flattened list kept for backward compatibility with any older consumer.
+    const items = groups.flatMap((g) => g.items).slice(0, 24);
 
     res.set("Cache-Control", visitorId ? "private, max-age=60" : "public, max-age=300");
-    res.json({ seed: { id: seed.id, title: seed.title, artist: seed.artist, subject: seed.subject }, personalized: profile.hasHistory, items });
+    res.json({ seed: { id: seed.id, title: seed.title, artist: seed.artist, subject: seed.subject, era: seed.era }, personalized: profile.hasHistory, groups, items });
   } catch (err) {
     console.error("similar error:", err.message);
     res.status(200).json({ items: [], error: err.message });
