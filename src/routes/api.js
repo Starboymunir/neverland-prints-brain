@@ -695,7 +695,10 @@ router.get("/storefront/catalog", async (req, res) => {
     const subject = req.query.subject;
     const country = req.query.country;
     const continent = req.query.continent;
-    const sort = req.query.sort || "newest";
+    // Default to "commercial" (indexed → fast, and shows the strongest artworks
+    // first for conversion). "newest" sorts by created_at which isn't indexed and
+    // took ~6s over 185k; it's still available when explicitly requested.
+    const sort = req.query.sort || "commercial";
     const search = req.query.q || req.query.search;
     const tag = req.query.tag;
 
