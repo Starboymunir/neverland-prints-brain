@@ -683,6 +683,16 @@ async function getFeaturedAssetIds() {
  *   ?min_price=       — min price tier
  *   ?max_price=       — max price tier
  */
+// Wrap a Drive image id in the weserv.nl caching image CDN: it fetches from
+// Google Drive ONCE, caches on its own CDN, and serves WebP fast — so Drive is
+// no longer hit per-pageview (which rate-limited/blacked-out images under ad
+// load). Same code works with any pull CDN later (e.g. bunny.net) — just this
+// one function changes.
+function driveImg(id, w) {
+  if (!id) return "";
+  return `https://images.weserv.nl/?url=${encodeURIComponent("ssl:lh3.googleusercontent.com/d/" + id + "=s" + w)}&w=${w}&output=webp&q=82`;
+}
+
 router.get("/storefront/catalog", async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
@@ -745,8 +755,8 @@ router.get("/storefront/catalog", async (req, res) => {
           country: tags.find((t) => !KNOWN_CONTINENTS.includes(t) && t !== "Unknown" && typeof t === "string" && t.length > 1) || null,
           continent: tags.find((t) => KNOWN_CONTINENTS.includes(t)) || null,
           orientation: a.ratio_class, quality: a.quality_tier,
-          image: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`,
-          imageSrcset: { s400: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s400`, s600: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`, s800: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s800` },
+          image: driveImg(a.drive_file_id, 600),
+          imageSrcset: { s400: driveImg(a.drive_file_id, 400), s600: driveImg(a.drive_file_id, 600), s800: driveImg(a.drive_file_id, 800) },
           driveFileId: a.drive_file_id, priceTier: tier.tier,
           price: cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || tier.price, comparePrice: tier.comparePrice,
           maxPrint: `${Math.round(a.max_print_width_cm || 0)} × ${Math.round(a.max_print_height_cm || 0)} cm`,
@@ -982,12 +992,8 @@ router.get("/storefront/catalog", async (req, res) => {
         continent: itemContinent,
         orientation: a.ratio_class,
         quality: a.quality_tier,
-        image: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`,
-        imageSrcset: {
-          s400: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s400`,
-          s600: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`,
-          s800: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s800`,
-        },
+        image: driveImg(a.drive_file_id, 600),
+        imageSrcset: { s400: driveImg(a.drive_file_id, 400), s600: driveImg(a.drive_file_id, 600), s800: driveImg(a.drive_file_id, 800) },
         driveFileId: a.drive_file_id,
         priceTier: tier.tier,
         price: cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || tier.price,
@@ -1733,12 +1739,8 @@ function assetToItem(a) {
     mood: a.mood,
     subject: a.subject,
     orientation: a.ratio_class,
-    image: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`,
-    imageSrcset: {
-      s400: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s400`,
-      s600: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s600`,
-      s800: `https://lh3.googleusercontent.com/d/${a.drive_file_id}=s800`,
-    },
+    image: driveImg(a.drive_file_id, 600),
+    imageSrcset: { s400: driveImg(a.drive_file_id, 400), s600: driveImg(a.drive_file_id, 600), s800: driveImg(a.drive_file_id, 800) },
     driveFileId: a.drive_file_id,
     priceTier: tier.tier,
     price: cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || tier.price,
