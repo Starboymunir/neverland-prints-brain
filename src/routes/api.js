@@ -512,7 +512,7 @@ router.get("/storefront/price-map", (req, res) => {
   try {
     const mapPath = path.join(__dirname, "..", "config", "skeleton-price-map.json");
     const priceMap = JSON.parse(fs.readFileSync(mapPath, "utf-8"));
-    res.set("Cache-Control", "public, max-age=3600");
+    res.set("Cache-Control", "public, max-age=300");
     res.json(priceMap);
   } catch (err) {
     res.status(500).json({ error: "Price map not configured", message: err.message });
@@ -1117,7 +1117,9 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
     // Use stored description, or generate one from AI metadata
     const description = asset.description || generateDescriptionFromMeta(asset);
 
-    res.set("Cache-Control", "public, max-age=300");
+    // Short, per-user cache so price/description/image edits reach shoppers fast
+    // (was public/5min → customers kept seeing pre-change product data).
+    res.set("Cache-Control", "private, max-age=60, must-revalidate");
     res.json({
       id: asset.id,
       title: asset.title,
@@ -1220,7 +1222,7 @@ router.get("/storefront/artists", async (req, res) => {
 
     const limited = limit > 0 ? sorted.slice(0, limit) : sorted;
 
-    res.set("Cache-Control", "public, max-age=3600");
+    res.set("Cache-Control", "public, max-age=300");
     res.json({ artists: limited, total: artists.length });
   } catch (err) {
     try {
@@ -1322,7 +1324,7 @@ router.get("/storefront/filters", async (req, res) => {
       setCache("filter_values", cached);
     }
 
-    res.set("Cache-Control", "public, max-age=3600");
+    res.set("Cache-Control", "public, max-age=300");
     res.json({
       ...cached,
       priceTiers: [
@@ -1445,12 +1447,12 @@ router.get("/storefront/collections", async (req, res) => {
           url: `/collections/${col.handle}`,
           count: total || 0,
           featured: col.featured || false,
-          image: sample ? `https://lh3.googleusercontent.com/d/${sample.drive_file_id}=s800` : null,
+          image: sample ? driveImg(sample.drive_file_id, 800) : null,
         };
       })
     );
 
-    res.set("Cache-Control", "public, max-age=1800"); // 30 min cache
+    res.set("Cache-Control", "public, max-age=300"); // 30 min cache
     res.json({ collections: results });
   } catch (err) {
     console.error("Collections endpoint error:", err);
@@ -1495,7 +1497,7 @@ router.get("/storefront/similar-asset/:assetId", async (req, res) => {
               similarity: r.similarity,
             };
           });
-          res.set("Cache-Control", "public, max-age=3600");
+          res.set("Cache-Control", "public, max-age=300");
           return res.json({ similar: items, method: "vector" });
         }
       } catch (e) {
@@ -1550,7 +1552,7 @@ router.get("/storefront/similar-asset/:assetId", async (req, res) => {
       };
     });
 
-    res.set("Cache-Control", "public, max-age=3600");
+    res.set("Cache-Control", "public, max-age=300");
     res.json({ similar: top, method: "tag" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1593,7 +1595,7 @@ router.get("/storefront/product/:shopifyProductId", async (req, res) => {
     const proxy = await getImageProxy();
     const urls = proxy.getResponsiveUrls(asset.drive_file_id);
 
-    res.set("Cache-Control", "public, max-age=3600"); // 1 hour
+    res.set("Cache-Control", "public, max-age=300"); // 1 hour
     res.json({
       driveFileId: asset.drive_file_id,
       images: urls,
@@ -1668,7 +1670,7 @@ router.get("/storefront/similar/:shopifyProductId", async (req, res) => {
       image: `https://lh3.googleusercontent.com/d/${s.drive_file_id}=s400`,
     }));
 
-    res.set("Cache-Control", "public, max-age=3600");
+    res.set("Cache-Control", "public, max-age=300");
     res.json({ similar: top });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2213,7 +2215,7 @@ router.get("/storefront/trending", async (req, res) => {
         }));
     }
 
-    res.set("Cache-Control", "public, max-age=1800");
+    res.set("Cache-Control", "public, max-age=300");
     res.json({ trending: trendingProducts });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2389,7 +2391,7 @@ router.get("/storefront/similar-v2/:shopifyProductId", async (req, res) => {
       try {
         const similar = await emb.findSimilar(asset.id, limit);
         if (similar.length > 0) {
-          res.set("Cache-Control", "public, max-age=3600");
+          res.set("Cache-Control", "public, max-age=300");
           return res.json({
             similar: similar.map((r) => ({
               productId: r.shopify_product_id,
