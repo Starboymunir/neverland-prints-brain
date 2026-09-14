@@ -22,9 +22,29 @@ const TIER_SCALE = { small: 0.35, medium: 0.55, large: 0.75, extra_large: 1.0 };
 // 70% target margin → cost / (1 - 0.70) = cost × 3.333 (matches sync-prices.js).
 const MARGIN = 1 / (1 - 0.70);
 
-// Framed costs more. Proportional uplift matching the current skeleton
-// framed/unframed ratio (~1.31). TODO: replace with real FW frame cost.
+// Legacy flat uplift (kept only for back-compat exports; real per-frame cost
+// below is what pricing now uses).
 const FRAME_UPLIFT = 1.31;
+
+// ── Real FinerWorks framing (verified live via /v3/get_prices) ─────────────
+// Framed product code = {print}F{frameId}S{w}X{h}G1 — frame + clear-acrylic
+// glazing (G1), no mat. Frame IDs and cost curves come straight from FW pricing
+// (all fit linearly): frame $ = a·perimeterIn + b; glazing (G1) = 0.055·areaIn²+3.
+//   black/white (Standard): 0.50·peri + 3   |  id 1 / 2
+//   natural (Standard):     0.70·peri + 5   |  id 7
+//   walnut (Burl Scoop):    1.35·peri + 6   |  id 72
+const FRAME_IDS = { black: 1, white: 2, natural: 7, walnut: 72 };
+const FRAME_COLORS = Object.keys(FRAME_IDS);
+function frameMouldingCost(periIn, color) {
+  if (color === "walnut") return 1.35 * periIn + 6;
+  if (color === "natural") return 0.70 * periIn + 5;
+  return 0.50 * periIn + 3; // black / white
+}
+function glazingCost(areaIn2) { return 0.055 * areaIn2 + 3; }
+function framedProductCode(lo, hi, color) {
+  const id = FRAME_IDS[color] || FRAME_IDS.black;
+  return `5M6M9S${lo}X${hi}F${id}S${lo}X${hi}G1`;
+}
 
 // FinerWorks printable envelope (from build-fw-cost-table.js sweep).
 const MIN_SIDE_IN = 4;
@@ -88,7 +108,7 @@ function tierDimsCm(maxWidthCm, maxHeightCm, tier) {
  * Compute the retail price for one (artwork, tier, frame).
  * Returns { price, fwCost, dims, productCode } or null if not priceable.
  */
-function computePrice(maxWidthCm, maxHeightCm, tier, framed) {
+function computePrice(maxWidthCm, maxHeightCm, tier, frame) {
   const want = tierDimsCm(maxWidthCm, maxHeightCm, tier);
   // Actual printable size (aspect-preserved). Everything below — cost, code, and
   // the SIZE we display — derives from this, so what's shown = priced = printed.
@@ -98,17 +118,18 @@ function computePrice(maxWidthCm, maxHeightCm, tier, framed) {
   const entry = COST_TABLE[`5M6M9S${lo}X${hi}`];
   if (!entry) return null;
   const base = entry.cost;
+  const dims = { widthCm: Math.round(wIn * CM_PER_IN), heightCm: Math.round(hIn * CM_PER_IN) };
 
-  let raw = base * MARGIN;
-  if (framed) raw *= FRAME_UPLIFT;
-  const price = ladderRoundUp(raw);
-
-  return {
-    price,
-    fwCost: framed ? Number((base * FRAME_UPLIFT).toFixed(2)) : base,
-    dims: { widthCm: Math.round(wIn * CM_PER_IN), heightCm: Math.round(hIn * CM_PER_IN) },
-    productCode: `5M6M9S${lo}X${hi}`,
-  };
+  // frame: falsy/"none" → unframed; true → default black; a color string → that frame.
+  const color = frame === true ? "black" : (typeof frame === "string" && frame !== "none" && FRAME_IDS[frame] ? frame : null);
+  if (!color) {
+    return { price: ladderRoundUp(base * MARGIN), fwCost: base, dims, productCode: `5M6M9S${lo}X${hi}`, framed: false };
+  }
+  // Real framed cost = print + moulding + glazing (rounded up a touch to guard margin).
+  const peri = 2 * (lo + hi), area = lo * hi;
+  const frameCost = Math.ceil(frameMouldingCost(peri, color) + glazingCost(area));
+  const fwCost = Number((base + frameCost).toFixed(2));
+  return { price: ladderRoundUp(fwCost * MARGIN), fwCost, dims, productCode: framedProductCode(lo, hi, color), framed: true, frameColor: color };
 }
 
 /**
@@ -126,7 +147,10 @@ function computePriceMap(maxWidthCm, maxHeightCm) {
     if (seen.has(uf.productCode)) continue; // same printable size as a smaller tier
     seen.add(uf.productCode);
     map[`${tier}_unframed`] = uf;
-    const fr = computePrice(maxWidthCm, maxHeightCm, tier, true);
+    // One framed price for all colours, based on the standard (black/white) frame
+    // — every colour still profits (walnut is the thinnest at ~2.1x, no loss), and
+    // the fulfilment sends the colour-specific product code so the right frame ships.
+    const fr = computePrice(maxWidthCm, maxHeightCm, tier, "black");
     if (fr) map[`${tier}_framed`] = fr;
   }
   return map;
@@ -142,4 +166,7 @@ module.exports = {
   TIER_SCALE,
   MARGIN,
   FRAME_UPLIFT,
+  FRAME_IDS,
+  FRAME_COLORS,
+  framedProductCode,
 };
