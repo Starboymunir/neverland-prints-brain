@@ -797,6 +797,72 @@ router.get("/draft-zero/status", (req, res) => {
   res.json({ running: _dzRunning, ..._dzStats });
 });
 
+// ── Self-chaining PRUNE-MISSING-IMAGES on the server ───────────────────────
+// ~2% of artworks have a Drive source file that no longer exists (404) and no
+// Shopify image, so nothing can render them. Draft (unpublish) exactly those so
+// they leave the store/ads. Conservative: a product is drafted ONLY when it has
+// NO Shopify featured image AND its Drive file returns a CONFIRMED 404 (checked
+// twice) — a transient rate-limit (429/timeout) never causes a removal.
+let _pruneRunning = false;
+let _pruneStats = { pages: 0, scanned: 0, checked: 0, drafted: 0, kept: 0, failed: 0, startedAt: null, cursor: null, done: false };
+function checkImageStatus(driveId) {
+  return new Promise((resolve) => {
+    const rq = _https.request({ hostname: "lh3.googleusercontent.com", path: "/d/" + driveId + "=s200", method: "GET", timeout: 12000, headers: { Range: "bytes=0-1" } },
+      (x) => { x.destroy(); resolve(x.statusCode); });
+    rq.on("error", () => resolve(0)); rq.on("timeout", () => { rq.destroy(); resolve(0); }); rq.end();
+  });
+}
+async function imageMissing(driveId) {
+  if (!driveId) return false;
+  let s = await checkImageStatus(driveId);
+  if (s !== 404) return false;              // only 404 is "missing"; 200/429/timeout → keep
+  await new Promise((r) => setTimeout(r, 400));
+  s = await checkImageStatus(driveId);      // confirm to rule out a fluke
+  return s === 404;
+}
+async function runPruneChunk() {
+  const after = _pruneStats.cursor;
+  const r = await shopGql(`{ products(first:100${after ? `, after:"${after}"` : ""}){ pageInfo{ hasNextPage endCursor } edges{ node{ id status featuredImage{ id } df: metafield(namespace:"neverland", key:"drive_file_id"){ value } } } } }`);
+  if (!r.data || !r.data.products) { setTimeout(runPruneChunk, 5000); return; }
+  const candidates = [];
+  for (const e of r.data.products.edges) {
+    _pruneStats.scanned++;
+    const n = e.node;
+    if (n.status !== "ACTIVE") continue;
+    if (n.featuredImage) continue;                 // has a Shopify image → keep
+    const driveId = n.df && n.df.value;
+    if (!driveId) continue;                        // no image source to judge → leave alone
+    candidates.push({ id: n.id, driveId });
+  }
+  let i = 0;
+  await Promise.all(Array.from({ length: 8 }, async () => {
+    while (i < candidates.length) {
+      const c = candidates[i++];
+      _pruneStats.checked++;
+      if (await imageMissing(c.driveId)) { const ok = await draftOne(c.id); if (ok) _pruneStats.drafted++; else _pruneStats.failed++; }
+      else _pruneStats.kept++;
+    }
+  }));
+  _pruneStats.pages++;
+  _pruneStats.cursor = r.data.products.pageInfo.endCursor;
+  if (r.data.products.pageInfo.hasNextPage) { setTimeout(runPruneChunk, 150); }
+  else { _pruneRunning = false; _pruneStats.done = true; console.log(`[prune-images] DONE scanned=${_pruneStats.scanned} checked=${_pruneStats.checked} drafted=${_pruneStats.drafted} kept=${_pruneStats.kept} failed=${_pruneStats.failed}`); }
+}
+router.post("/prune-images", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  if (_pruneRunning) return res.json({ ok: true, already_running: true, stats: _pruneStats });
+  _pruneRunning = true;
+  _pruneStats = { pages: 0, scanned: 0, checked: 0, drafted: 0, kept: 0, failed: 0, startedAt: new Date().toISOString(), cursor: null, done: false };
+  runPruneChunk();
+  res.json({ ok: true, started: true, note: "drafting ACTIVE products whose image is gone (confirmed 404, no Shopify image)" });
+});
+router.get("/prune-images/status", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  res.json({ running: _pruneRunning, ..._pruneStats });
+});
+
 // ── Self-chaining DRIVE-IMAGE METAFIELD backfill ───────────────────────────
 // Most native products have NO Shopify image, so collection cards render empty.
 // Their image DOES exist in Supabase (assets.drive_file_id). This writes that id
