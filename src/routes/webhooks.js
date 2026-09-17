@@ -16,6 +16,7 @@ const supabase = require("../db/supabase");
 const FinerWorksService = require("../services/finerworks");
 const ShopifyService = require("../services/shopify");
 const { fulfillItem, fulfillOrder, resolveItem, previewItem } = require("../services/fulfillment");
+const pricing = require("../services/pricing");
 
 const router = express.Router();
 
@@ -66,7 +67,40 @@ router.post("/order-created", async (req, res) => {
         props[p.name] = p.value;
       });
 
-      const isSkeletonProduct = !!props["Artwork"];
+      let isSkeletonProduct = !!props["Artwork"];
+
+      // FALLBACK: some checkout paths (dynamic/Shop-Pay checkout, cart permalinks,
+      // a sales channel that adds the raw variant) drop our line-item properties,
+      // so the order can't be fulfilled and never reaches the approval queue
+      // (this is exactly what happened to #1025). The skeleton SKU still encodes
+      // everything — NP-<assetIdPrefix>-<tier> — so reconstruct from it.
+      if (!isSkeletonProduct && item.sku && /^NP-[0-9a-f]{8}-\w+$/i.test(item.sku)) {
+        try {
+          const m = item.sku.match(/^NP-([0-9a-f]{8})-(\w+)$/i);
+          const prefix = m[1], tier = m[2];
+          const { data } = await supabase.from("assets")
+            .select("id,title,artist,max_print_width_cm,max_print_height_cm,drive_file_id")
+            .gte("id", `${prefix}-0000-0000-0000-000000000000`).lte("id", `${prefix}-ffff-ffff-ffff-ffffffffffff`).limit(1);
+          const asset = data && data[0];
+          if (asset) {
+            const map = pricing.computePriceMap(asset.max_print_width_cm, asset.max_print_height_cm);
+            const paid = parseFloat(item.price);
+            const uf = map[`${tier}_unframed`], fr = map[`${tier}_framed`];
+            const framed = !!(fr && Math.abs(paid - fr.price) < Math.abs(paid - (uf ? uf.price : 1e9)));
+            const info = framed ? fr : uf;
+            props["_asset_id"] = asset.id;
+            props["Artwork"] = asset.title;
+            props["Artist"] = asset.artist || "Unknown";
+            props["Size"] = info ? `${info.dims.widthCm} × ${info.dims.heightCm} cm` : "";
+            props["Frame"] = framed ? "Framed" : "Unframed";
+            props["_price_tier"] = tier;
+            props["_finerworks_product_code"] = info ? info.productCode : "";
+            props["_drive_file_id"] = asset.drive_file_id;
+            isSkeletonProduct = true;
+            console.log(`   🔧 Rebuilt dropped-property line from SKU ${item.sku} → "${asset.title}" (${props.Frame})`);
+          }
+        } catch (e) { console.warn("   ⚠ SKU-fallback failed:", e.message); }
+      }
 
       if (isSkeletonProduct) {
         // This is a catalog item purchased through skeleton product
