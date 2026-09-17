@@ -83,21 +83,21 @@ router.post("/order-created", async (req, res) => {
             .gte("id", `${prefix}-0000-0000-0000-000000000000`).lte("id", `${prefix}-ffff-ffff-ffff-ffffffffffff`).limit(1);
           const asset = data && data[0];
           if (asset) {
-            const map = pricing.computePriceMap(asset.max_print_width_cm, asset.max_print_height_cm);
-            const paid = parseFloat(item.price);
-            const uf = map[`${tier}_unframed`], fr = map[`${tier}_framed`];
-            const framed = !!(fr && Math.abs(paid - fr.price) < Math.abs(paid - (uf ? uf.price : 1e9)));
-            const info = framed ? fr : uf;
+            // Use the SIZE THE CUSTOMER ACTUALLY BOUGHT, from the variant title
+            // (e.g. "Medium — 48×28 cm") — NOT the pricing engine, which computes a
+            // different (larger) size. Leaving the FW code empty makes fulfilment
+            // derive it from this exact size. Raw Size variants are unframed prints.
+            const vm = (item.variant_title || "").match(/(\d+(?:\.\d+)?)\s*[×x]\s*(\d+(?:\.\d+)?)\s*cm/i);
             props["_asset_id"] = asset.id;
             props["Artwork"] = asset.title;
             props["Artist"] = asset.artist || "Unknown";
-            props["Size"] = info ? `${info.dims.widthCm} × ${info.dims.heightCm} cm` : "";
-            props["Frame"] = framed ? "Framed" : "Unframed";
+            props["Size"] = vm ? `${vm[1]} × ${vm[2]} cm` : "";
+            props["Frame"] = "Unframed";
             props["_price_tier"] = tier;
-            props["_finerworks_product_code"] = info ? info.productCode : "";
+            props["_finerworks_product_code"] = ""; // let fulfilment derive from Size
             props["_drive_file_id"] = asset.drive_file_id;
             isSkeletonProduct = true;
-            console.log(`   🔧 Rebuilt dropped-property line from SKU ${item.sku} → "${asset.title}" (${props.Frame})`);
+            console.log(`   🔧 Rebuilt dropped-property line from SKU ${item.sku} → "${asset.title}" @ ${props.Size}`);
           }
         } catch (e) { console.warn("   ⚠ SKU-fallback failed:", e.message); }
       }
