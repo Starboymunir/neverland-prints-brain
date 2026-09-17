@@ -957,6 +957,47 @@ router.get("/backfill-drive-meta/status", (req, res) => {
   res.json({ running: _bfRunning, ..._bfStats });
 });
 
+// ── Self-chaining VARIANT RE-SYNC on the server ────────────────────────────
+// Aligns every "Size"-variant product's prices + size labels to the dynamic
+// pricing engine, in place (no variant creation), so bypass checkouts can no
+// longer sell the old underpriced variants. Cursor-resumable like normalize.
+let _rsRunning = false;
+let _rsStats = { chunks: 0, done: 0, startedAt: null, lastChunk: null, cursor: "" };
+function runResyncChunk(chunkSize, iter) {
+  const root = path.join(__dirname, "..", "..");
+  const after = _rsStats.cursor ? ` --after-id=${_rsStats.cursor}` : "";
+  const cmd = `node ${path.join(root, "resync-variants.js")} --apply --limit=${chunkSize}${after}`;
+  console.log(`🔁 [run-resync] chunk ${iter} (after=${_rsStats.cursor || "start"})`);
+  exec(cmd, { cwd: root, timeout: 60 * 60 * 1000, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    if (err) console.error(`🔁 [run-resync] chunk ${iter} error:`, err.message);
+    const out = stdout || "";
+    const done = parseInt((out.match(/resynced (\d+)/) || [])[1] || "0", 10);
+    const scanned = parseInt((out.match(/SCANNED=(\d+)/) || [])[1] || "0", 10);
+    const resume = (out.match(/RESUME_AFTER=([^\s]+)/) || [])[1] || _rsStats.cursor;
+    _rsStats.chunks = iter; _rsStats.done += done; _rsStats.cursor = resume;
+    _rsStats.lastChunk = { done, scanned, at: new Date().toISOString() };
+    const moreRemain = scanned >= chunkSize;
+    const transient = scanned === 0 && err;
+    if ((moreRemain || transient) && iter < 5000) setTimeout(() => runResyncChunk(chunkSize, iter + 1), transient ? 15000 : 3000);
+    else { _rsRunning = false; console.log(`🔁 [run-resync] ALL DONE — ${_rsStats.done} products over ${iter} chunks.`); }
+  });
+}
+router.post("/run-resync", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  if (_rsRunning) return res.json({ ok: true, already_running: true, stats: _rsStats });
+  const chunk = Math.min(parseInt(req.query.chunk || "400", 10) || 400, 2000);
+  _rsRunning = true;
+  _rsStats = { chunks: 0, done: 0, startedAt: new Date().toISOString(), lastChunk: null, cursor: req.query.after || "" };
+  runResyncChunk(chunk, 1);
+  res.json({ ok: true, started: true, note: "re-syncing Size-variant prices+labels to the dynamic engine" });
+});
+router.get("/run-resync/status", (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  res.json({ running: _rsRunning, ..._rsStats });
+});
+
 // ── Self-chaining COMMERCIAL RANKING on the server ─────────────────────────
 // Scores the whole assets catalog with the commercial-ranking engine and
 // writes commercial_score on each row (used by ?sort=commercial and, later,
