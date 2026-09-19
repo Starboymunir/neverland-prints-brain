@@ -109,14 +109,23 @@ function refreshCache(key, computeFn) {
     .finally(() => { delete _inflight[key]; });
   return _inflight[key];
 }
-async function cachedAggregate(key, ttlMs, computeFn) {
+// waitForFirst=false: when the cache is completely cold, DON'T block the request
+// on the (possibly slow) first compute — kick it off in the background and return
+// null so the caller can serve a fast fallback. Used by /filters, whose compute
+// is a full-table scan that can take a minute cold.
+async function cachedAggregate(key, ttlMs, computeFn, waitForFirst = true) {
   const entry = _cache[key];
   if (entry && Date.now() - entry.ts < ttlMs) return entry.data; // fresh
   if (entry) { // stale: serve now, refresh in background
     refreshCache(key, computeFn).catch((e) => console.warn(`cachedAggregate refresh failed for ${key}:`, e.message));
     return entry.data;
   }
-  // Nothing cached yet — compute once (deduped). Serve any stale entry on error.
+  // Nothing cached yet.
+  if (!waitForFirst) {
+    refreshCache(key, computeFn).catch((e) => console.warn(`cachedAggregate warm failed for ${key}:`, e.message));
+    return null; // caller serves a fast fallback while this warms
+  }
+  // compute once (deduped). Serve any stale entry on error.
   try { return await refreshCache(key, computeFn); }
   catch (e) { if (_cache[key]) return _cache[key].data; throw e; }
 }
@@ -1352,7 +1361,15 @@ async function computeFilterValues() {
  */
 router.get("/storefront/filters", async (req, res) => {
   try {
-    const cached = await cachedAggregate("filter_values", 30 * 60 * 1000, computeFilterValues);
+    // Non-blocking: if the facet cache is cold (e.g. just after a restart, while
+    // the boot pre-warm is still running its scan), serve the fast Shopify-based
+    // fallback instead of blocking the request on a full-table scan.
+    const cached = await cachedAggregate("filter_values", 30 * 60 * 1000, computeFilterValues, false);
+    if (!cached) {
+      const fb = await storefrontFiltersFromShopify();
+      res.set("Cache-Control", "public, max-age=60");
+      return res.json(fb);
+    }
 
     res.set("Cache-Control", "public, max-age=300");
     res.json({
