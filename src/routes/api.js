@@ -93,6 +93,34 @@ function setCache(key, data) {
   _cache[key] = { data, ts: Date.now() };
 }
 
+// Stale-while-revalidate wrapper for expensive full-table aggregations
+// (filters, artist counts). Serves cached data instantly; when the entry is
+// stale it serves it anyway and refreshes in the background; and it DEDUPES
+// concurrent recomputes so that a cold cache right after a restart can't let a
+// burst of homepage requests each launch their own full-table scan and OOM the
+// process (the root of the intermittent "recs/filters vanished" flapping).
+// Serves stale data if a refresh throws.
+const _inflight = {};
+function refreshCache(key, computeFn) {
+  if (_inflight[key]) return _inflight[key];
+  _inflight[key] = Promise.resolve()
+    .then(computeFn)
+    .then((data) => { setCache(key, data); return data; })
+    .finally(() => { delete _inflight[key]; });
+  return _inflight[key];
+}
+async function cachedAggregate(key, ttlMs, computeFn) {
+  const entry = _cache[key];
+  if (entry && Date.now() - entry.ts < ttlMs) return entry.data; // fresh
+  if (entry) { // stale: serve now, refresh in background
+    refreshCache(key, computeFn).catch((e) => console.warn(`cachedAggregate refresh failed for ${key}:`, e.message));
+    return entry.data;
+  }
+  // Nothing cached yet — compute once (deduped). Serve any stale entry on error.
+  try { return await refreshCache(key, computeFn); }
+  catch (e) { if (_cache[key]) return _cache[key].data; throw e; }
+}
+
 function isSupabaseFetchFailure(err) {
   const msg = (err && err.message) ? String(err.message) : "";
   return /fetch failed|ENOTFOUND|ECONNRESET|ETIMEDOUT/i.test(msg);
@@ -1165,10 +1193,36 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
   }
 });
 
+// Artist name → count. Prefers a database-side GROUP BY (RPC get_artist_counts);
+// falls back to a paginated scan only if that RPC isn't present. Wrapped by
+// cachedAggregate (30-min TTL, stale-while-revalidate, deduped).
+async function computeArtistList() {
+  const { data, error } = await supabase.rpc("get_artist_counts");
+  if (!error) {
+    return (data || []).map((r) => ({ artist: r.artist, name: r.artist, count: r.count }));
+  }
+  console.warn("RPC get_artist_counts not available, using fallback:", error.message);
+  const counts = {};
+  let from = 0;
+  while (true) {
+    const { data: batch, error: bErr } = await supabase
+      .from("assets")
+      .select("artist")
+      .in("ingestion_status", ["ready", "analyzed"])
+      .not("artist", "is", null)
+      .range(from, from + 999);
+    if (bErr) throw bErr;
+    if (!batch || batch.length === 0) break;
+    batch.forEach((a) => { counts[a.artist] = (counts[a.artist] || 0) + 1; });
+    if (batch.length < 1000) break;
+    from += 1000;
+  }
+  return Object.entries(counts).map(([name, count]) => ({ artist: name, name, count }));
+}
+
 /**
  * GET /api/storefront/artists
- * List all artists with counts. Paginates through ALL rows (bypasses 1000-row limit).
- * Cached for 30 minutes.
+ * List all artists with counts, cached 30 min with stale-while-revalidate.
  */
 router.get("/storefront/artists", async (req, res) => {
   try {
@@ -1177,35 +1231,9 @@ router.get("/storefront/artists", async (req, res) => {
     const searchQ = (req.query.q || req.query.search || "").trim().toLowerCase();
     const sortBy = req.query.sort || "count"; // count | alpha
 
-    // Check cache (30 min TTL)
-    let artists = getCached("artists_list", 30 * 60 * 1000);
-    if (!artists) {
-      // Use database-side GROUP BY via RPC (avoids loading 135k rows into Node.js)
-      const { data, error } = await supabase.rpc("get_artist_counts");
-      if (error) {
-        // Fallback: paginated counting if RPC not available
-        console.warn("RPC get_artist_counts not available, using fallback:", error.message);
-        const counts = {};
-        let from = 0;
-        while (true) {
-          const { data: batch, error: bErr } = await supabase
-            .from("assets")
-            .select("artist")
-            .in("ingestion_status", ["ready", "analyzed"])
-            .not("artist", "is", null)
-            .range(from, from + 999);
-          if (bErr) throw bErr;
-          if (!batch || batch.length === 0) break;
-          batch.forEach((a) => { counts[a.artist] = (counts[a.artist] || 0) + 1; });
-          if (batch.length < 1000) break;
-          from += 1000;
-        }
-        artists = Object.entries(counts).map(([name, count]) => ({ artist: name, name, count }));
-      } else {
-        artists = (data || []).map((r) => ({ artist: r.artist, name: r.artist, count: r.count }));
-      }
-      setCache("artists_list", artists);
-    }
+    // Cached 30 min with stale-while-revalidate + dedupe (so a cold cache after
+    // a restart can't launch a 135k-row scan on every concurrent request).
+    const artists = await cachedAggregate("artists_list", 30 * 60 * 1000, computeArtistList);
 
     // Sort
     let sorted;
@@ -1234,95 +1262,95 @@ router.get("/storefront/artists", async (req, res) => {
   }
 });
 
+// Compute filter facet counts by scanning the assets table one column at a
+// time — SEQUENTIALLY, not as 6 parallel full-table scans — so peak memory
+// stays low and a cold recompute (right after a restart) can't OOM the process.
+// Wrapped by cachedAggregate below (30-min TTL, stale-while-revalidate, deduped).
+async function computeFilterValues() {
+  const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
+
+  async function countColumn(col) {
+    const counts = {};
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("assets")
+        .select(col)
+        .in("ingestion_status", ["ready", "analyzed"])
+        .not(col, "is", null)
+        .range(from, from + 999);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      data.forEach((r) => { counts[r[col]] = (counts[r[col]] || 0) + 1; });
+      if (data.length < 1000) break;
+      from += 1000;
+    }
+    return Object.entries(counts)
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  // One dimension at a time (was Promise.all) → only one column's batch is held
+  // in memory at once.
+  const styles = await countColumn("style");
+  const moods = await countColumn("mood");
+  const orientations = await countColumn("ratio_class");
+  const eras = await countColumn("era");
+  const subjects = await countColumn("subject");
+
+  // ai_tags is an array column carrying countries + continents.
+  const countryCounts = {};
+  const continentCounts = {};
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("assets")
+      .select("ai_tags")
+      .in("ingestion_status", ["ready", "analyzed"])
+      .not("ai_tags", "is", null)
+      .range(from, from + 999);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    data.forEach((r) => {
+      const tags = Array.isArray(r.ai_tags) ? r.ai_tags : [];
+      tags.forEach((tag) => {
+        if (KNOWN_CONTINENTS.includes(tag)) {
+          continentCounts[tag] = (continentCounts[tag] || 0) + 1;
+        } else if (typeof tag === "string" && tag.length > 1 && tag !== "Unknown") {
+          countryCounts[tag] = (countryCounts[tag] || 0) + 1;
+        }
+      });
+    });
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+
+  const toSortedArr = (counts) =>
+    Object.entries(counts)
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+
+  const cap = (arr, n) => Array.isArray(arr) ? arr.slice(0, n) : [];
+  return {
+    styles: cap(styles, 150),
+    moods: cap(moods, 150),
+    orientations: cap(orientations, 40),
+    eras: cap(eras, 120),
+    subjects: cap(subjects, 200),
+    countries: cap(toSortedArr(countryCounts), 250),
+    continents: cap(toSortedArr(continentCounts), 10),
+  };
+}
+
 /**
  * GET /api/storefront/filters
  * Returns available filter values (styles, moods, orientations, eras, subjects, countries, continents).
- * Paginates through ALL rows (bypasses 1000-row limit). Cached for 30 minutes.
+ * Aggregated over ALL rows, cached 30 min with stale-while-revalidate (never a
+ * synchronous full-table scan on the user's request once warm).
  */
 router.get("/storefront/filters", async (req, res) => {
   try {
-    // Check cache (30 min TTL)
-    let cached = getCached("filter_values", 30 * 60 * 1000);
-    if (!cached) {
-      // Database-side aggregation — one simple query per dimension
-      // instead of loading 135k rows into Node.js memory
-      const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
-
-      async function countColumn(col) {
-        const counts = {};
-        let from = 0;
-        while (true) {
-          const { data, error } = await supabase
-            .from("assets")
-            .select(col)
-            .in("ingestion_status", ["ready", "analyzed"])
-            .not(col, "is", null)
-            .range(from, from + 999);
-          if (error) throw error;
-          if (!data || data.length === 0) break;
-          data.forEach((r) => { counts[r[col]] = (counts[r[col]] || 0) + 1; });
-          if (data.length < 1000) break;
-          from += 1000;
-        }
-        return Object.entries(counts)
-          .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => b.count - a.count);
-      }
-
-      // Run dimension queries in parallel (each only fetches one column)
-      const [styles, moods, orientations, eras, subjects] = await Promise.all([
-        countColumn("style"),
-        countColumn("mood"),
-        countColumn("ratio_class"),
-        countColumn("era"),
-        countColumn("subject"),
-      ]);
-
-      // ai_tags needs special handling (it's an array column with countries+continents)
-      const countryCounts = {};
-      const continentCounts = {};
-      let from = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from("assets")
-          .select("ai_tags")
-          .in("ingestion_status", ["ready", "analyzed"])
-          .not("ai_tags", "is", null)
-          .range(from, from + 999);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        data.forEach((r) => {
-          const tags = Array.isArray(r.ai_tags) ? r.ai_tags : [];
-          tags.forEach((tag) => {
-            if (KNOWN_CONTINENTS.includes(tag)) {
-              continentCounts[tag] = (continentCounts[tag] || 0) + 1;
-            } else if (typeof tag === "string" && tag.length > 1 && tag !== "Unknown") {
-              countryCounts[tag] = (countryCounts[tag] || 0) + 1;
-            }
-          });
-        });
-        if (data.length < 1000) break;
-        from += 1000;
-      }
-
-      const toSortedArr = (counts) =>
-        Object.entries(counts)
-          .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => b.count - a.count);
-
-      const cap = (arr, n) => Array.isArray(arr) ? arr.slice(0, n) : [];
-      cached = {
-        styles: cap(styles, 150),
-        moods: cap(moods, 150),
-        orientations: cap(orientations, 40),
-        eras: cap(eras, 120),
-        subjects: cap(subjects, 200),
-        countries: cap(toSortedArr(countryCounts), 250),
-        continents: cap(toSortedArr(continentCounts), 10),
-      };
-
-      setCache("filter_values", cached);
-    }
+    const cached = await cachedAggregate("filter_values", 30 * 60 * 1000, computeFilterValues);
 
     res.set("Cache-Control", "public, max-age=300");
     res.json({
@@ -3751,5 +3779,15 @@ router.get("/finerworks/price-compare", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Pre-warm the expensive aggregation caches shortly after boot so the first
+// storefront visitor after a (re)start gets an instant cached response instead
+// of triggering a full-table scan on their request. Fire-and-forget; a slight
+// delay lets Supabase finish connecting first. Sequential inside each compute
+// keeps peak memory low.
+setTimeout(() => {
+  refreshCache("filter_values", computeFilterValues).catch((e) => console.warn("prewarm filter_values failed:", e.message));
+  refreshCache("artists_list", computeArtistList).catch((e) => console.warn("prewarm artists_list failed:", e.message));
+}, 8000);
 
 module.exports = router;
