@@ -1262,10 +1262,11 @@ router.get("/storefront/artists", async (req, res) => {
   }
 });
 
-// Compute filter facet counts by scanning the assets table one column at a
-// time — SEQUENTIALLY, not as 6 parallel full-table scans — so peak memory
-// stays low and a cold recompute (right after a restart) can't OOM the process.
-// Wrapped by cachedAggregate below (30-min TTL, stale-while-revalidate, deduped).
+// Compute filter facet counts. Each column scan holds only one 1000-row batch
+// at a time, so running the dimensions in parallel costs a few MB — cheap. The
+// OOM protection is cachedAggregate's DEDUPE (one recompute at a time no matter
+// how many requests arrive after a restart), not serializing this one compute
+// (serial was ~6x slower and timed the endpoint out). 30-min SWR cache.
 async function computeFilterValues() {
   const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
 
@@ -1290,13 +1291,14 @@ async function computeFilterValues() {
       .sort((a, b) => b.count - a.count);
   }
 
-  // One dimension at a time (was Promise.all) → only one column's batch is held
-  // in memory at once.
-  const styles = await countColumn("style");
-  const moods = await countColumn("mood");
-  const orientations = await countColumn("ratio_class");
-  const eras = await countColumn("era");
-  const subjects = await countColumn("subject");
+  // Dimensions in parallel (fast cold compute); dedupe upstream stops the cascade.
+  const [styles, moods, orientations, eras, subjects] = await Promise.all([
+    countColumn("style"),
+    countColumn("mood"),
+    countColumn("ratio_class"),
+    countColumn("era"),
+    countColumn("subject"),
+  ]);
 
   // ai_tags is an array column carrying countries + continents.
   const countryCounts = {};
