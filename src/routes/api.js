@@ -166,6 +166,65 @@ async function shopifyAdminGet(resource, params = {}) {
   return JSON.parse(text);
 }
 
+// Shared catalog column set + filter/mapping helpers (used by the main query and
+// by the timeout-retry path below).
+const CATALOG_COLS =
+  "id, title, drive_file_id, artist, style, mood, era, subject, ai_tags, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, created_at, commercial_score";
+
+function applyCatalogFilters(query, f) {
+  query = query.in("ingestion_status", ["ready", "analyzed"]).not("drive_file_id", "is", null);
+  if (f.artist) query = query.eq("artist", f.artist);
+  if (f.style) query = query.eq("style", f.style);
+  if (f.mood) query = query.eq("mood", f.mood);
+  if (f.orientation) query = query.eq("ratio_class", f.orientation);
+  if (f.era) query = query.eq("era", f.era);
+  if (f.subject) query = query.eq("subject", f.subject);
+  if (f.country) query = query.filter("ai_tags", "cs", JSON.stringify([f.country]));
+  if (f.continent) query = query.filter("ai_tags", "cs", JSON.stringify([f.continent]));
+  if (f.tag) query = query.filter("ai_tags", "cs", JSON.stringify([f.tag]));
+  if (f.search) {
+    const words = f.search.trim().split(/\s+/).filter((w) => w.length > 1);
+    if (words.length > 1) {
+      for (const word of words) {
+        query = query.or(`title.ilike.%${word}%,style.ilike.%${word}%,mood.ilike.%${word}%,artist.ilike.%${word}%,era.ilike.%${word}%,subject.ilike.%${word}%`);
+      }
+    } else {
+      query = query.or(`title.ilike.%${f.search}%,style.ilike.%${f.search}%,mood.ilike.%${f.search}%,artist.ilike.%${f.search}%,era.ilike.%${f.search}%,subject.ilike.%${f.search}%`);
+    }
+  }
+  return query;
+}
+
+function mapCatalogItems(data) {
+  const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
+  return (data || []).map((a) => {
+    const tier = computePriceTier(a.max_print_width_cm, a.max_print_height_cm);
+    const tags = Array.isArray(a.ai_tags) ? a.ai_tags : [];
+    const itemContinent = tags.find((t) => KNOWN_CONTINENTS.includes(t)) || null;
+    const itemCountry = tags.find((t) => !KNOWN_CONTINENTS.includes(t) && t !== "Unknown" && typeof t === "string" && t.length > 1) || null;
+    return {
+      id: a.id,
+      title: a.title,
+      artist: a.artist,
+      style: a.style,
+      mood: a.mood,
+      era: a.era,
+      subject: a.subject,
+      country: itemCountry,
+      continent: itemContinent,
+      orientation: a.ratio_class,
+      quality: a.quality_tier,
+      image: driveImg(a.drive_file_id, 600),
+      imageSrcset: { s400: driveImg(a.drive_file_id, 400), s600: driveImg(a.drive_file_id, 600), s800: driveImg(a.drive_file_id, 800) },
+      driveFileId: a.drive_file_id,
+      priceTier: tier.tier,
+      price: cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || tier.price,
+      comparePrice: tier.comparePrice,
+      maxPrint: `${Math.round(a.max_print_width_cm || 0)} × ${Math.round(a.max_print_height_cm || 0)} cm`,
+    };
+  });
+}
+
 async function storefrontCatalogFromShopify(req) {
   const page = Math.max(1, parseInt(req.query.page || "1", 10));
   const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page || "24", 10)));
@@ -863,45 +922,14 @@ router.get("/storefront/catalog", async (req, res) => {
       }
     }
 
-    let query = supabase
-      .from("assets")
-      .select(
-        "id, title, drive_file_id, artist, style, mood, era, subject, ai_tags, ratio_class, quality_tier, max_print_width_cm, max_print_height_cm, width_px, height_px, created_at, commercial_score",
-        // "planned" uses the Postgres planner's row estimate instead of a full
-        // COUNT over 185k rows on every request — the exact count was making the
-        // unfiltered catalog take 5-12s (filtered was fast). The total is only
-        // used for the "X results" label + pagination, so an estimate is fine.
-        { count: "planned" }
-      )
-      .in("ingestion_status", ["ready", "analyzed"])
-      .not("drive_file_id", "is", null);
-
-    // Filters
-    if (artist) query = query.eq("artist", artist);
-    if (style) query = query.eq("style", style);
-    if (mood) query = query.eq("mood", mood);
-    if (orientation) query = query.eq("ratio_class", orientation);
-    if (era) query = query.eq("era", era);
-    if (subject) query = query.eq("subject", subject);
-    if (country) query = query.filter("ai_tags", "cs", JSON.stringify([country]));
-    if (continent) query = query.filter("ai_tags", "cs", JSON.stringify([continent]));
-    if (tag) query = query.filter("ai_tags", "cs", JSON.stringify([tag]));
-    if (search) {
-      // Enhanced search: split into words and match each word against any field
-      const words = search.trim().split(/\s+/).filter(w => w.length > 1);
-      if (words.length > 1) {
-        // Multi-word: each word must match at least one field (AND logic)
-        for (const word of words) {
-          query = query.or(
-            `title.ilike.%${word}%,style.ilike.%${word}%,mood.ilike.%${word}%,artist.ilike.%${word}%,era.ilike.%${word}%,subject.ilike.%${word}%`
-          );
-        }
-      } else {
-        query = query.or(
-          `title.ilike.%${search}%,style.ilike.%${search}%,mood.ilike.%${search}%,artist.ilike.%${search}%,era.ilike.%${search}%,subject.ilike.%${search}%`
-        );
-      }
-    }
+    // "planned" count uses the Postgres planner's row estimate instead of a full
+    // COUNT over 185k rows on every request (exact count made the unfiltered
+    // catalog take 5-12s). Filters shared with the timeout-retry path below.
+    const catalogFilters = { artist, style, mood, orientation, era, subject, country, continent, tag, search };
+    let query = applyCatalogFilters(
+      supabase.from("assets").select(CATALOG_COLS, { count: "planned" }),
+      catalogFilters
+    );
 
     // Sort
     if (sort === "popular" && popularAssetIds && popularAssetIds.length > 0) {
@@ -992,52 +1020,35 @@ router.get("/storefront/catalog", async (req, res) => {
       }
     }
 
+    // Fail fast if the sort column isn't indexed: abort after 8s so we drop to
+    // the commercial-score retry (indexed, ~1.5s) instead of hanging ~30s until
+    // Postgres' statement timeout. Once a created_at / lower(title) index exists,
+    // the real sort completes in <1s and this never trips.
+    const ac = new AbortController();
+    const killer = setTimeout(() => ac.abort(), 8000);
     let data = [];
     let count = 0;
-    if (normalNeeded > 0) {
-      query = query.range(normalFrom, normalFrom + normalNeeded - 1);
-      const r = await query;
-      if (r.error) throw r.error;
-      data = r.data || [];
-      count = r.count || 0;
-    } else {
-      // Page is entirely featured — still need the total for pagination.
-      const r = await query.range(0, 0);
-      if (r.error) throw r.error;
-      count = r.count || 0;
+    try {
+      if (normalNeeded > 0) {
+        const r = await query.range(normalFrom, normalFrom + normalNeeded - 1).abortSignal(ac.signal);
+        if (r.error) throw r.error;
+        data = r.data || [];
+        count = r.count || 0;
+      } else {
+        // Page is entirely featured — still need the total for pagination.
+        const r = await query.range(0, 0).abortSignal(ac.signal);
+        if (r.error) throw r.error;
+        count = r.count || 0;
+      }
+    } finally {
+      clearTimeout(killer);
     }
 
     data = featuredRows.concat(data);
     count = count + featuredIds.length;
 
-    // Compute price tier for each asset
-    const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
-    let items = (data || []).map((a) => {
-      const tier = computePriceTier(a.max_print_width_cm, a.max_print_height_cm);
-      const tags = Array.isArray(a.ai_tags) ? a.ai_tags : [];
-      const itemContinent = tags.find(t => KNOWN_CONTINENTS.includes(t)) || null;
-      const itemCountry = tags.find(t => !KNOWN_CONTINENTS.includes(t) && t !== "Unknown" && typeof t === "string" && t.length > 1) || null;
-      return {
-        id: a.id,
-        title: a.title,
-        artist: a.artist,
-        style: a.style,
-        mood: a.mood,
-        era: a.era,
-        subject: a.subject,
-        country: itemCountry,
-        continent: itemContinent,
-        orientation: a.ratio_class,
-        quality: a.quality_tier,
-        image: driveImg(a.drive_file_id, 600),
-        imageSrcset: { s400: driveImg(a.drive_file_id, 400), s600: driveImg(a.drive_file_id, 600), s800: driveImg(a.drive_file_id, 800) },
-        driveFileId: a.drive_file_id,
-        priceTier: tier.tier,
-        price: cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || tier.price,
-        comparePrice: tier.comparePrice,
-        maxPrint: `${Math.round(a.max_print_width_cm || 0)} × ${Math.round(a.max_print_height_cm || 0)} cm`,
-      };
-    });
+    // Compute price tier + shape for each asset
+    let items = mapCatalogItems(data);
 
     // Re-sort by trending score if popular sort with analytics data
     if (sort === "popular" && popularAssetIds && popularAssetIds.length > 0) {
@@ -1075,6 +1086,55 @@ router.get("/storefront/catalog", async (req, res) => {
     // The Shopify fallback silently hid real errors in this endpoint — log loudly
     // so a broken primary path is visible instead of quietly degrading.
     console.error("catalog primary path failed:", err.message);
+
+    // A statement timeout means the requested sort column isn't indexed
+    // (created_at for newest/oldest/random, title for title_*). Retry with the
+    // indexed commercial_score order so the shopper still gets a FULL page of
+    // real artworks instead of the near-empty Shopify fallback (which drops every
+    // product without a Shopify-hosted image → ~1 item). Adding a created_at /
+    // lower(title) index removes the timeout entirely (see ops notes).
+    if (/statement timeout|abort/i.test(err.message || "")) {
+      try {
+        const page = Math.max(1, parseInt(req.query.page || "1", 10));
+        const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page || "24", 10)));
+        const from = (page - 1) * perPage;
+        const f = {
+          artist: req.query.artist, style: req.query.style, mood: req.query.mood,
+          orientation: req.query.orientation, era: req.query.era, subject: req.query.subject,
+          country: req.query.country, continent: req.query.continent, tag: req.query.tag,
+          search: req.query.q || req.query.search,
+        };
+        const r2 = await applyCatalogFilters(
+          supabase.from("assets").select(CATALOG_COLS, { count: "planned" }), f
+        )
+          .order("commercial_score", { ascending: false, nullsFirst: false })
+          .order("id", { ascending: true })
+          .range(from, from + perPage - 1);
+        if (!r2.error) {
+          res.set("Cache-Control", "public, max-age=60");
+          return res.json({
+            items: mapCatalogItems(r2.data),
+            total: r2.count || 0,
+            page,
+            perPage,
+            totalPages: Math.ceil((r2.count || 0) / perPage),
+            featured: 0,
+            degraded: "commercial_fallback", // requested sort's column isn't indexed
+            requestedSort: req.query.sort || "commercial",
+            filters: {
+              artist: f.artist || null, style: f.style || null, mood: f.mood || null,
+              orientation: f.orientation || null, era: f.era || null, subject: f.subject || null,
+              country: f.country || null, continent: f.continent || null,
+              sort: req.query.sort || "commercial", q: f.search || null, tag: f.tag || null,
+            },
+          });
+        }
+        console.error("catalog commercial-retry error:", r2.error.message);
+      } catch (e2) {
+        console.error("catalog commercial-retry failed:", e2.message);
+      }
+    }
+
     try {
       const fallback = await storefrontCatalogFromShopify(req);
       return res.json(Object.assign({ fallback: true, fallbackReason: String(err.message).slice(0, 200) }, fallback));
