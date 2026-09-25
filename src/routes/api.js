@@ -1278,6 +1278,32 @@ router.get("/storefront/artists", async (req, res) => {
 // (serial was ~6x slower and timed the endpoint out). 30-min SWR cache.
 async function computeFilterValues() {
   const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
+  const cap = (arr, n) => (Array.isArray(arr) ? arr.slice(0, n) : []);
+
+  // FAST PATH: database-side aggregation via the get_filter_counts RPC. Returns a
+  // few KB instead of reading ~135k rows over the wire — the difference between a
+  // trivial and a huge Supabase egress cost. Falls through to the row-scan below
+  // if the RPC isn't present yet (client runs the SQL once in the SQL editor).
+  try {
+    const { data: agg, error: rpcErr } = await supabase.rpc("get_filter_counts");
+    if (!rpcErr && agg) {
+      const g = typeof agg === "string" ? JSON.parse(agg) : agg;
+      const tagList = Array.isArray(g.tags) ? g.tags : [];
+      const countries = tagList.filter((t) => t && !KNOWN_CONTINENTS.includes(t.value) && t.value !== "Unknown" && typeof t.value === "string" && t.value.length > 1);
+      const continents = tagList.filter((t) => t && KNOWN_CONTINENTS.includes(t.value));
+      return {
+        styles: cap(g.styles, 150),
+        moods: cap(g.moods, 150),
+        orientations: cap(g.orientations, 40),
+        eras: cap(g.eras, 120),
+        subjects: cap(g.subjects, 200),
+        countries: cap(countries, 250),
+        continents: cap(continents, 10),
+      };
+    }
+  } catch (e) {
+    console.warn("get_filter_counts RPC unavailable, falling back to row scan:", e.message);
+  }
 
   async function countColumn(col) {
     const counts = {};
@@ -1341,7 +1367,6 @@ async function computeFilterValues() {
       .map(([value, count]) => ({ value, count }))
       .sort((a, b) => b.count - a.count);
 
-  const cap = (arr, n) => Array.isArray(arr) ? arr.slice(0, n) : [];
   return {
     styles: cap(styles, 150),
     moods: cap(moods, 150),
@@ -3799,14 +3824,10 @@ router.get("/finerworks/price-compare", async (req, res) => {
   }
 });
 
-// Pre-warm the expensive aggregation caches shortly after boot so the first
-// storefront visitor after a (re)start gets an instant cached response instead
-// of triggering a full-table scan on their request. Fire-and-forget; a slight
-// delay lets Supabase finish connecting first. Sequential inside each compute
-// keeps peak memory low.
-setTimeout(() => {
-  refreshCache("filter_values", computeFilterValues).catch((e) => console.warn("prewarm filter_values failed:", e.message));
-  refreshCache("artists_list", computeArtistList).catch((e) => console.warn("prewarm artists_list failed:", e.message));
-}, 8000);
+// NOTE: boot pre-warm removed. It re-scanned the whole assets table on every
+// restart, and with frequent restarts that repeated full-table read was a large
+// Supabase EGRESS sink (it helped blow the egress quota). Filters/artists now
+// warm lazily on first request (filters serves the Shopify fallback until then),
+// and computeFilterValues prefers the tiny get_filter_counts RPC when present.
 
 module.exports = router;
