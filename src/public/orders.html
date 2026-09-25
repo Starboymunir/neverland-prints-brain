@@ -113,7 +113,21 @@ async function load(){
     return;
   }
 
-  const data = await res.json();
+  // Don't silently show "0 orders" when the request actually FAILED (e.g. the
+  // database is unreachable / over quota) — that hid real orders behind a fake
+  // empty state. Surface the real problem instead.
+  let data;
+  try { data = await res.json(); } catch(e){ data = null; }
+  if (!res.ok || !data || data.error){
+    const msg = (data && data.error) ? data.error : ('Error ' + res.status);
+    count.textContent = 'Unavailable';
+    list.textContent = '';
+    const d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = '⚠️ Can’t load orders right now — the database is unavailable. Any orders placed are safe in Shopify and will appear here once it’s restored. (' + msg + ')';
+    list.appendChild(d);
+    return;
+  }
   const items = data.orders || [];
 
   // Group line items by their Shopify order so each customer order = ONE card
