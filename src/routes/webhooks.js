@@ -739,7 +739,12 @@ async function normalizeTick(req, res) {
   const key = process.env.FINERWORKS_WEBHOOK_KEY;
   if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
   if (_normRunning) return res.json({ ok: true, warm: true, running: true, done: _normStats.done, cursor: _normStats.cursor });
-  // Not running — resume from the durable cursor.
+  // The catalog-wide normalize finished long ago. Auto-resuming it from this
+  // once-a-minute ping turned into an endless full-table rescan (when the cursor
+  // read failed it restarted from the top, normalizing 0 products each pass) —
+  // the main drain on Supabase bandwidth/IO. Now the tick is keep-alive only;
+  // resuming requires an explicit ?resume=1 (or POST /run-normalize).
+  if (req.query.resume !== "1") return res.json({ ok: true, warm: true, running: false, note: "keep-alive only; normalize not auto-resumed" });
   const cursor = await readDurableCursor();
   const chunk = 500;
   _normRunning = true;
