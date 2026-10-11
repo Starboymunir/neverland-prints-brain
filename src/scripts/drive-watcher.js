@@ -562,10 +562,11 @@ async function runOnce(forceFullScan = false) {
       result = await deduplicateAndInsert(files);
     }
 
-    // Get total count
+    // Total for the log line only — use the planner estimate. An exact COUNT over
+    // ~186k rows every 5 minutes was needless load on the database.
     const { count } = await supabase
       .from("assets")
-      .select("*", { count: "exact", head: true });
+      .select("*", { count: "planned", head: true });
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     totalSynced += result.inserted;

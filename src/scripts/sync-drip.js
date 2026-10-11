@@ -358,7 +358,10 @@ async function startDrip() {
       } else {
         console.error(`   ❌ Unexpected: ${err.message.slice(0, 200)}`);
         stats.lastError = err.message.slice(0, 200);
-        await sleep(10000); // wait 10s on unknown errors
+        // Back off hard. The batch query walks the whole assets table looking for
+        // unsynced rows; when the DB is slow it times out, and retrying every 10s
+        // turned into a full-table scan every 10s that kept the DB starved.
+        await sleep(10 * 60 * 1000);
       }
     }
   }
