@@ -1202,31 +1202,15 @@ router.get("/storefront/asset/:assetId", async (req, res) => {
   }
 });
 
-// Artist name → count. Prefers a database-side GROUP BY (RPC get_artist_counts);
-// falls back to a paginated scan only if that RPC isn't present. Wrapped by
-// cachedAggregate (30-min TTL, stale-while-revalidate, deduped).
+// Artist name → count, read from the precomputed agg_cache via get_artist_counts()
+// (instant). Deliberately NO row-scan fallback: paging through ~186k rows was the
+// single biggest drain on the database. If the RPC fails, cachedAggregate keeps
+// serving the last good list and the route falls back to Shopify.
 async function computeArtistList() {
   const { data, error } = await supabase.rpc("get_artist_counts");
-  if (!error) {
-    return (data || []).map((r) => ({ artist: r.artist, name: r.artist, count: r.count }));
-  }
-  console.warn("RPC get_artist_counts not available, using fallback:", error.message);
-  const counts = {};
-  let from = 0;
-  while (true) {
-    const { data: batch, error: bErr } = await supabase
-      .from("assets")
-      .select("artist")
-      .in("ingestion_status", ["ready", "analyzed"])
-      .not("artist", "is", null)
-      .range(from, from + 999);
-    if (bErr) throw bErr;
-    if (!batch || batch.length === 0) break;
-    batch.forEach((a) => { counts[a.artist] = (counts[a.artist] || 0) + 1; });
-    if (batch.length < 1000) break;
-    from += 1000;
-  }
-  return Object.entries(counts).map(([name, count]) => ({ artist: name, name, count }));
+  if (error) throw error;
+  if (!data || !data.length) throw new Error("artist counts not computed yet (run refresh_agg_cache)");
+  return data.map((r) => ({ artist: r.artist, name: r.artist, count: Number(r.count) }));
 }
 
 /**
@@ -1242,7 +1226,7 @@ router.get("/storefront/artists", async (req, res) => {
 
     // Cached 30 min with stale-while-revalidate + dedupe (so a cold cache after
     // a restart can't launch a 135k-row scan on every concurrent request).
-    const artists = await cachedAggregate("artists_list", 30 * 60 * 1000, computeArtistList);
+    const artists = await cachedAggregate("artists_list", 6 * 60 * 60 * 1000, computeArtistList);
 
     // Sort
     let sorted;
@@ -1271,110 +1255,28 @@ router.get("/storefront/artists", async (req, res) => {
   }
 });
 
-// Compute filter facet counts. Each column scan holds only one 1000-row batch
-// at a time, so running the dimensions in parallel costs a few MB — cheap. The
-// OOM protection is cachedAggregate's DEDUPE (one recompute at a time no matter
-// how many requests arrive after a restart), not serializing this one compute
-// (serial was ~6x slower and timed the endpoint out). 30-min SWR cache.
+// Filter facet counts, read from the precomputed agg_cache via get_filter_counts()
+// (one cached row, instant). Deliberately NO row-scan fallback: the old fallback
+// paged through every artwork (~1,100 queries per refresh) and was the top CPU
+// consumer on the database. Refresh the cache with: select refresh_agg_cache();
 async function computeFilterValues() {
   const KNOWN_CONTINENTS = ["Europe", "Asia", "North America", "South America", "Africa", "Oceania"];
   const cap = (arr, n) => (Array.isArray(arr) ? arr.slice(0, n) : []);
-
-  // FAST PATH: database-side aggregation via the get_filter_counts RPC. Returns a
-  // few KB instead of reading ~135k rows over the wire — the difference between a
-  // trivial and a huge Supabase egress cost. Falls through to the row-scan below
-  // if the RPC isn't present yet (client runs the SQL once in the SQL editor).
-  try {
-    const { data: agg, error: rpcErr } = await supabase.rpc("get_filter_counts");
-    if (!rpcErr && agg) {
-      const g = typeof agg === "string" ? JSON.parse(agg) : agg;
-      const tagList = Array.isArray(g.tags) ? g.tags : [];
-      const countries = tagList.filter((t) => t && !KNOWN_CONTINENTS.includes(t.value) && t.value !== "Unknown" && typeof t.value === "string" && t.value.length > 1);
-      const continents = tagList.filter((t) => t && KNOWN_CONTINENTS.includes(t.value));
-      return {
-        styles: cap(g.styles, 150),
-        moods: cap(g.moods, 150),
-        orientations: cap(g.orientations, 40),
-        eras: cap(g.eras, 120),
-        subjects: cap(g.subjects, 200),
-        countries: cap(countries, 250),
-        continents: cap(continents, 10),
-      };
-    }
-  } catch (e) {
-    console.warn("get_filter_counts RPC unavailable, falling back to row scan:", e.message);
-  }
-
-  async function countColumn(col) {
-    const counts = {};
-    let from = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from("assets")
-        .select(col)
-        .in("ingestion_status", ["ready", "analyzed"])
-        .not(col, "is", null)
-        .range(from, from + 999);
-      if (error) throw error;
-      if (!data || data.length === 0) break;
-      data.forEach((r) => { counts[r[col]] = (counts[r[col]] || 0) + 1; });
-      if (data.length < 1000) break;
-      from += 1000;
-    }
-    return Object.entries(counts)
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count);
-  }
-
-  // Dimensions in parallel (fast cold compute); dedupe upstream stops the cascade.
-  const [styles, moods, orientations, eras, subjects] = await Promise.all([
-    countColumn("style"),
-    countColumn("mood"),
-    countColumn("ratio_class"),
-    countColumn("era"),
-    countColumn("subject"),
-  ]);
-
-  // ai_tags is an array column carrying countries + continents.
-  const countryCounts = {};
-  const continentCounts = {};
-  let from = 0;
-  while (true) {
-    const { data, error } = await supabase
-      .from("assets")
-      .select("ai_tags")
-      .in("ingestion_status", ["ready", "analyzed"])
-      .not("ai_tags", "is", null)
-      .range(from, from + 999);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    data.forEach((r) => {
-      const tags = Array.isArray(r.ai_tags) ? r.ai_tags : [];
-      tags.forEach((tag) => {
-        if (KNOWN_CONTINENTS.includes(tag)) {
-          continentCounts[tag] = (continentCounts[tag] || 0) + 1;
-        } else if (typeof tag === "string" && tag.length > 1 && tag !== "Unknown") {
-          countryCounts[tag] = (countryCounts[tag] || 0) + 1;
-        }
-      });
-    });
-    if (data.length < 1000) break;
-    from += 1000;
-  }
-
-  const toSortedArr = (counts) =>
-    Object.entries(counts)
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count);
-
+  const { data: agg, error } = await supabase.rpc("get_filter_counts");
+  if (error) throw error;
+  if (!agg) throw new Error("filter counts not computed yet (run refresh_agg_cache)");
+  const g = typeof agg === "string" ? JSON.parse(agg) : agg;
+  const tagList = Array.isArray(g.tags) ? g.tags : [];
+  const countries = tagList.filter((t) => t && !KNOWN_CONTINENTS.includes(t.value) && t.value !== "Unknown" && typeof t.value === "string" && t.value.length > 1);
+  const continents = tagList.filter((t) => t && KNOWN_CONTINENTS.includes(t.value));
   return {
-    styles: cap(styles, 150),
-    moods: cap(moods, 150),
-    orientations: cap(orientations, 40),
-    eras: cap(eras, 120),
-    subjects: cap(subjects, 200),
-    countries: cap(toSortedArr(countryCounts), 250),
-    continents: cap(toSortedArr(continentCounts), 10),
+    styles: cap(g.styles, 150),
+    moods: cap(g.moods, 150),
+    orientations: cap(g.orientations, 40),
+    eras: cap(g.eras, 120),
+    subjects: cap(g.subjects, 200),
+    countries: cap(countries, 250),
+    continents: cap(continents, 10),
   };
 }
 
@@ -1389,7 +1291,7 @@ router.get("/storefront/filters", async (req, res) => {
     // Non-blocking: if the facet cache is cold (e.g. just after a restart, while
     // the boot pre-warm is still running its scan), serve the fast Shopify-based
     // fallback instead of blocking the request on a full-table scan.
-    const cached = await cachedAggregate("filter_values", 30 * 60 * 1000, computeFilterValues, false);
+    const cached = await cachedAggregate("filter_values", 6 * 60 * 60 * 1000, computeFilterValues, false);
     if (!cached) {
       const fb = await storefrontFiltersFromShopify();
       res.set("Cache-Control", "public, max-age=60");
