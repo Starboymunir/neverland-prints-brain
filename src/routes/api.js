@@ -1990,9 +1990,10 @@ router.get("/storefront/similar", async (req, res) => {
     // 1. Resolve the seed artwork.
     let seedQ = supabase.from("assets").select(REC_ASSET_COLS).limit(1);
     seedQ = assetId ? seedQ.eq("id", assetId) : seedQ.eq("shopify_product_id", productId);
-    const { data: seedRows } = await seedQ;
+    const { data: seedRows, error: seedErr } = await seedQ;
+    if (seedErr) console.error("similar: seed lookup failed:", seedErr.message);
     const seed = (seedRows || [])[0];
-    if (!seed) return res.status(200).json({ items: [], seed: null });
+    if (!seed) return res.status(200).json({ items: [], seed: null, error: seedErr ? seedErr.message : undefined });
 
     // Build several DISTINCT recommendation shelves for the product page:
     // "More by this artist", "More <subject>", "More from the <era>", "More
@@ -2005,39 +2006,36 @@ router.get("/storefront/similar", async (req, res) => {
     const rank = (rows) => rows
       .map((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; return { a, s: recommender.personalizedScore(a, profile, { exploreSeed, exploreAmount: 0.08 }) }; })
       .sort((x, y) => y.s - x.s).map((x) => x.a);
-    async function shelf(col, val, cap) {
+    async function fetchShelf(col, val, cap) {
       if (!val) return [];
-      const { data } = await supabase.from("assets").select(REC_ASSET_COLS)
+      const { data, error } = await supabase.from("assets").select(REC_ASSET_COLS)
         .eq(col, val).not("commercial_score", "is", null)
         .order("commercial_score", { ascending: false }).limit(cap * 5);
-      const fresh = (data || []).filter((a) => !seenAcross.has(a.id));
-      const picked = rank(fresh).slice(0, cap);
+      if (error) console.error(`similar: ${col} shelf failed:`, error.message);
+      return data || [];
+    }
+    function pick(rows, cap) {
+      const picked = rank(rows.filter((a) => !seenAcross.has(a.id))).slice(0, cap);
       picked.forEach((a) => seenAcross.add(a.id));
-      return picked;
+      return picked.map(assetToItem);
     }
 
     const BAD = new Set(["", "unknown", "Unknown", "other", "Other", "Anonymous", "anonymous"]);
+    const ok = (v) => v && !BAD.has(v);
+    // Fetch all four shelves in PARALLEL (one round-trip of latency instead of
+    // four), then pick in order so items are de-duplicated across shelves.
+    const [byArtist, bySubject, byEra, byStyle] = await Promise.all([
+      ok(seed.artist) ? fetchShelf("artist", seed.artist, perShelf) : [],
+      ok(seed.subject) ? fetchShelf("subject", seed.subject, perShelf) : [],
+      ok(seed.era) ? fetchShelf("era", seed.era, perShelf) : [],
+      ok(seed.style) ? fetchShelf("style", seed.style, perShelf) : [],
+    ]);
     const groups = [];
-    // 1) More by this artist (skip anonymous/unknown)
-    if (seed.artist && !BAD.has(seed.artist)) {
-      const items = (await shelf("artist", seed.artist, perShelf)).map(assetToItem);
-      if (items.length) groups.push({ key: "artist", title: `More by ${seed.artist}`, items });
-    }
-    // 2) More of this subject (e.g. "More Flowers", "More Landscape art")
-    if (seed.subject && !BAD.has(seed.subject)) {
-      const items = (await shelf("subject", seed.subject, perShelf)).map(assetToItem);
-      if (items.length) groups.push({ key: "subject", title: `More ${seed.subject.toLowerCase()} art`, items });
-    }
-    // 3) More from this era/time
-    if (seed.era && !BAD.has(seed.era)) {
-      const items = (await shelf("era", seed.era, perShelf)).map(assetToItem);
-      if (items.length) groups.push({ key: "era", title: `More from the ${seed.era}`, items });
-    }
-    // 4) More in this style (fills out the page for pieces with a distinct style)
-    if (seed.style && !BAD.has(seed.style)) {
-      const items = (await shelf("style", seed.style, perShelf)).map(assetToItem);
-      if (items.length) groups.push({ key: "style", title: `More ${seed.style} art`, items });
-    }
+    const add = (key, title, rows) => { const items = pick(rows, perShelf); if (items.length) groups.push({ key, title, items }); };
+    if (ok(seed.artist)) add("artist", `More by ${seed.artist}`, byArtist);                         // 1) same artist
+    if (ok(seed.subject)) add("subject", `More ${seed.subject.toLowerCase()} art`, bySubject);      // 2) same subject
+    if (ok(seed.era)) add("era", `More from the ${seed.era}`, byEra);                               // 3) same era
+    if (ok(seed.style)) add("style", `More ${seed.style} art`, byStyle);                            // 4) same style
     // 5) Fallback: if nothing matched (very niche piece), a general strong shelf.
     if (!groups.length) {
       const { data } = await supabase.from("assets").select(REC_ASSET_COLS)
