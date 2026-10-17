@@ -12,6 +12,55 @@
  */
 
 const FinerWorksService = require("./finerworks");
+const { FRAME_IDS } = require("./pricing");
+const FRAME_BY_ID = Object.fromEntries(Object.entries(FRAME_IDS).map(([color, id]) => [String(id), color]));
+
+/**
+ * Which frame the customer bought. The stored "Frame" text is the customer's
+ * choice ("Framed — Walnut", "Framed — Natural Oak", "Framed", "Unframed") and
+ * wins over the colour baked into the priced code (the /pages/art cart always
+ * passes the BLACK framed code). "Framed" with no colour = black, the default.
+ * Returns a FRAME_IDS key, or null for unframed.
+ */
+function frameColorOf(frameText, codeFrameId) {
+  const t = String(frameText || "").toLowerCase().trim();
+  if (t.startsWith("unframed")) return null;
+  const named = Object.keys(FRAME_IDS).find((c) => t.includes(c));
+  if (t.startsWith("framed")) return named || FRAME_BY_ID[String(codeFrameId)] || "black";
+  return codeFrameId ? FRAME_BY_ID[String(codeFrameId)] || "black" : null;
+}
+
+/** Print code -> framed code: {print}F{frameId}S{w}X{h}G1 (frame + clear acrylic, no mat). */
+function applyFrame(printCode, color) {
+  if (!color) return printCode;
+  const m = String(printCode).match(/^(\d+M\d+M\d+)(S\d+X\d+)$/);
+  return m ? `${m[1]}${m[2]}F${FRAME_IDS[color]}${m[2]}G1` : printCode;
+}
+
+/**
+ * The exact FinerWorks code for one order line: the PRICED size when the cart
+ * passed a code (borderless M8 forced), else a size computed from the tier/size
+ * text — then the customer's frame applied on top. Previously any framed code was
+ * ignored and every framed order went to FinerWorks as a bare print.
+ * Returns { productCode, dims, frameColor } or { error }.
+ */
+function codeFor(item, asset) {
+  const passed = String(item.finerworksProductCode || "").trim().toUpperCase();
+  const m = passed.match(/^(\d+M\d+M)\d+(S(\d+)X(\d+))(?:F(\d+)S\d+X\d+G\d+)?$/);
+  let productCode, dims;
+  if (m) {
+    productCode = m[1] + "8" + m[2]; // force borderless (M8)
+    dims = { widthCm: parseInt(m[3], 10) * 2.54, heightCm: parseInt(m[4], 10) * 2.54 };
+  } else {
+    dims = resolveDims({ size: item.size, priceTier: item.priceTier, asset });
+    if (!dims) return { error: `cannot determine print size (size="${item.size}")` };
+    dims = clampToPrintable(dims);
+    productCode = FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
+  }
+  const frameColor = frameColorOf(item.frame, m && m[5]);
+  return { productCode: applyFrame(productCode, frameColor), dims, frameColor };
+}
+
 
 // Tier => FIXED longest edge in inches, aspect ratio preserved.
 // NOT a percentage of the artwork's max print size: that made "Small" scale with
@@ -131,19 +180,9 @@ async function fulfillItem({ supabase, finerworks, item, address, email }) {
   // charge != print. Force borderless mounting M8 (identical cost, no unwanted
   // border). Only fall back to computing a size when no priced code was passed
   // (legacy flat orders).
-  let productCode = null;
-  let dims = null;
-  const passed = String(item.finerworksProductCode || "").trim().toUpperCase();
-  const m = passed.match(/^(\d+M\d+M)\d+(S(\d+)X(\d+))$/);
-  if (m) {
-    productCode = m[1] + "8" + m[2]; // force borderless (M8)
-    dims = { widthCm: parseInt(m[3], 10) * 2.54, heightCm: parseInt(m[4], 10) * 2.54 };
-  } else {
-    dims = resolveDims({ size: item.size, priceTier: item.priceTier, asset });
-    if (!dims) return fail(`Cannot determine print size (size="${item.size}")`);
-    dims = clampToPrintable(dims);
-    productCode = FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
-  }
+  const resolved = codeFor(item, asset);
+  if (resolved.error) return fail(resolved.error);
+  const { productCode, dims } = resolved;
 
   let pixelWidth = asset ? asset.width_px || 0 : 0;
   let pixelHeight = asset ? asset.height_px || 0 : 0;
@@ -227,19 +266,9 @@ async function resolveItem({ supabase, item }) {
     asset = data || null;
   } catch (e) { /* ignore */ }
 
-  let productCode = null;
-  let dims = null;
-  const passed = String(item.finerworksProductCode || "").trim().toUpperCase();
-  const m = passed.match(/^(\d+M\d+M)\d+(S(\d+)X(\d+))$/);
-  if (m) {
-    productCode = m[1] + "8" + m[2]; // force borderless (M8)
-    dims = { widthCm: parseInt(m[3], 10) * 2.54, heightCm: parseInt(m[4], 10) * 2.54 };
-  } else {
-    dims = resolveDims({ size: item.size, priceTier: item.priceTier, asset });
-    if (!dims) return { error: `cannot determine print size (size="${item.size}")` };
-    dims = clampToPrintable(dims);
-    productCode = FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm);
-  }
+  const resolved = codeFor(item, asset);
+  if (resolved.error) return { error: resolved.error };
+  const { productCode, dims } = resolved;
 
   let pixelWidth = asset ? asset.width_px || 0 : 0;
   let pixelHeight = asset ? asset.height_px || 0 : 0;
@@ -269,7 +298,7 @@ async function fulfillOrder({ supabase, finerworks, rows, address, email, shippi
       orderId: row.shopify_order_id, lineItemId: row.line_item_id,
       artworkTitle: row.artwork_title, size: row.size, priceTier: row.price_tier,
       driveFileId: row.drive_file_id, assetId: row.asset_id, quantity: row.quantity,
-      finerworksProductCode: row.finerworks_product_code,
+      finerworksProductCode: row.finerworks_product_code, frame: row.frame,
     };
     const r = await resolveItem({ supabase, item });
     if (r.error) {
@@ -329,19 +358,20 @@ async function previewItem({ supabase, row }) {
     asset = data || null;
   } catch (e) { /* ignore */ }
 
-  let dims = resolveDims({ size: row.size, priceTier: row.price_tier, asset });
-  if (!dims) return { error: `Cannot determine print size (size="${row.size}")` };
-  dims = clampToPrintable(dims);
+  const resolved = codeFor({ size: row.size, priceTier: row.price_tier, finerworksProductCode: row.finerworks_product_code, frame: row.frame }, asset);
+  if (resolved.error) return { error: resolved.error };
+  const { dims } = resolved;
 
   const widthIn = Math.round(dims.widthCm / 2.54);
   const heightIn = Math.round(dims.heightCm / 2.54);
 
   return {
-    productCode: FinerWorksService.buildDefaultProductCode(dims.widthCm, dims.heightCm),
+    productCode: resolved.productCode,
+    frameColor: resolved.frameColor,
     printSize: `${Math.min(widthIn, heightIn)}" × ${Math.max(widthIn, heightIn)}"`,
     widthIn,
     heightIn,
   };
 }
 
-module.exports = { fulfillItem, fulfillOrder, resolveItem, previewItem, resolveDims, countryCodeFor, TIER_LONGEST_EDGE_IN };
+module.exports = { fulfillItem, fulfillOrder, resolveItem, previewItem, resolveDims, countryCodeFor, codeFor, frameColorOf, applyFrame, TIER_LONGEST_EDGE_IN };

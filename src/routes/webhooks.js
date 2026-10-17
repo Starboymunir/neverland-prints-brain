@@ -20,6 +20,18 @@ const pricing = require("../services/pricing");
 
 const router = express.Router();
 
+// The customer's frame choice, normalised to "Framed — <Colour>" / "Unframed" so
+// the COLOUR survives to fulfilment. /products/ pages send "Framed — Walnut";
+// /pages/art sends "Framed" plus _frame_color ("walnut") / "Frame Color".
+function frameLabel(props) {
+  const f = String(props["Frame"] || "Unframed");
+  if (!/^framed/i.test(f)) return "Unframed";
+  const explicit = String(props["_frame_color"] || "").toLowerCase();
+  const hay = `${f} ${props["Frame Color"] || ""}`.toLowerCase();
+  const color = pricing.FRAME_IDS[explicit] ? explicit : Object.keys(pricing.FRAME_IDS).find((c) => hay.includes(c));
+  return color ? `Framed — ${color.charAt(0).toUpperCase()}${color.slice(1)}` : f;
+}
+
 const SHOPIFY_SECRET = process.env.SHOPIFY_CLIENT_SECRET;
 const finerworks = new FinerWorksService();
 const shopify = new ShopifyService();
@@ -112,7 +124,7 @@ router.post("/order-created", async (req, res) => {
           artworkTitle: props["Artwork"],
           artist: props["Artist"] || "Unknown",
           size: props["Size"] || "",
-          frame: props["Frame"] || "Unframed",
+          frame: frameLabel(props),
           priceTier: props["_price_tier"] || "",
           finerworksProductCode: props["_finerworks_product_code"] || "",
           driveFileId: props["_drive_file_id"] || "",
@@ -162,6 +174,9 @@ router.post("/order-created", async (req, res) => {
         size: item.size,
         frame: item.frame,
         price_tier: item.priceTier,
+        // The code the price was computed from (incl. frame) — fulfilment prints
+        // exactly this. It used to be dropped here, so framed orders went out bare.
+        finerworks_product_code: item.finerworksProductCode || null,
         drive_file_id: item.driveFileId,
         quantity: item.quantity,
         price: item.price,
@@ -505,7 +520,7 @@ router.post("/quote-shipping", async (req, res) => {
         supabase,
         item: {
           size: row.size, priceTier: row.price_tier, driveFileId: row.drive_file_id,
-          assetId: row.asset_id, finerworksProductCode: row.finerworks_product_code, artworkTitle: row.artwork_title,
+          assetId: row.asset_id, finerworksProductCode: row.finerworks_product_code, artworkTitle: row.artwork_title, frame: row.frame,
         },
       });
       if (r.productCode) {
