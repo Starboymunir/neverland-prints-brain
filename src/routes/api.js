@@ -168,7 +168,7 @@ async function shopifyAdminGet(resource, params = {}) {
 
 async function storefrontCatalogFromShopify(req) {
   const page = Math.max(1, parseInt(req.query.page || "1", 10));
-  const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page || "24", 10)));
+  const perPage = Math.min(120, Math.max(1, parseInt(req.query.per_page || "24", 10)));
   const artist = (req.query.artist || "").toLowerCase();
   const subject = (req.query.subject || "").toLowerCase();
   const search = (req.query.q || req.query.search || "").toLowerCase();
@@ -733,7 +733,7 @@ function driveImg(id, w) {
 router.get("/storefront/catalog", async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || "1", 10));
-    const perPage = Math.min(100, Math.max(1, parseInt(req.query.per_page || "24", 10)));
+    const perPage = Math.min(120, Math.max(1, parseInt(req.query.per_page || "24", 10)));
     const artist = req.query.artist;
     const style = req.query.style;
     const mood = req.query.mood;
@@ -1922,35 +1922,58 @@ router.get("/storefront/similar", async (req, res) => {
       return picked.map(assetToItem);
     }
 
-    const BAD = new Set(["", "unknown", "Unknown", "other", "Other", "Anonymous", "anonymous"]);
+    // Placeholder values carried by not-yet-analysed artworks ("unknown" era,
+    // "other" style, "calm" mood) never become shelf titles or collection links.
+    const BAD = new Set(["", "unknown", "Unknown", "other", "Other", "calm", "Anonymous", "anonymous"]);
     const ok = (v) => v && !BAD.has(v);
-    // Fetch all four shelves in PARALLEL (one round-trip of latency instead of
-    // four), then pick in order so items are de-duplicated across shelves.
-    const [byArtist, bySubject, byEra, byStyle] = await Promise.all([
+    const OLD_MASTER_STYLES = ["Renaissance", "Baroque", "Rococo"];
+    async function fetchWhere(label, build, cap) {
+      const { data, error } = await build(supabase.from("assets").select(REC_ASSET_COLS))
+        .not("commercial_score", "is", null)
+        .order("commercial_score", { ascending: false }).limit(cap);
+      if (error) console.error(`similar: ${label} shelf failed:`, error.message);
+      return data || [];
+    }
+    const lim = perShelf * 5;
+    // All shelves fetched in PARALLEL (one round-trip of latency), then picked in
+    // display order so no artwork repeats across shelves.
+    const [byArtist, byEra, byStyle, bySubject, byMood, topPicks, oldMasters] = await Promise.all([
       ok(seed.artist) ? fetchShelf("artist", seed.artist, perShelf) : [],
-      ok(seed.subject) ? fetchShelf("subject", seed.subject, perShelf) : [],
       ok(seed.era) ? fetchShelf("era", seed.era, perShelf) : [],
       ok(seed.style) ? fetchShelf("style", seed.style, perShelf) : [],
+      ok(seed.subject) ? fetchShelf("subject", seed.subject, perShelf) : [],
+      ok(seed.mood) ? fetchShelf("mood", seed.mood, perShelf) : [],
+      fetchWhere("top picks", (q) => q, 300),
+      fetchWhere("old masters", (q) => q.in("style", OLD_MASTER_STYLES), lim),
     ]);
+    const eraTitle = (e) => (/century|period|era\b|dynasty|renaissance|medieval|victorian|ancient/i.test(e) ? `More from the ${e}` : `More ${e} art`);
+    const styleTitle = (st) => (/(ism|ist)$|nouveau|deco|ukiyo|raphaelite|renaissance|baroque|rococo/i.test(st) ? `More ${st}` : `More ${st.toLowerCase()} pieces`);
     const groups = [];
     const add = (key, title, rows) => { const items = pick(rows, perShelf); if (items.length) groups.push({ key, title, items }); };
-    if (ok(seed.artist)) add("artist", `More by ${seed.artist}`, byArtist);                         // 1) same artist
-    if (ok(seed.subject)) add("subject", `More ${seed.subject.toLowerCase()} art`, bySubject);      // 2) same subject
-    if (ok(seed.era)) add("era", `More from the ${seed.era}`, byEra);                               // 3) same era
-    if (ok(seed.style)) add("style", `More ${seed.style} art`, byStyle);                            // 4) same style
-    // 5) Fallback: if nothing matched (very niche piece), a general strong shelf.
-    if (!groups.length) {
-      const { data } = await supabase.from("assets").select(REC_ASSET_COLS)
-        .not("commercial_score", "is", null).order("commercial_score", { ascending: false }).limit(perShelf * 5);
-      const items = rank((data || []).filter((a) => !seenAcross.has(a.id))).slice(0, perShelf).map(assetToItem);
-      if (items.length) groups.push({ key: "editors", title: "You may also like", items });
-    }
+    if (ok(seed.artist)) add("artist", `More by ${seed.artist}`, byArtist);                 // more by this artist
+    if (ok(seed.era)) add("era", eraTitle(seed.era), byEra);                                 // same century / period
+    if (ok(seed.style)) add("style", styleTitle(seed.style), byStyle);                       // impressionist → more impressionism
+    if (ok(seed.subject)) add("subject", `More ${seed.subject.toLowerCase()} art`, bySubject); // same subject
+    if (ok(seed.mood)) add("mood", `More ${seed.mood.toLowerCase()} pieces`, byMood);      // same feel
+    add("for_you", "We think you'll like", topPicks);                                     // taste-ranked top picks
+    add("old_masters", "Old Masters", oldMasters);                                           // Renaissance / Baroque / Rococo
+
+    // Collections this piece belongs to — chips that open the catalog filtered to
+    // that collection (the catalog honours artist / era / style / subject / mood).
+    const enc = encodeURIComponent;
+    const collections = [
+      ok(seed.artist) && { kind: "artist", title: seed.artist, url: `/pages/catalog?artist=${enc(seed.artist)}` },
+      ok(seed.era) && { kind: "era", title: seed.era, url: `/pages/catalog?era=${enc(seed.era)}` },
+      ok(seed.style) && { kind: "style", title: seed.style, url: `/pages/catalog?style=${enc(seed.style)}` },
+      ok(seed.subject) && { kind: "subject", title: seed.subject, url: `/pages/catalog?subject=${enc(seed.subject)}` },
+      ok(seed.mood) && { kind: "mood", title: seed.mood, url: `/pages/catalog?mood=${enc(seed.mood)}` },
+    ].filter(Boolean);
 
     // Flattened list kept for backward compatibility with any older consumer.
     const items = groups.flatMap((g) => g.items).slice(0, 24);
 
     res.set("Cache-Control", visitorId ? "private, max-age=60" : "public, max-age=300");
-    res.json({ seed: { id: seed.id, title: seed.title, artist: seed.artist, subject: seed.subject, era: seed.era }, personalized: profile.hasHistory, groups, items });
+    res.json({ seed: { id: seed.id, title: seed.title, artist: seed.artist, subject: seed.subject, era: seed.era, style: seed.style, mood: seed.mood }, personalized: profile.hasHistory, groups, collections, items });
   } catch (err) {
     console.error("similar error:", err.message);
     res.status(200).json({ items: [], error: err.message });
