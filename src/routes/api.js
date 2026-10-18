@@ -2733,7 +2733,10 @@ router.get("/health", async (req, res) => {
   };
 
   try {
-    const { count, error } = await supabase.from("assets").select("*", { count: "exact", head: true });
+    // Planner estimate, not an exact COUNT(*): this endpoint is pinged every 5 min by
+    // the keep-alive, and an exact count over ~186k rows each time was needless load
+    // (and timed out on the small DB, making health report a false error).
+    const { count, error } = await supabase.from("assets").select("*", { count: "planned", head: true });
     if (error) {
       checks.supabase = `error: ${error.message}`;
     } else {
