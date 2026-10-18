@@ -2736,8 +2736,10 @@ router.get("/debug/latency", async (req, res) => {
   const probeHost = /^[a-z0-9]{20}.supabase.co$/.test(String(req.query.probe || "")) ? req.query.probe : null;
   const probe = [];
   if (probeHost) for (let i = 0; i < 3; i++) probe.push(await time(() => fetch(`https://${probeHost}/rest/v1/`)));
+  let serverLocation = null;
+  try { const g = await (await fetch("https://ipinfo.io/json")).json(); serverLocation = [g.city, g.region, g.country, g.org].filter(Boolean).join(", "); } catch (e) { serverLocation = "lookup failed"; }
   res.json({
-    dbRoundTripMs: db, probeHost, probeRoundTripMs: probe, shopifyAdminMs: shopify, featuredIdsMs: featured, featuredWasCached,
+    serverLocation, dbRoundTripMs: db, probeHost, probeRoundTripMs: probe, shopifyAdminMs: shopify, featuredIdsMs: featured, featuredWasCached,
     region: process.env.RENDER_REGION || null, instance: process.env.RENDER_INSTANCE_ID || null,
     supabaseHost: (process.env.SUPABASE_URL || "").replace("https://", ""),
   });
