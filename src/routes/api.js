@@ -208,8 +208,15 @@ function cachedResponse(ttlMs, keyFn) {
     next();
   };
 }
-router.use("/storefront/catalog", cachedResponse(5 * 60 * 1000, (req) =>
-  (req.query.sort === "for_you" || req.query.visitor_id || req.query.session_id) ? null : req.originalUrl));
+// The storefront sends visitor/session ids on every catalog call, but the backend
+// only uses them for sort=for_you — so they are left out of the cache key there.
+router.use("/storefront/catalog", cachedResponse(5 * 60 * 1000, (req) => {
+  if (req.query.sort === "for_you") return null; // personalized: never shared
+  const u = new URL(req.originalUrl, "http://x");
+  u.searchParams.delete("visitor_id");
+  u.searchParams.delete("session_id");
+  return u.pathname + "?" + u.searchParams.toString();
+}));
 router.use("/storefront/asset", cachedResponse(10 * 60 * 1000, (req) => req.originalUrl));
 
 async function storefrontCatalogFromShopify(req) {
