@@ -618,7 +618,7 @@ router.get("/storefront/price-map", (req, res) => {
 router.get("/storefront/from-prices", async (req, res) => {
   try {
     const ids = String(req.query.drive_ids || "")
-      .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 50);
+      .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 120);
     if (!ids.length) return res.json({});
     const { data } = await supabase
       .from("assets")
