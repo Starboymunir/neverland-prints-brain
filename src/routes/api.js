@@ -2732,8 +2732,12 @@ router.get("/debug/latency", async (req, res) => {
   const shopify = await time(() => shopifyAdminGet("shop.json", { fields: "id" }));
   const featuredWasCached = !!(_featuredCache.ids && Date.now() - _featuredCache.at < FEATURED_TTL_MS);
   const featured = await time(() => getFeaturedAssetIds());
+  // Optional: time a plain HTTPS round trip to another Supabase project (region probe).
+  const probeHost = /^[a-z0-9]{20}.supabase.co$/.test(String(req.query.probe || "")) ? req.query.probe : null;
+  const probe = [];
+  if (probeHost) for (let i = 0; i < 3; i++) probe.push(await time(() => fetch(`https://${probeHost}/rest/v1/`)));
   res.json({
-    dbRoundTripMs: db, shopifyAdminMs: shopify, featuredIdsMs: featured, featuredWasCached,
+    dbRoundTripMs: db, probeHost, probeRoundTripMs: probe, shopifyAdminMs: shopify, featuredIdsMs: featured, featuredWasCached,
     region: process.env.RENDER_REGION || null, instance: process.env.RENDER_INSTANCE_ID || null,
     supabaseHost: (process.env.SUPABASE_URL || "").replace("https://", ""),
   });
