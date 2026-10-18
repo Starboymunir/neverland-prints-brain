@@ -833,7 +833,7 @@ router.get("/storefront/catalog", async (req, res) => {
       if (orientation) pq = pq.eq("ratio_class", orientation);
       if (era) pq = pq.eq("era", era);
       const poolData = await sharedRows(`foryou-pool:${[subject, style, artist, mood, orientation, era].join("|")}`, async () => {
-        const { data, error } = await pq.order("commercial_score", { ascending: false }).limit(1000);
+        const { data, error } = await pq.order("commercial_score", { ascending: false, nullsFirst: false }).limit(1000);
         if (error) throw error;
         return data || [];
       });
@@ -1850,7 +1850,7 @@ router.get("/storefront/recommendations", async (req, res) => {
           .select(REC_ASSET_COLS)
           .or(orParts)
           .not("commercial_score", "is", null)
-          .order("commercial_score", { ascending: false })
+          .order("commercial_score", { ascending: false, nullsFirst: false })
           .limit(240);
         candidates = (data || []).filter((a) => !excludeIds.has(a.id));
         candidates.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
@@ -1893,7 +1893,7 @@ router.get("/storefront/recommendations", async (req, res) => {
           .from("assets")
           .select(REC_ASSET_COLS)
           .not("commercial_score", "is", null)
-          .order("commercial_score", { ascending: false })
+          .order("commercial_score", { ascending: false, nullsFirst: false })
           .limit(300);
         if (error) throw error;
         return rows || [];
@@ -1998,7 +1998,7 @@ router.get("/storefront/similar", async (req, res) => {
       return sharedRows(`where:${label}:${cap}`, async () => {
         const { data, error } = await build(supabase.from("assets").select(REC_ASSET_COLS))
           .not("commercial_score", "is", null)
-          .order("commercial_score", { ascending: false }).limit(cap);
+          .order("commercial_score", { ascending: false, nullsFirst: false }).limit(cap);
         if (error) throw error;
         return data || [];
       });
