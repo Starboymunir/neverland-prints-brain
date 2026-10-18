@@ -2718,6 +2718,27 @@ router.get("/size-catalog", (req, res) => {
  * GET /api/health
  * Health check endpoint.
  */
+/**
+ * GET /api/debug/latency?key=...  — measured from INSIDE the server: one round trip
+ * to the database, one to Shopify, and the featured-collection lookup. Used to see
+ * whether slowness is the database, the network, or the Shopify API.
+ */
+router.get("/debug/latency", async (req, res) => {
+  const key = process.env.FINERWORKS_WEBHOOK_KEY;
+  if (key && req.query.key !== key) return res.status(401).json({ error: "Unauthorized" });
+  const time = async (fn) => { const t0 = Date.now(); try { await fn(); return Date.now() - t0; } catch (e) { return `err ${Date.now() - t0}ms: ${e.message}`; } };
+  const db = [];
+  for (let i = 0; i < 3; i++) db.push(await time(() => supabase.from("sync_state").select("key").limit(1)));
+  const shopify = await time(() => shopifyAdminGet("shop.json", { fields: "id" }));
+  const featuredWasCached = !!(_featuredCache.ids && Date.now() - _featuredCache.at < FEATURED_TTL_MS);
+  const featured = await time(() => getFeaturedAssetIds());
+  res.json({
+    dbRoundTripMs: db, shopifyAdminMs: shopify, featuredIdsMs: featured, featuredWasCached,
+    region: process.env.RENDER_REGION || null, instance: process.env.RENDER_INSTANCE_ID || null,
+    supabaseHost: (process.env.SUPABASE_URL || "").replace("https://", ""),
+  });
+});
+
 router.get("/health", async (req, res) => {
   const checks = {
     server: "ok",
