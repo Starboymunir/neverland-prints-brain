@@ -91,6 +91,8 @@ function getCached(key, ttlMs) {
 }
 function setCache(key, data) {
   _cache[key] = { data, ts: Date.now() };
+  const keys = Object.keys(_cache);
+  if (keys.length > 2000) for (const k of keys.slice(0, keys.length - 2000)) delete _cache[k];
 }
 
 // Stale-while-revalidate wrapper for expensive full-table aggregations
@@ -165,6 +167,50 @@ async function shopifyAdminGet(resource, params = {}) {
   if (!res.ok) throw new Error(`Shopify ${resource} ${res.status}: ${text.slice(0, 220)}`);
   return JSON.parse(text);
 }
+
+// Shared, visitor-independent row sets (recommendation shelves, candidate pools).
+// They are identical for every visitor, so fetch once and reuse for 10 minutes
+// instead of querying the database on every page view. Per-visitor ranking still
+// happens in memory on top. Errors are never cached (fn must throw on error).
+async function sharedRows(key, fn, ttlMs = 10 * 60 * 1000) {
+  try { return await cachedAggregate("rows:" + key, ttlMs, fn); }
+  catch (e) { console.error("sharedRows " + key + " failed:", e.message); return []; }
+}
+
+// Short-lived response cache for visitor-independent storefront reads (the plain
+// catalog browse and per-artwork pricing). Every visitor requests the same catalog
+// pages, so they are served from memory instead of re-querying the database.
+// Personalized requests (sort=for_you or visitor/session ids) always bypass it;
+// error / fallback / degraded responses are never cached.
+const _respCache = new Map();
+function cachedResponse(ttlMs, keyFn) {
+  return (req, res, next) => {
+    if (req.method !== "GET") return next();
+    const key = keyFn(req);
+    if (!key) return next();
+    const hit = _respCache.get(key);
+    if (hit && Date.now() - hit.t < ttlMs) {
+      res.set("X-Cache", "HIT");
+      if (hit.cc) res.set("Cache-Control", hit.cc);
+      return res.type("application/json").send(hit.body);
+    }
+    const json = res.json.bind(res);
+    res.json = (obj) => {
+      try {
+        if (res.statusCode === 200 && obj && !obj.error && !obj.fallback && !obj.degraded) {
+          _respCache.set(key, { t: Date.now(), body: JSON.stringify(obj), cc: res.get("Cache-Control") });
+          if (_respCache.size > 500) _respCache.delete(_respCache.keys().next().value);
+        }
+      } catch (e) { /* never break the response */ }
+      res.set("X-Cache", "MISS");
+      return json(obj);
+    };
+    next();
+  };
+}
+router.use("/storefront/catalog", cachedResponse(5 * 60 * 1000, (req) =>
+  (req.query.sort === "for_you" || req.query.visitor_id || req.query.session_id) ? null : req.originalUrl));
+router.use("/storefront/asset", cachedResponse(10 * 60 * 1000, (req) => req.originalUrl));
 
 async function storefrontCatalogFromShopify(req) {
   const page = Math.max(1, parseInt(req.query.page || "1", 10));
@@ -779,7 +825,11 @@ router.get("/storefront/catalog", async (req, res) => {
       if (mood) pq = pq.eq("mood", mood);
       if (orientation) pq = pq.eq("ratio_class", orientation);
       if (era) pq = pq.eq("era", era);
-      const { data: poolData } = await pq.order("commercial_score", { ascending: false }).limit(1000);
+      const poolData = await sharedRows(`foryou-pool:${[subject, style, artist, mood, orientation, era].join("|")}`, async () => {
+        const { data, error } = await pq.order("commercial_score", { ascending: false }).limit(1000);
+        if (error) throw error;
+        return data || [];
+      });
       const pool = (poolData || []).filter((a) => !profile.seenAssetIds || !profile.seenAssetIds.has(a.id));
       pool.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
       const ranked = recommender.pickDiverse(pool, profile, pool.length, { exploreSeed: recommender.rotationSeed(visitorId || sessionId, "foryou"), exploreAmount: 0.12 });
@@ -1804,13 +1854,17 @@ router.get("/storefront/recommendations", async (req, res) => {
 
       // ── More from artists you like ──
       if (profile.topArtists.length) {
-        const { data } = await supabase
-          .from("assets")
-          .select(REC_ASSET_COLS)
-          .in("artist", profile.topArtists.slice(0, 4))
-          .not("commercial_score", "is", null)
-          .order("commercial_score", { ascending: false })
-          .limit(120);
+        const data = await sharedRows(`artists:${profile.topArtists.slice(0, 4).join("|")}`, async () => {
+          const { data: rows, error } = await supabase
+            .from("assets")
+            .select(REC_ASSET_COLS)
+            .in("artist", profile.topArtists.slice(0, 4))
+            .not("commercial_score", "is", null)
+            .order("commercial_score", { ascending: false })
+            .limit(120);
+          if (error) throw error;
+          return rows || [];
+        });
         const artistPool = (data || []).filter((a) => !excludeIds.has(a.id));
         artistPool.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
         const picks = recommender.pickDiverse(artistPool, profile, perModule, { exploreSeed: recommender.rotationSeed(visitorId || sessionId, "artist"), exploreAmount: 0.1 });
@@ -1827,12 +1881,16 @@ router.get("/storefront/recommendations", async (req, res) => {
 
     // ── Cold-start / always-on fallback: curated top commercial score ──
     if (!profile.hasHistory || modules.length === 0) {
-      const { data } = await supabase
-        .from("assets")
-        .select(REC_ASSET_COLS)
-        .not("commercial_score", "is", null)
-        .order("commercial_score", { ascending: false })
-        .limit(300);
+      const data = await sharedRows("top-300", async () => {
+        const { data: rows, error } = await supabase
+          .from("assets")
+          .select(REC_ASSET_COLS)
+          .not("commercial_score", "is", null)
+          .order("commercial_score", { ascending: false })
+          .limit(300);
+        if (error) throw error;
+        return rows || [];
+      });
       let pool = (data || []).filter((a) => !excludeIds.has(a.id));
       pool.forEach((a) => { a._price = cheapestPrice(a.max_print_width_cm, a.max_print_height_cm) || 0; });
       // Diversify by subject AND rotate (exploreSeed) so the shelf isn't the same
@@ -1910,11 +1968,13 @@ router.get("/storefront/similar", async (req, res) => {
       .sort((x, y) => y.s - x.s).map((x) => x.a);
     async function fetchShelf(col, val, cap) {
       if (!val) return [];
-      const { data, error } = await supabase.from("assets").select(REC_ASSET_COLS)
-        .eq(col, val).not("commercial_score", "is", null)
-        .order("commercial_score", { ascending: false }).limit(cap * 5);
-      if (error) console.error(`similar: ${col} shelf failed:`, error.message);
-      return data || [];
+      return sharedRows(`shelf:${col}:${val}:${cap * 5}`, async () => {
+        const { data, error } = await supabase.from("assets").select(REC_ASSET_COLS)
+          .eq(col, val).not("commercial_score", "is", null)
+          .order("commercial_score", { ascending: false }).limit(cap * 5);
+        if (error) throw error;
+        return data || [];
+      });
     }
     function pick(rows, cap) {
       const picked = rank(rows.filter((a) => !seenAcross.has(a.id))).slice(0, cap);
@@ -1928,11 +1988,13 @@ router.get("/storefront/similar", async (req, res) => {
     const ok = (v) => v && !BAD.has(v);
     const OLD_MASTER_STYLES = ["Renaissance", "Baroque", "Rococo"];
     async function fetchWhere(label, build, cap) {
-      const { data, error } = await build(supabase.from("assets").select(REC_ASSET_COLS))
-        .not("commercial_score", "is", null)
-        .order("commercial_score", { ascending: false }).limit(cap);
-      if (error) console.error(`similar: ${label} shelf failed:`, error.message);
-      return data || [];
+      return sharedRows(`where:${label}:${cap}`, async () => {
+        const { data, error } = await build(supabase.from("assets").select(REC_ASSET_COLS))
+          .not("commercial_score", "is", null)
+          .order("commercial_score", { ascending: false }).limit(cap);
+        if (error) throw error;
+        return data || [];
+      });
     }
     const lim = perShelf * 5;
     // All shelves fetched in PARALLEL (one round-trip of latency), then picked in
